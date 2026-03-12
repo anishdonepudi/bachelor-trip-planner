@@ -18,6 +18,7 @@ import { ConfigModal } from "./ConfigModal";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 import { DataUpdateModal } from "./DataUpdateModal";
 import { JobsPanel } from "./JobsPanel";
+import { ComboSummary } from "./ComboSummary";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -29,6 +30,7 @@ export function Dashboard() {
 
   const [priorityCity, setPriorityCity] = useState("all");
   const [configChanged, setConfigChanged] = useState(false);
+  const [showComboView, setShowComboView] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [scrapeTriggered, setScrapeTriggered] = useState(false);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
@@ -211,6 +213,32 @@ export function Dashboard() {
               onPriorityCityChange={setPriorityCity}
             />
 
+            {/* View toggle */}
+            {hasData && (
+              <div className="flex items-center gap-1 p-1 rounded-lg bg-zinc-900 border border-zinc-800 w-fit">
+                <button
+                  onClick={() => setShowComboView(false)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    !showComboView
+                      ? "bg-zinc-700 text-zinc-100"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Ranked List
+                </button>
+                <button
+                  onClick={() => setShowComboView(true)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    showComboView
+                      ? "bg-zinc-700 text-zinc-100"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  All Combos
+                </button>
+              </div>
+            )}
+
             {/* Weekend Cards */}
             {!hasData ? (
               <div className="text-center py-16">
@@ -229,6 +257,20 @@ export function Dashboard() {
                   </p>
                 </div>
               </div>
+            ) : showComboView ? (
+              <ComboSummary
+                weekendData={weekendData}
+                dateRanges={dateRanges}
+                cities={cities}
+                priorityCity={priorityCity}
+                activeFlightCategory={flightCategory}
+                activeBudgetTier={budgetTier}
+                onSelectCombo={(fc, bt) => {
+                  setFlightCategory(fc);
+                  setBudgetTier(bt);
+                  setShowComboView(false);
+                }}
+              />
             ) : (
               <div className="space-y-4">
                 <div className="text-sm text-zinc-500">
