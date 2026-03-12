@@ -22,6 +22,7 @@ export function ConfigModal({ cities: initialCities, onSave }: ConfigModalProps)
   const [saving, setSaving] = useState(false);
 
   const totalPeople = cities.reduce((sum, c) => sum + c.people, 0);
+  const hasChanges = JSON.stringify(cities) !== JSON.stringify(initialCities);
 
   const addCity = () => {
     setCities([
@@ -168,8 +169,8 @@ export function ConfigModal({ cities: initialCities, onSave }: ConfigModalProps)
             </button>
             <button
               onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-50 transition-colors text-sm font-medium"
+              disabled={saving || !hasChanges}
+              className="flex-1 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
             >
               {saving ? "Saving..." : "Save & Refresh Data"}
             </button>

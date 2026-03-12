@@ -4,9 +4,10 @@ import { useState, useCallback } from "react";
 
 interface ScrapeStatusProps {
   lastUpdated: string | null;
+  isRunning?: boolean;
 }
 
-export function ScrapeStatus({ lastUpdated }: ScrapeStatusProps) {
+export function ScrapeStatus({ lastUpdated, isRunning }: ScrapeStatusProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -49,11 +50,11 @@ export function ScrapeStatus({ lastUpdated }: ScrapeStatusProps) {
       </span>
       <button
         onClick={triggerRefresh}
-        disabled={refreshing}
+        disabled={refreshing || isRunning}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-medium"
       >
         <svg
-          className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`}
+          className={`w-3.5 h-3.5 ${refreshing || isRunning ? "animate-spin" : ""}`}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -65,7 +66,7 @@ export function ScrapeStatus({ lastUpdated }: ScrapeStatusProps) {
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        {refreshing ? "Triggering..." : "Refresh Data"}
+        {isRunning ? "Refreshing..." : refreshing ? "Triggering..." : "Refresh Data"}
       </button>
       {message && (
         <span className="text-xs text-amber-400">{message}</span>
