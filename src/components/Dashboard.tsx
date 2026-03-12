@@ -27,6 +27,7 @@ export function Dashboard() {
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
 
+  const [priorityCity, setPriorityCity] = useState("all");
   const [configChanged, setConfigChanged] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
@@ -96,9 +97,10 @@ export function Dashboard() {
       weekendData.airbnbListings ?? [],
       flightCategory,
       budgetTier,
-      cities
+      cities,
+      priorityCity
     );
-  }, [weekendData, dateRanges, flightCategory, budgetTier, cities]);
+  }, [weekendData, dateRanges, flightCategory, budgetTier, cities, priorityCity]);
 
 
   const hasData =
@@ -184,8 +186,11 @@ export function Dashboard() {
             <FilterBar
               flightCategory={flightCategory}
               budgetTier={budgetTier}
+              priorityCity={priorityCity}
+              cities={cities}
               onFlightCategoryChange={setFlightCategory}
               onBudgetTierChange={setBudgetTier}
+              onPriorityCityChange={setPriorityCity}
             />
 
             {/* Weekend Cards */}
@@ -209,7 +214,7 @@ export function Dashboard() {
             ) : (
               <div className="space-y-4">
                 <div className="text-sm text-zinc-500">
-                  {weekendScores.length} weekends ranked by composite score (per-city z-score)
+                  {weekendScores.length} weekends ranked by {priorityCity !== "all" ? `cheapest for ${priorityCity}` : "composite score (per-city z-score)"} &middot; max 10hr one-way flights
                 </div>
                 {weekendScores.map((weekend, i) => (
                   <WeekendCard

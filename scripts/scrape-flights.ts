@@ -1,17 +1,20 @@
 /**
- * Google Flights Scraper (API Interception)
+ * Google Flights Scraper (Click-Free API Interception)
  *
  * Uses network interception to capture structured flight data from Google's
- * internal GetShoppingResults API instead of fragile DOM scraping.
+ * internal GetShoppingResults API. Return flights are fetched via direct POST
+ * requests using tokens from the outbound API response — no clicking needed.
  *
- * Per airport + date range, runs 2 phases:
- *   Phase 1 (no filter):   nonstop_no_carryon + onestop_no_carryon
- *   Phase 2 (carry-on):    nonstop_carryon + onestop_carryon
+ * Per airport + date range, runs 4 parallel pages (one per category):
+ *   1. nonstop_no_carryon  — load page, POST for returns
+ *   2. onestop_no_carryon  — load page, POST for returns
+ *   3. nonstop_carryon     — load page + carry-on filter, POST for returns
+ *   4. onestop_carryon     — load page + carry-on filter, POST for returns
  *
- * Each phase:
+ * Each page:
  *   1. Load page, optionally apply carry-on bag filter
- *   2. Intercept outbound API → filter by stops + duration, sort by price
- *   3. For each top N outbound: click it → intercept return API → go back
+ *   2. Intercept outbound API → extract tokens + segment data
+ *   3. For each top N outbound: POST directly to get return flights
  *   4. Pair each outbound with its specific return flight
  *   5. Skip records with no valid return
  *
@@ -166,6 +169,14 @@ async function completeJob(jobId: number, errorMsg?: string): Promise<void> {
 // API Response Parsing
 // ---------------------------------------------------------------------------
 
+interface SegmentInfo {
+  origin: string;
+  dest: string;
+  date: string;
+  airlineCode: string;
+  flightNumber: string;
+}
+
 interface ApiParsedFlight {
   airline: string;
   airlineCode: string;
@@ -180,6 +191,8 @@ interface ApiParsedFlight {
   price: number;
   layoverAirport?: string;
   layoverDuration?: number;
+  token: string;
+  segments: SegmentInfo[];
 }
 
 interface CapturedApiCall {
@@ -227,6 +240,7 @@ function extractInner(parts: unknown[]): any[] {
 
 /**
  * Parse structured flight data from API inner response.
+ * Extracts token and segment data needed for click-free return requests.
  * Filters: duration ≤ MAX_DURATION_MINUTES, stops 0 or 1.
  * Sorts by price ascending.
  */
@@ -242,12 +256,34 @@ function parseFlightsFromApi(inner: any[]): { nonstop: ApiParsedFlight[]; onesto
       const d = item[0];
       if (!d) continue;
 
-      const segments = d[2] ?? [];
-      const stops = segments.length > 0 ? segments.length - 1 : 0;
+      const rawSegments = d[2] ?? [];
+      const stops = rawSegments.length > 0 ? rawSegments.length - 1 : 0;
       const dep = d[5];
       const arr = d[8];
-      const depDate = segments[0]?.[20];
-      const arrDate = segments[segments.length - 1]?.[21];
+      const depDate = rawSegments[0]?.[20];
+      const arrDate = rawSegments[rawSegments.length - 1]?.[21];
+
+      // Extract token for click-free POST requests
+      const token = item[1]?.[1];
+      if (typeof token !== "string" || token.length < 20) continue;
+
+      // Extract per-segment data for POST body construction
+      const segments: SegmentInfo[] = [];
+      for (const seg of rawSegments) {
+        const flightCode = seg?.[22]; // [airlineCode, flightNumber, null, airlineName]
+        const segOrigin = seg?.[3];   // origin airport code
+        const segDest = seg?.[6];     // destination airport code
+        const segDate = seg?.[20];    // [year, month, day]
+        if (!flightCode || !segOrigin || !segDest || !segDate) continue;
+        segments.push({
+          origin: segOrigin,
+          dest: segDest,
+          date: `${segDate[0]}-${String(segDate[1]).padStart(2, "0")}-${String(segDate[2]).padStart(2, "0")}`,
+          airlineCode: flightCode[0],
+          flightNumber: flightCode[1],
+        });
+      }
+      if (segments.length === 0) continue;
 
       let layoverAirport: string | undefined;
       let layoverDuration: number | undefined;
@@ -270,6 +306,8 @@ function parseFlightsFromApi(inner: any[]): { nonstop: ApiParsedFlight[]; onesto
         price: item[1]?.[0]?.[1] ?? 0,
         layoverAirport,
         layoverDuration,
+        token,
+        segments,
       };
 
       if (flight.duration > MAX_DURATION_MINUTES) continue;
@@ -283,6 +321,84 @@ function parseFlightsFromApi(inner: any[]): { nonstop: ApiParsedFlight[]; onesto
   onestop.sort((a, b) => a.price - b.price);
 
   return { nonstop, onestop };
+}
+
+// ---------------------------------------------------------------------------
+// Click-Free Return Flight Requests
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the f.req value for requesting return flights for a specific outbound.
+ * Uses the outbound flight's token and segment data to construct the POST body
+ * that Google Flights normally sends when a user clicks an outbound flight.
+ */
+function buildFreqValue(
+  token: string,
+  segments: SegmentInfo[],
+  originAirport: string,
+  destAirport: string,
+  departDate: string,
+  returnDate: string
+): string {
+  const segEntries = segments.map(s =>
+    `["${s.origin}","${s.date}","${s.dest}",null,"${s.airlineCode}","${s.flightNumber}"]`
+  );
+  const segArray = `[${segEntries.join(",")}]`;
+
+  const innerJson =
+    `[[null,"${token}"],` +
+    `[null,null,1,null,[],1,[1,0,0,0],null,null,null,null,null,null,` +
+    `[` +
+      `[[[["${originAirport}",0]]],[[["${destAirport}",0]]],null,0,null,null,"${departDate}",null,` +
+      `${segArray},null,null,null,null,null,3],` +
+      `[[[["${destAirport}",0]]],[[["${originAirport}",0]]],null,0,null,null,"${returnDate}",null,null,null,null,null,null,null,3]` +
+    `]` +
+    `,null,null,null,1],0,0,0,1]`;
+
+  return `[null,${JSON.stringify(innerJson)}]`;
+}
+
+/**
+ * Fetch return flights for a specific outbound via direct POST.
+ * Uses the browser's fetch() to maintain cookies/session.
+ */
+async function fetchReturnViaPost(
+  page: Page,
+  apiUrl: string,
+  target: ApiParsedFlight,
+  originAirport: string,
+  departDate: string,
+  returnDate: string
+): Promise<{ nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null> {
+  const freqValue = buildFreqValue(
+    target.token, target.segments,
+    originAirport, DESTINATION_AIRPORT, departDate, returnDate
+  );
+  const postBody = `f.req=${encodeURIComponent(freqValue)}&`;
+
+  const result = await page.evaluate(async (evalUrl: string, evalBody: string) => {
+    try {
+      const res = await fetch(evalUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: evalBody,
+      });
+      if (res.status !== 200) return null;
+      return await res.text();
+    } catch {
+      return null;
+    }
+  }, apiUrl, postBody);
+
+  if (!result || result.length < 500) return null;
+
+  const parts = parseMultiPart(result);
+  const inners = extractInner(parts);
+  for (const inner of inners) {
+    const parsed = parseFlightsFromApi(inner);
+    if (parsed.nonstop.length > 0 || parsed.onestop.length > 0) return parsed;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -318,11 +434,16 @@ async function applyCarryOnFilter(page: Page): Promise<boolean> {
 }
 
 /**
- * Set up API interception on a page.
+ * Set up API interception on a page. Captures the API URL and response bodies.
  */
-function setupApiInterception(page: Page, captured: CapturedApiCall[]): void {
+function setupApiInterception(
+  page: Page,
+  captured: CapturedApiCall[],
+  state: { apiUrl: string }
+): void {
   page.on("request", (req) => {
     if (req.url().includes("GetShoppingResults")) {
+      if (!state.apiUrl) state.apiUrl = req.url();
       captured.push({ body: "", resolved: false });
     }
     req.continue();
@@ -366,96 +487,6 @@ async function waitForApiResponse(
   return null;
 }
 
-/**
- * Format price as it appears in the Google Flights DOM.
- */
-function formatPriceForDom(price: number): string {
-  if (price >= 1000) {
-    const thousands = Math.floor(price / 1000);
-    const remainder = price % 1000;
-    return `$${thousands},${String(remainder).padStart(3, "0")}`;
-  }
-  return `$${price}`;
-}
-
-/**
- * Find a specific outbound flight in the DOM and click it using Puppeteer's
- * native click. Matches by price text + airline name.
- */
-async function findAndClickOutbound(
-  page: Page,
-  target: ApiParsedFlight,
-  skipIndices: number[]
-): Promise<number> {
-  const priceStr = formatPriceForDom(target.price);
-  const items = await page.$$("li.pIav2d");
-
-  // First pass: price + airline
-  for (let i = 0; i < items.length; i++) {
-    if (skipIndices.includes(i)) continue;
-    const text = await items[i].evaluate(el => el.textContent ?? "");
-    if (text.includes(priceStr) && text.includes(target.airline)) {
-      await items[i].click();
-      return i;
-    }
-  }
-
-  // Second pass: price only
-  for (let i = 0; i < items.length; i++) {
-    if (skipIndices.includes(i)) continue;
-    const text = await items[i].evaluate(el => el.textContent ?? "");
-    if (text.includes(priceStr)) {
-      await items[i].click();
-      return i;
-    }
-  }
-
-  return -1;
-}
-
-/**
- * Click an outbound flight, capture its specific return flights, then go back.
- */
-async function getReturnForOutbound(
-  page: Page,
-  captured: CapturedApiCall[],
-  target: ApiParsedFlight,
-  skipIndices: number[],
-  returnUrl: string,
-  isCarryon: boolean
-): Promise<{ returns: { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null; clickedIndex: number }> {
-  const preClickCount = captured.length;
-
-  const clickedIdx = await findAndClickOutbound(page, target, skipIndices);
-  if (clickedIdx === -1) {
-    return { returns: null, clickedIndex: -1 };
-  }
-
-  try {
-    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 15_000 });
-  } catch {}
-  await new Promise((r) => setTimeout(r, 3000));
-
-  const returns = await waitForApiResponse(captured, preClickCount, 10_000);
-
-  // Navigate back to outbound list
-  try {
-    await page.goBack({ waitUntil: "networkidle2", timeout: 15_000 });
-    await page.waitForSelector("li.pIav2d", { timeout: 10_000 });
-  } catch {
-    // goBack failed — reload the page
-    await page.goto(returnUrl, { waitUntil: "networkidle2", timeout: 60_000 });
-    try { await page.waitForSelector("li.pIav2d", { timeout: 15_000 }); } catch {}
-    if (isCarryon) {
-      await applyCarryOnFilter(page);
-      await new Promise((r) => setTimeout(r, 3000));
-    }
-  }
-  await new Promise((r) => setTimeout(r, 2000));
-
-  return { returns, clickedIndex: clickedIdx };
-}
-
 // ---------------------------------------------------------------------------
 // Core scrape function
 // ---------------------------------------------------------------------------
@@ -470,15 +501,24 @@ interface ScrapeResult {
 }
 
 /**
- * Scrape a single category on its own page.
+ * Scrape a single category on its own page using click-free POST approach.
  * Each category gets its own browser context + page for isolation.
+ *
+ * Flow:
+ *   1. Load page, optionally apply carry-on filter
+ *   2. Intercept outbound API → extract tokens + segments
+ *   3. For each top N outbound: POST directly to get return flights
+ *   4. Pair outbound + best return, skip if no valid return
  */
 async function scrapeSingleCategory(
   browser: Browser,
   baseUrl: string,
   category: FlightCategory,
   stopType: "nonstop" | "onestop",
-  isCarryon: boolean
+  isCarryon: boolean,
+  originAirport: string,
+  departDate: string,
+  returnDate: string
 ): Promise<ScrapeResult[]> {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
@@ -486,8 +526,9 @@ async function scrapeSingleCategory(
   await page.setUserAgent(pickRandom(USER_AGENTS));
 
   const captured: CapturedApiCall[] = [];
+  const state = { apiUrl: "" };
   await page.setRequestInterception(true);
-  setupApiInterception(page, captured);
+  setupApiInterception(page, captured, state);
 
   const results: ScrapeResult[] = [];
 
@@ -531,25 +572,27 @@ async function scrapeSingleCategory(
       return results;
     }
 
+    if (!state.apiUrl) {
+      console.warn(`      [${category}] No API URL captured, skipping`);
+      return results;
+    }
+
     const googleFlightsUrl = page.url();
     const outboundList = stopType === "nonstop" ? outbound.nonstop : outbound.onestop;
     const topCount = Math.min(TOP_N_PER_CATEGORY, outboundList.length);
 
-    console.log(`      [${category}] ${outboundList.length} outbound, clicking top ${topCount}`);
+    console.log(`      [${category}] ${outboundList.length} outbound, fetching returns for top ${topCount}`);
 
     if (topCount === 0) return results;
 
-    // Step 3: Click top N outbound to get per-outbound returns
-    const clickedDomIndices: number[] = [];
-
+    // Step 3: POST for return flights (no clicking)
     for (let i = 0; i < topCount; i++) {
       const target = outboundList[i];
 
-      const { returns, clickedIndex } = await getReturnForOutbound(
-        page, captured, target, clickedDomIndices, baseUrl, isCarryon
+      const returns = await fetchReturnViaPost(
+        page, state.apiUrl, target,
+        originAirport, departDate, returnDate
       );
-
-      if (clickedIndex >= 0) clickedDomIndices.push(clickedIndex);
 
       // Pick best return for this category
       let bestReturn: ApiParsedFlight | null = null;
@@ -573,12 +616,15 @@ async function scrapeSingleCategory(
 
       results.push({
         category,
-        price: target.price,
+        price: Math.max(target.price, bestReturn.price),
         airline: target.airline,
         outbound: target,
         return_: bestReturn,
         googleFlightsUrl,
       });
+
+      // Small delay between POSTs
+      await new Promise((r) => setTimeout(r, 1000 + Math.random() * 1000));
     }
   } finally {
     await page.close();
@@ -593,11 +639,14 @@ async function scrapeSingleCategory(
  *
  * Launches 4 parallel pages (one per category) with staggered loads
  * and separate browser contexts to minimize CAPTCHA risk.
+ * Each page fetches return flights via direct POST — no clicking.
  */
 async function scrapeAirportDate(
   browser: Browser,
   baseUrl: string,
-  _airport: string
+  airport: string,
+  departDate: string,
+  returnDate: string
 ): Promise<ScrapeResult[]> {
   const categoryDefs: { category: FlightCategory; stopType: "nonstop" | "onestop"; isCarryon: boolean }[] = [
     { category: "nonstop_no_carryon", stopType: "nonstop", isCarryon: false },
@@ -613,7 +662,10 @@ async function scrapeAirportDate(
     const delay = i * (3000 + Math.random() * 2000); // 3-5s stagger
     promises.push(
       new Promise<ScrapeResult[]>((resolve) => setTimeout(resolve, delay)).then(() =>
-        scrapeSingleCategory(browser, baseUrl, def.category, def.stopType, def.isCarryon)
+        scrapeSingleCategory(
+          browser, baseUrl, def.category, def.stopType, def.isCarryon,
+          airport, departDate, returnDate
+        )
       )
     );
   }
@@ -676,7 +728,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log("=== Google Flights Scraper (API Interception) ===");
+  console.log("=== Google Flights Scraper (Click-Free API) ===");
   console.log(`Started at ${new Date().toISOString()}`);
   console.log(`Airports: ${inputAirports.join(", ")}`);
   console.log(`Target cities: ${[...targetCities].join(", ")}`);
@@ -721,7 +773,10 @@ async function main(): Promise<void> {
         let scrapeResults: ScrapeResult[] = [];
 
         try {
-          scrapeResults = await scrapeAirportDate(browser!, baseUrl, airport);
+          scrapeResults = await scrapeAirportDate(
+            browser!, baseUrl, airport,
+            dateRange.departDate, dateRange.returnDate
+          );
           console.log(`    Total results: ${scrapeResults.length}`);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);

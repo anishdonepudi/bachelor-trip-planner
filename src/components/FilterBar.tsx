@@ -1,20 +1,26 @@
 "use client";
 
-import { FlightCategory, BudgetTier } from "@/lib/types";
+import { FlightCategory, BudgetTier, CityConfig } from "@/lib/types";
 import { FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
 
 interface FilterBarProps {
   flightCategory: FlightCategory;
   budgetTier: BudgetTier;
+  priorityCity: string;
+  cities: CityConfig[];
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
+  onPriorityCityChange: (city: string) => void;
 }
 
 export function FilterBar({
   flightCategory,
   budgetTier,
+  priorityCity,
+  cities,
   onFlightCategoryChange,
   onBudgetTierChange,
+  onPriorityCityChange,
 }: FilterBarProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-6 p-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl">
@@ -61,6 +67,25 @@ export function FilterBar({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Priority City */}
+      <div className="flex-1">
+        <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+          Rank By City
+        </h3>
+        <select
+          value={priorityCity}
+          onChange={(e) => onPriorityCityChange(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 hover:bg-zinc-800 focus:outline-none focus:border-emerald-500/40 focus:ring-1 focus:ring-emerald-500/20 transition-all appearance-none cursor-pointer"
+        >
+          <option value="all">All Cities</option>
+          {cities.map((c) => (
+            <option key={c.city} value={c.city}>
+              {c.city} ({c.people})
+            </option>
+          ))}
+        </select>
       </div>
     </div>
   );

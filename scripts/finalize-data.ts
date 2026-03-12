@@ -2,10 +2,10 @@
  * Finalize Data Refresh
  *
  * Runs ONLY when all scrape jobs succeed. All work happens in staging first,
- * then production tables are updated in one final swap:
+ * then production tables are updated via insert-then-delete-old (never empty):
  *
  *   Phase 1 (staging): Aggregate best flights into flights_staging
- *   Phase 2 (promote): Copy all staging tables → production
+ *   Phase 2 (promote): Insert new rows with run_id, then delete old rows
  *   Phase 3 (cleanup): Clear staging tables
  *
  * Usage: npx tsx scripts/finalize-data.ts
@@ -145,64 +145,66 @@ async function main() {
   console.log(`\n4. ${stagedAirbnb.length} staged airbnb listings (ready for promotion)`);
 
   // =============================================
-  // PHASE 2: Promote staging → production
+  // PHASE 2: Promote staging → production (insert-then-delete-old)
+  // New rows are inserted WITH run_id before old rows are removed,
+  // so the production tables are never empty.
   // =============================================
 
   console.log("\n--- Phase 2: Promote to production ---\n");
 
+  const promoteRunId = RUN_ID ?? `local-${Date.now()}`;
+
   // Promote flight_options
   if (stagedFlights.length > 0) {
     console.log("5. Promoting flight_options...");
-    // Delete production rows for the combinations we have new data for
-    const foKeys = new Set(stagedFlights.map((r) => `${r.date_range_id}|${r.origin_city}|${r.airport_used}`));
-    for (const key of foKeys) {
-      const [drId, city, airport] = key.split("|");
-      await supabase.from("flight_options").delete()
-        .eq("date_range_id", drId).eq("origin_city", city).eq("airport_used", airport);
-    }
-
     const foRows = stagedFlights.map((row) => {
-      const { id, run_id, ...rest } = row;
-      return rest;
+      const { id, ...rest } = row;
+      return { ...rest, run_id: promoteRunId };
     });
     const foInserted = await batchInsert("flight_options", foRows);
-    console.log(`   Inserted ${foInserted} flight options`);
+    console.log(`   Inserted ${foInserted} new flight options`);
+
+    // Delete old rows (different run_id or null)
+    const { count: deletedCount } = await supabase
+      .from("flight_options")
+      .delete({ count: "exact" })
+      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    console.log(`   Deleted ${deletedCount ?? "?"} old flight options`);
   }
 
-  // Promote flights (aggregated best)
+  // Promote flights
   const stagedBestFlights = await fetchAll("flights_staging", RUN_ID);
   if (stagedBestFlights.length > 0) {
     console.log("6. Promoting best flights...");
     const flightRows = stagedBestFlights.map((row) => {
-      const { id, run_id, ...rest } = row;
-      return rest;
+      const { id, ...rest } = row;
+      return { ...rest, run_id: promoteRunId };
     });
+    const inserted = await batchInsert("flights", flightRows);
+    console.log(`   Inserted ${inserted} new best flights`);
 
-    for (let i = 0; i < flightRows.length; i += 100) {
-      const batch = flightRows.slice(i, i + 100);
-      const { error } = await supabase
-        .from("flights")
-        .upsert(batch, { onConflict: "date_range_id,origin_city,category" });
-      if (error) console.error(`   Upsert error (flights batch ${i / 100 + 1}): ${error.message}`);
-    }
-    console.log(`   Upserted ${flightRows.length} best flights`);
+    const { count: deletedCount } = await supabase
+      .from("flights")
+      .delete({ count: "exact" })
+      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    console.log(`   Deleted ${deletedCount ?? "?"} old best flights`);
   }
 
   // Promote airbnb_listings
   if (stagedAirbnb.length > 0) {
     console.log("7. Promoting airbnb_listings...");
-    const airbnbKeys = new Set(stagedAirbnb.map((r) => `${r.date_range_id}|${r.budget_tier}`));
-    for (const key of airbnbKeys) {
-      const [drId, tier] = key.split("|");
-      await supabase.from("airbnb_listings").delete().eq("date_range_id", drId).eq("budget_tier", tier);
-    }
-
     const alRows = stagedAirbnb.map((row) => {
-      const { id, run_id, ...rest } = row;
-      return rest;
+      const { id, ...rest } = row;
+      return { ...rest, run_id: promoteRunId };
     });
     const alInserted = await batchInsert("airbnb_listings", alRows);
-    console.log(`   Inserted ${alInserted} airbnb listings`);
+    console.log(`   Inserted ${alInserted} new airbnb listings`);
+
+    const { count: deletedCount } = await supabase
+      .from("airbnb_listings")
+      .delete({ count: "exact" })
+      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    console.log(`   Deleted ${deletedCount ?? "?"} old airbnb listings`);
   } else {
     console.log("7. No staged airbnb listings — skipping.");
   }

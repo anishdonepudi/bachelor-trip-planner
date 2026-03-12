@@ -6,23 +6,36 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+async function fetchAll(table: string) {
+  const rows: Record<string, unknown>[] = [];
+  const PAGE_SIZE = 1000;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    rows.push(...data);
+    if (data.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return rows;
+}
+
 export async function GET() {
   try {
-    const [flightsRes, flightOptionsRes, airbnbRes] = await Promise.all([
-      supabase.from("flights").select("*"),
-      supabase.from("flight_options").select("*"),
-      supabase.from("airbnb_listings").select("*"),
+    const [flights, flightOptions, airbnbListings] = await Promise.all([
+      fetchAll("flights"),
+      fetchAll("flight_options"),
+      fetchAll("airbnb_listings"),
     ]);
 
-    if (flightsRes.error) throw flightsRes.error;
-    if (flightOptionsRes.error) throw flightOptionsRes.error;
-    if (airbnbRes.error) throw airbnbRes.error;
-
-    return NextResponse.json({
-      flights: flightsRes.data ?? [],
-      flightOptions: flightOptionsRes.data ?? [],
-      airbnbListings: airbnbRes.data ?? [],
-    });
+    return NextResponse.json({ flights, flightOptions, airbnbListings });
   } catch (error) {
     console.error("Error fetching weekends:", error);
     return NextResponse.json(

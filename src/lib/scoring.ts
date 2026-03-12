@@ -128,18 +128,25 @@ export function scoreAllWeekends(
   allAirbnbs: AirbnbListingRow[],
   flightCategory: FlightCategory,
   budgetTier: BudgetTier,
-  cities: CityConfig[]
+  cities: CityConfig[],
+  priorityCity: string = "all"
 ): WeekendScore[] {
+  // Filter out flights with 2+ stops on either leg (stale data from older scraper runs)
+  const maxStops = (f: { outbound_details?: { stops?: number } | null; return_details?: { stops?: number } | null }) =>
+    Math.max(f.outbound_details?.stops ?? 0, f.return_details?.stops ?? 0);
+  const validFlights = allFlights.filter((f) => maxStops(f) <= 1);
+  const validFlightOptions = allFlightOptions.filter((f) => maxStops(f) <= 1);
+
   const weekendScores: WeekendScore[] = [];
 
   for (const weekend of dateRanges) {
-    const weekendFlights = allFlights.filter(
+    const weekendFlights = validFlights.filter(
       (f) => f.date_range_id === weekend.id
     );
     const weekendAirbnbs = allAirbnbs.filter(
       (a) => a.date_range_id === weekend.id
     );
-    let weekendFlightOptions = allFlightOptions.filter(
+    let weekendFlightOptions = validFlightOptions.filter(
       (f) => f.date_range_id === weekend.id
     );
 
@@ -193,8 +200,11 @@ export function scoreAllWeekends(
   // For each city, compute mean & stddev of per-person cost across all weekends.
   // Then for each weekend, compute how many stddevs each city is below its mean.
   // Average the z-scores across cities, then normalize to 0-100.
+  // When priorityCity is set, only that city's z-score is used for ranking.
 
-  const cityNames = cities.map((c) => c.city);
+  const cityNames = priorityCity !== "all"
+    ? [priorityCity]
+    : cities.map((c) => c.city);
 
   // Collect per-person costs per city across all weekends
   const cityPerPersonCosts: Record<string, number[]> = {};
@@ -234,7 +244,7 @@ export function scoreAllWeekends(
     let zSum = 0;
     let zCount = 0;
     for (const cost of ws.perCityCosts) {
-      if (cost.perPersonTotal !== null) {
+      if (cost.perPersonTotal !== null && cityStats[cost.city]) {
         const { mean, std } = cityStats[cost.city];
         const z = (cost.perPersonTotal - mean) / std;
         zSum += -z; // negate: lower cost = higher score
