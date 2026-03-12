@@ -151,15 +151,16 @@ jobs:
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
 
-  # Cleanup staging on failure so stale data doesn't accumulate
+  # Cleanup staging on failure or cancellation so stale data doesn't accumulate
   cleanup-staging:
     name: Cleanup Staging
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs: [scrape-flights, scrape-airbnb]
     if: >-
-      !cancelled() &&
-      (needs.scrape-flights.result == 'failure' || needs.scrape-airbnb.result == 'failure')
+      always() &&
+      (needs.scrape-flights.result == 'failure' || needs.scrape-airbnb.result == 'failure' ||
+       needs.scrape-flights.result == 'cancelled' || needs.scrape-airbnb.result == 'cancelled')
 
     steps:
       - name: Checkout repository
