@@ -1,11 +1,11 @@
 /**
- * Google Flights Scraper
+ * Google Flights Scraper (Airport-Centric)
  *
- * Reads city/airport config from Supabase, scrapes Google Flights for each
- * (weekend date range x city x airport) combination, categorizes results,
- * picks the cheapest per category, and upserts into Supabase.
+ * Each GitHub Actions job passes AIRPORTS env var (e.g. "SFO" or "PHL,ONT").
+ * This script scrapes those airports across all date ranges, then writes
+ * results to every city that uses those airports.
  *
- * Usage: npx ts-node scripts/scrape-flights.ts
+ * Usage: AIRPORTS=SFO npx tsx scripts/scrape-flights.ts
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
@@ -14,12 +14,9 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import type { Browser, Page } from "puppeteer";
 import { generateDateRanges } from "../src/lib/date-ranges";
 import type {
-  CityConfig,
-  DateRange,
   FlightCategory,
   FlightLeg,
   FlightOptionRow,
-  Flight,
 } from "../src/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -39,7 +36,6 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const DESTINATION_AIRPORT = "CUN";
-const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
 
 const FLIGHT_CATEGORIES: FlightCategory[] = [
   "nonstop_carryon",
@@ -47,6 +43,32 @@ const FLIGHT_CATEGORIES: FlightCategory[] = [
   "onestop_carryon",
   "onestop_no_carryon",
 ];
+
+// Maps each airport to the cities it serves
+const AIRPORT_TO_CITIES: Record<string, string[]> = {
+  SFO: ["San Francisco"],
+  OAK: ["San Francisco"],
+  SJC: ["San Francisco"],
+  JFK: ["New York City"],
+  EWR: ["New York City"],
+  LGA: ["New York City"],
+  PHL: ["Philadelphia"],
+  IAH: ["Houston"],
+  HOU: ["Houston"],
+  MSY: ["New Orleans"],
+  DCA: ["Washington DC"],
+  IAD: ["Washington DC"],
+  BWI: ["Washington DC"],
+  ORD: ["Chicago"],
+  MDW: ["Chicago"],
+  LAX: ["Los Angeles", "Irvine"],
+  BUR: ["Los Angeles"],
+  LGB: ["Los Angeles", "Irvine"],
+  SNA: ["Los Angeles", "Irvine"],
+  PHX: ["Phoenix"],
+  AZA: ["Phoenix"],
+  ONT: ["Irvine"],
+};
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -85,39 +107,7 @@ function buildFlightsUrl(
 // Supabase helpers
 // ---------------------------------------------------------------------------
 
-async function fetchCityConfigs(): Promise<CityConfig[]> {
-  const { data, error } = await supabase
-    .from("config")
-    .select("cities")
-    .limit(1)
-    .single();
-
-  if (error || !data) {
-    throw new Error(`Failed to fetch config: ${error?.message}`);
-  }
-
-  return data.cities as CityConfig[];
-}
-
-async function isDataFresh(
-  dateRangeId: string,
-  city: string
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("flights")
-    .select("scraped_at")
-    .eq("date_range_id", dateRangeId)
-    .eq("origin_city", city)
-    .order("scraped_at", { ascending: false })
-    .limit(1);
-
-  if (error || !data || data.length === 0) return false;
-
-  const scrapedAt = new Date(data[0].scraped_at).getTime();
-  return Date.now() - scrapedAt < STALE_THRESHOLD_MS;
-}
-
-async function createScrapeJob(): Promise<number> {
+async function createScrapeJob(airports: string[]): Promise<number> {
   const { data, error } = await supabase
     .from("scrape_jobs")
     .insert({
@@ -125,7 +115,7 @@ async function createScrapeJob(): Promise<number> {
       status: "running",
       started_at: new Date().toISOString(),
       github_run_id: process.env.GITHUB_RUN_ID ?? null,
-      progress: { completed: 0, total: 0, current: "initializing" },
+      progress: { completed: 0, total: 0, current: "initializing", airports },
     })
     .select("id")
     .single();
@@ -173,8 +163,93 @@ interface ScrapedFlight {
   returnDuration: string;
   returnStops: number;
   layoverAirport?: string;
+  layoverDuration?: string;
   returnLayoverAirport?: string;
+  returnLayoverDuration?: string;
   hasBaggage: boolean;
+}
+
+interface ParsedFlightInfo {
+  price: number;
+  airline: string;
+  stops: number;
+  duration: string;
+  departTime: string;
+  arriveTime: string;
+  layoverAirport?: string;
+  layoverDuration?: string;
+  hasBaggage: boolean;
+}
+
+/** Parse flight info from an aria-label string */
+function parseAriaLabel(ariaLabel: string): Omit<ParsedFlightInfo, "hasBaggage"> | null {
+  const priceMatch = ariaLabel.match(/(\d[\d,]*)\s*US\s*dollars/i);
+  if (!priceMatch) return null;
+  const price = parseInt(priceMatch[1].replace(/,/g, ""), 10);
+  if (!price || price === 0 || price > 99999999) return null;
+
+  let stops = 0;
+  if (!/nonstop/i.test(ariaLabel)) {
+    const stopMatch = ariaLabel.match(/(\d+)\s*stop/i);
+    stops = stopMatch ? parseInt(stopMatch[1], 10) : 0;
+  }
+
+  let duration = "";
+  const totalDurMatch = ariaLabel.match(/Total duration\s+(.+?)(?:\.|$)/i);
+  if (totalDurMatch) duration = totalDurMatch[1].trim();
+
+  let airline = "Unknown";
+  const airlineMatch = ariaLabel.match(/flight with\s+(.+?)\./i);
+  if (airlineMatch) airline = airlineMatch[1].trim();
+
+  let departTime = "";
+  let arriveTime = "";
+  const timeMatches = ariaLabel.match(
+    /Leaves\s+.+?\s+at\s+(\d{1,2}:\d{2}\s*[AP]M).+?arrives\s+at\s+.+?\s+at\s+(\d{1,2}:\d{2}\s*[AP]M)/i
+  );
+  if (timeMatches) {
+    departTime = timeMatches[1];
+    arriveTime = timeMatches[2];
+  }
+
+  let layoverDuration: string | undefined;
+  const layoverDurMatch = ariaLabel.match(
+    /(?:is\s+a\s+)?(\d+\s*hr?\s*(?:\d+\s*min)?|\d+\s*min)\s+(?:overnight\s+)?layover\s+at/i
+  );
+  if (layoverDurMatch && stops > 0) layoverDuration = layoverDurMatch[1].trim();
+
+  let layoverAirport: string | undefined;
+  const layoverMatch = ariaLabel.match(/layover\s+at\s+(.+?)(?:\.\s|$)/i);
+  if (layoverMatch && stops > 0) layoverAirport = layoverMatch[1].trim();
+
+  return { price, airline, stops, duration, departTime, arriveTime, layoverAirport, layoverDuration };
+}
+
+/** Parse list items on the current page into flight data using aria-labels */
+function parseFlightItems(items: { ariaLabel: string; textContent: string }[]): ParsedFlightInfo[] {
+  const results: ParsedFlightInfo[] = [];
+  for (const item of items) {
+    const parsed = parseAriaLabel(item.ariaLabel);
+    if (!parsed) continue;
+    const hasBaggage = !/does not include overhead bin access/i.test(item.ariaLabel);
+    results.push({ ...parsed, hasBaggage });
+  }
+  return results;
+}
+
+/** Extract aria-label data from all li.pIav2d items on the page */
+async function extractPageItems(page: Page): Promise<{ ariaLabel: string; textContent: string }[]> {
+  return page.evaluate(() => {
+    const items = document.querySelectorAll("li.pIav2d");
+    const results: { ariaLabel: string; textContent: string }[] = [];
+    for (const item of items) {
+      const linkEl = item.querySelector("[aria-label]");
+      const ariaLabel = linkEl?.getAttribute("aria-label") ?? "";
+      if (!ariaLabel) continue;
+      results.push({ ariaLabel, textContent: item.textContent ?? "" });
+    }
+    return results;
+  });
 }
 
 async function scrapeFlightsPage(
@@ -184,13 +259,9 @@ async function scrapeFlightsPage(
   await page.setUserAgent(pickRandom(USER_AGENTS));
   await page.goto(url, { waitUntil: "networkidle2", timeout: 60_000 });
 
-  // Wait for flight results to load
   try {
-    await page.waitForSelector('[role="list"] [role="listitem"], .pIav2d, .Rk10dc', {
-      timeout: 15_000,
-    });
+    await page.waitForSelector("li.pIav2d", { timeout: 15_000 });
   } catch {
-    // Check for CAPTCHA
     const captcha = await page.$('iframe[src*="recaptcha"], #captcha-form, .g-recaptcha');
     if (captcha) {
       console.warn("    CAPTCHA detected, skipping this page");
@@ -200,85 +271,126 @@ async function scrapeFlightsPage(
     return [];
   }
 
-  // Extra wait for dynamic content
   await new Promise((r) => setTimeout(r, 2000));
 
-  const flights: ScrapedFlight[] = await page.evaluate(() => {
-    const results: ScrapedFlight[] = [];
+  // Step 1: Collect outbound flights
+  const outboundData = await extractPageItems(page);
+  const outboundFlights = parseFlightItems(outboundData);
+  if (outboundFlights.length === 0) return [];
 
-    // Google Flights renders results as list items
-    const items = document.querySelectorAll(
-      'li.pIav2d, [role="listitem"], ul.Rk10dc > li'
-    );
+  // Step 2: Click cheapest per category to get return flight details
+  const seenCategories = new Set<string>();
+  const flightsToClick: { index: number; outbound: ParsedFlightInfo }[] = [];
 
-    for (const item of items) {
+  for (let i = 0; i < outboundFlights.length; i++) {
+    const f = outboundFlights[i];
+    const cat = (f.stops === 0 ? "nonstop" : "onestop") + "_" + (f.hasBaggage ? "carryon" : "no_carryon");
+    if (!seenCategories.has(cat)) {
+      seenCategories.add(cat);
+      flightsToClick.push({ index: i, outbound: f });
+    }
+  }
+
+  const results: ScrapedFlight[] = [];
+
+  for (const { index, outbound } of flightsToClick) {
+    try {
+      const items = await page.$$("li.pIav2d");
+      if (index >= items.length) continue;
+
+      await items[index].click();
+      await new Promise((r) => setTimeout(r, 3000));
+
       try {
-        // Price
-        const priceEl = item.querySelector('[data-test-id="price"] span, .YMlIz span, .BVAVmf');
-        if (!priceEl) continue;
-        const priceText = priceEl.textContent?.replace(/[^0-9]/g, "");
-        if (!priceText) continue;
-        const price = parseInt(priceText, 10);
-        if (isNaN(price) || price === 0) continue;
-
-        // Airline
-        const airlineEl = item.querySelector('.Ir0Voe .sSHqwe, .h1fkLb, [data-test-id="airline"]');
-        const airline = airlineEl?.textContent?.trim() ?? "Unknown";
-
-        // Stops
-        const stopsEl = item.querySelector('.EfT7Ae .ogfYpf, .BbR8Ec .ogfYpf, [data-test-id="stops"]');
-        const stopsText = stopsEl?.textContent?.trim() ?? "";
-        let stops = 0;
-        if (/nonstop/i.test(stopsText)) {
-          stops = 0;
-        } else {
-          const m = stopsText.match(/(\d+)\s*stop/i);
-          stops = m ? parseInt(m[1], 10) : 0;
-        }
-
-        // Duration
-        const durationEl = item.querySelector('.Ak5kof .gvkrdb, [data-test-id="duration"]');
-        const duration = durationEl?.textContent?.trim() ?? "";
-
-        // Times
-        const timeEls = item.querySelectorAll('.zxVSec span, .mv1WYe span, [data-test-id="departure-time"], [data-test-id="arrival-time"]');
-        const departTime = timeEls[0]?.textContent?.trim() ?? "";
-        const arriveTime = timeEls[1]?.textContent?.trim() ?? "";
-
-        // Layover info
-        const layoverEl = item.querySelector('.BbR8Ec .sSHqwe, .EfT7Ae .sSHqwe');
-        const layoverAirport = layoverEl?.textContent?.trim();
-
-        // Bag info - check if carry-on is included
-        const bagText = item.textContent ?? "";
-        const hasBaggage =
-          /carry-on/i.test(bagText) ||
-          /cabin bag/i.test(bagText) ||
-          /personal item and carry-on/i.test(bagText);
-
-        results.push({
-          price,
-          airline,
-          stops,
-          duration,
-          departTime,
-          arriveTime,
-          returnDepartTime: "", // Return leg parsed separately if visible
-          returnArriveTime: "",
-          returnDuration: "",
-          returnStops: stops, // Approximate with same stops
-          hasBaggage,
-          layoverAirport: stops > 0 ? layoverAirport : undefined,
-        });
+        await page.waitForSelector("li.pIav2d", { timeout: 10_000 });
       } catch {
-        // Skip malformed entries
+        console.warn("      No return flights loaded, skipping");
+        await page.goBack({ waitUntil: "networkidle2", timeout: 30_000 });
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+
+      const returnData = await extractPageItems(page);
+      const returnFlights = parseFlightItems(returnData);
+
+      const bestReturn = returnFlights.length > 0
+        ? returnFlights.reduce((a, b) => (a.price <= b.price ? a : b))
+        : null;
+
+      results.push({
+        price: outbound.price,
+        airline: outbound.airline,
+        stops: outbound.stops,
+        duration: outbound.duration,
+        departTime: outbound.departTime,
+        arriveTime: outbound.arriveTime,
+        layoverAirport: outbound.layoverAirport,
+        layoverDuration: outbound.layoverDuration,
+        returnDepartTime: bestReturn?.departTime ?? "",
+        returnArriveTime: bestReturn?.arriveTime ?? "",
+        returnDuration: bestReturn?.duration ?? "",
+        returnStops: bestReturn?.stops ?? outbound.stops,
+        returnLayoverAirport: bestReturn?.layoverAirport,
+        returnLayoverDuration: bestReturn?.layoverDuration,
+        hasBaggage: outbound.hasBaggage,
+      });
+
+      const layoverInfo = outbound.layoverAirport
+        ? ` | layover: ${outbound.layoverDuration} at ${outbound.layoverAirport}`
+        : "";
+      const retLayoverInfo = bestReturn?.layoverAirport
+        ? ` | layover: ${bestReturn.layoverDuration} at ${bestReturn.layoverAirport}`
+        : "";
+      console.log(
+        `      Outbound: $${outbound.price} ${outbound.airline} (${outbound.stops} stops, ${outbound.duration})${layoverInfo}`
+      );
+      console.log(
+        `      Return:   ${bestReturn ? `${bestReturn.airline} (${bestReturn.stops} stops, ${bestReturn.duration})${retLayoverInfo}` : "none found"}`
+      );
+
+      await page.goBack({ waitUntil: "networkidle2", timeout: 30_000 });
+      await new Promise((r) => setTimeout(r, 2000));
+
+      try {
+        await page.waitForSelector("li.pIav2d", { timeout: 10_000 });
+      } catch {
+        console.warn("      Could not return to outbound list, stopping click-through");
+        break;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`      Click-through error: ${msg}`);
+      try {
+        await page.goBack({ waitUntil: "networkidle2", timeout: 15_000 });
+        await new Promise((r) => setTimeout(r, 2000));
+      } catch {
+        break;
       }
     }
+  }
 
-    return results;
-  });
+  // Include remaining outbound flights without return details
+  for (let i = 0; i < outboundFlights.length; i++) {
+    if (flightsToClick.some((c) => c.index === i)) continue;
+    const f = outboundFlights[i];
+    results.push({
+      price: f.price,
+      airline: f.airline,
+      stops: f.stops,
+      duration: f.duration,
+      departTime: f.departTime,
+      arriveTime: f.arriveTime,
+      layoverAirport: f.layoverAirport,
+      layoverDuration: f.layoverDuration,
+      returnDepartTime: "",
+      returnArriveTime: "",
+      returnDuration: "",
+      returnStops: f.stops,
+      hasBaggage: f.hasBaggage,
+    });
+  }
 
-  return flights;
+  return results;
 }
 
 function categorizeFlight(flight: ScrapedFlight): FlightCategory {
@@ -291,23 +403,65 @@ function categorizeFlight(flight: ScrapedFlight): FlightCategory {
   return "onestop_no_carryon";
 }
 
+function buildFlightLeg(flight: ScrapedFlight, leg: "outbound" | "return"): FlightLeg {
+  if (leg === "outbound") {
+    return {
+      departTime: flight.departTime,
+      arriveTime: flight.arriveTime,
+      duration: flight.duration,
+      stops: flight.stops,
+      layoverAirport: flight.layoverAirport,
+      layoverDuration: flight.layoverDuration,
+    };
+  }
+  return {
+    departTime: flight.returnDepartTime,
+    arriveTime: flight.returnArriveTime,
+    duration: flight.returnDuration,
+    stops: flight.returnStops,
+    layoverAirport: flight.returnLayoverAirport,
+    layoverDuration: flight.returnLayoverDuration,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Main orchestration
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  // Parse input airports from env
+  const airportsEnv = process.env.AIRPORTS;
+  if (!airportsEnv) {
+    console.error("Missing AIRPORTS env var (e.g. AIRPORTS=SFO or AIRPORTS=PHL,ONT)");
+    process.exit(1);
+  }
+
+  const inputAirports = airportsEnv.split(",").map((a) => a.trim());
+
+  // Derive all cities served by these airports
+  const targetCities = new Set<string>();
+  for (const airport of inputAirports) {
+    const cities = AIRPORT_TO_CITIES[airport];
+    if (!cities) {
+      console.error(`Unknown airport: ${airport}`);
+      process.exit(1);
+    }
+    for (const city of cities) targetCities.add(city);
+  }
+
   console.log("=== Google Flights Scraper ===");
   console.log(`Started at ${new Date().toISOString()}`);
+  console.log(`Airports: ${inputAirports.join(", ")}`);
+  console.log(`Target cities: ${[...targetCities].join(", ")}`);
 
-  const cities = await fetchCityConfigs();
   const dateRanges = generateDateRanges();
-  const jobId = await createScrapeJob();
-
-  const totalTasks = cities.length * dateRanges.length;
+  const totalTasks = inputAirports.length * dateRanges.length;
   let completedTasks = 0;
 
-  console.log(`Cities: ${cities.length}, Date ranges: ${dateRanges.length}`);
-  console.log(`Total tasks: ${totalTasks}`);
+  console.log(`Date ranges: ${dateRanges.length}`);
+  console.log(`Total tasks: ${totalTasks}\n`);
+
+  const jobId = await createScrapeJob(inputAirports);
 
   let browser: Browser | null = null;
 
@@ -323,28 +477,45 @@ async function main(): Promise<void> {
       ],
     });
 
-    // Process cities sequentially
-    for (const city of cities) {
-      const allAirports = [...city.primaryAirports, ...city.nearbyAirports];
-      console.log(
-        `\nProcessing ${city.city} (airports: ${allAirports.join(", ")})`
-      );
+    for (const dateRange of dateRanges) {
+      console.log(`\n--- ${dateRange.id} (${dateRange.format}) ---`);
 
-      for (const dateRange of dateRanges) {
+      // Scrape each airport for this date range
+      const scrapedByAirport = new Map<string, { flights: ScrapedFlight[]; url: string }>();
+
+      for (const airport of inputAirports) {
         completedTasks++;
-        const taskLabel = `${city.city} | ${dateRange.id}`;
-
-        // Check freshness
-        if (await isDataFresh(dateRange.id, city.city)) {
-          console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel} - FRESH, skipping`);
-          await updateJobProgress(jobId, completedTasks, totalTasks, `${taskLabel} (skipped)`);
-          continue;
-        }
-
+        const taskLabel = `${airport} | ${dateRange.id}`;
         console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel} - scraping...`);
         await updateJobProgress(jobId, completedTasks, totalTasks, taskLabel);
 
-        // Collect all flight options across airports for this city+dateRange
+        const url = buildFlightsUrl(airport, dateRange.departDate, dateRange.returnDate);
+
+        try {
+          const page = await browser!.newPage();
+          await page.setViewport({ width: 1920, height: 1080 });
+          const flights = await scrapeFlightsPage(page, url);
+          console.log(`    ${airport}: ${flights.length} results`);
+          scrapedByAirport.set(airport, { flights, url });
+          await page.close();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`    ${airport}: ERROR - ${msg}`);
+        }
+
+        if (inputAirports.length > 1) await randomDelay();
+      }
+
+      // Write results for each target city
+      const now = new Date().toISOString();
+
+      for (const city of targetCities) {
+        // Find which of our input airports serve this city
+        const cityAirports = inputAirports.filter(
+          (a) => AIRPORT_TO_CITIES[a]?.includes(city)
+        );
+
+        // Collect all flight options for this city from its airports
         const allOptions: {
           airport: string;
           category: FlightCategory;
@@ -352,164 +523,56 @@ async function main(): Promise<void> {
           url: string;
         }[] = [];
 
-        for (const airport of allAirports) {
-          const url = buildFlightsUrl(
-            airport,
-            dateRange.departDate,
-            dateRange.returnDate
-          );
-
-          try {
-            const page = await browser!.newPage();
-            await page.setViewport({ width: 1920, height: 1080 });
-
-            const flights = await scrapeFlightsPage(page, url);
-            console.log(`    ${airport}: ${flights.length} results`);
-
-            for (const f of flights) {
-              allOptions.push({
-                airport,
-                category: categorizeFlight(f),
-                flight: f,
-                url,
-              });
-            }
-
-            await page.close();
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`    ${airport}: ERROR - ${msg}`);
-          }
-
-          // Random delay between airport queries
-          await randomDelay();
-        }
-
-        // Find cheapest per category across all airports
-        const now = new Date().toISOString();
-        const bestByCategory = new Map<
-          FlightCategory,
-          { airport: string; flight: ScrapedFlight; url: string }
-        >();
-
-        for (const opt of allOptions) {
-          const existing = bestByCategory.get(opt.category);
-          if (!existing || opt.flight.price < existing.flight.price) {
-            bestByCategory.set(opt.category, {
-              airport: opt.airport,
-              flight: opt.flight,
-              url: opt.url,
+        for (const airport of cityAirports) {
+          const data = scrapedByAirport.get(airport);
+          if (!data) continue;
+          for (const f of data.flights) {
+            allOptions.push({
+              airport,
+              category: categorizeFlight(f),
+              flight: f,
+              url: data.url,
             });
           }
         }
 
-        // Build flight_options rows (all options)
+        if (allOptions.length === 0) continue;
+
+        // Build flight_options rows
         const optionRows: FlightOptionRow[] = allOptions.map((opt) => ({
           date_range_id: dateRange.id,
-          origin_city: city.city,
+          origin_city: city,
           category: opt.category,
           airport_used: opt.airport,
           price: opt.flight.price,
           airline: opt.flight.airline,
-          outbound_details: {
-            departTime: opt.flight.departTime,
-            arriveTime: opt.flight.arriveTime,
-            duration: opt.flight.duration,
-            stops: opt.flight.stops,
-            layoverAirport: opt.flight.layoverAirport,
-          } as FlightLeg,
-          return_details: {
-            departTime: opt.flight.returnDepartTime,
-            arriveTime: opt.flight.returnArriveTime,
-            duration: opt.flight.returnDuration,
-            stops: opt.flight.returnStops,
-          } as FlightLeg,
+          outbound_details: buildFlightLeg(opt.flight, "outbound"),
+          return_details: buildFlightLeg(opt.flight, "return"),
           google_flights_url: opt.url,
           is_best: false,
           scraped_at: now,
         }));
 
-        // Mark best options
-        for (const [category, best] of bestByCategory.entries()) {
-          const match = optionRows.find(
-            (r) =>
-              r.category === category &&
-              r.airport_used === best.airport &&
-              r.price === best.flight.price
-          );
-          if (match) match.is_best = true;
-        }
-
-        // Upsert into flights table (best per category)
-        for (const category of FLIGHT_CATEGORIES) {
-          const best = bestByCategory.get(category);
-
-          const flightRow: Flight = {
-            date_range_id: dateRange.id,
-            trip_format: dateRange.format,
-            depart_date: dateRange.departDate,
-            return_date: dateRange.returnDate,
-            origin_city: city.city,
-            category,
-            airport_used: best?.airport ?? "",
-            price: best?.flight.price ?? null,
-            airline: best?.flight.airline ?? null,
-            outbound_details: best
-              ? ({
-                  departTime: best.flight.departTime,
-                  arriveTime: best.flight.arriveTime,
-                  duration: best.flight.duration,
-                  stops: best.flight.stops,
-                  layoverAirport: best.flight.layoverAirport,
-                } as FlightLeg)
-              : null,
-            return_details: best
-              ? ({
-                  departTime: best.flight.returnDepartTime,
-                  arriveTime: best.flight.returnArriveTime,
-                  duration: best.flight.returnDuration,
-                  stops: best.flight.returnStops,
-                } as FlightLeg)
-              : null,
-            google_flights_url: best?.url ?? null,
-            scraped_at: now,
-          };
-
-          const { error } = await supabase
-            .from("flights")
-            .upsert(flightRow, {
-              onConflict: "date_range_id,origin_city,category",
-            });
-
-          if (error) {
-            console.error(
-              `    DB upsert error (flights, ${category}): ${error.message}`
-            );
-          }
-        }
-
-        // Insert all options into flight_options table
-        if (optionRows.length > 0) {
-          // Delete old options for this city+dateRange, then insert fresh
+        // Delete old options scoped to these specific airports (not all airports for the city)
+        for (const airport of cityAirports) {
           await supabase
             .from("flight_options")
             .delete()
             .eq("date_range_id", dateRange.id)
-            .eq("origin_city", city.city);
+            .eq("origin_city", city)
+            .eq("airport_used", airport);
+        }
 
-          // Insert in batches of 50
-          for (let i = 0; i < optionRows.length; i += 50) {
-            const batch = optionRows.slice(i, i + 50);
-            const { error } = await supabase.from("flight_options").insert(batch);
-            if (error) {
-              console.error(`    DB insert error (flight_options): ${error.message}`);
-            }
+        // Insert in batches of 50
+        for (let i = 0; i < optionRows.length; i += 50) {
+          const batch = optionRows.slice(i, i + 50);
+          const { error } = await supabase.from("flight_options").insert(batch);
+          if (error) {
+            console.error(`    DB insert error (flight_options, ${city}): ${error.message}`);
           }
         }
 
-        console.log(
-          `    Saved: ${bestByCategory.size} best flights, ${optionRows.length} total options`
-        );
+        console.log(`    → ${city}: ${optionRows.length} options saved`);
       }
     }
 
@@ -521,9 +584,7 @@ async function main(): Promise<void> {
     await completeJob(jobId, msg);
     process.exit(1);
   } finally {
-    if (browser) {
-      await browser.close();
-    }
+    if (browser) await browser.close();
   }
 }
 

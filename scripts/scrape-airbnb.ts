@@ -1,51 +1,40 @@
 /**
- * Airbnb Scraper
+ * Airbnb Scraper (HTML-embedded JSON — no Puppeteer, no GraphQL API)
  *
- * For each weekend date range and budget tier, scrapes the first page of
- * Airbnb search results for Tulum, Mexico (17 adults, pool, entire home).
- * Extracts listing details and upserts into Supabase.
+ * Airbnb embeds search results as JSON in their server-rendered HTML page.
+ * We fetch the page, extract the embedded data, and parse listings.
+ * ~1-2 seconds per query vs. 60-90s with Puppeteer.
  *
- * Usage: npx ts-node scripts/scrape-airbnb.ts
+ * Usage:
+ *   Full run:   npx tsx scripts/scrape-airbnb.ts
+ *   Local test: npx tsx scripts/scrape-airbnb.ts --test
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
-import puppeteerExtra from "puppeteer-extra";
-import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import type { Browser, Page } from "puppeteer";
+import axios from "axios";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { BudgetTier, AirbnbListingRow, DateRange } from "../src/lib/types";
+import type { BudgetTier, AirbnbListingRow } from "../src/lib/types";
 
 // ---------------------------------------------------------------------------
-// Setup
+// Config
 // ---------------------------------------------------------------------------
-
-puppeteerExtra.use(StealthPlugin());
-
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
-
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY env vars");
-  process.exit(1);
-}
-
-const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 const TOTAL_PEOPLE = 17;
 const NIGHTS = 3;
-const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000; // 12 hours
+const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000;
+const IS_TEST = process.argv.includes("--test");
 
 interface BudgetTierConfig {
   value: BudgetTier;
   label: string;
-  totalMin: number;
+  totalMin: number; // total stay price (price_filter_input_type=2)
   totalMax: number;
 }
 
 const BUDGET_TIERS: BudgetTierConfig[] = [
-  { value: "budget", label: "Budget", totalMin: 850, totalMax: 1020 },
-  { value: "mid", label: "Mid-Range", totalMin: 1020, totalMax: 1190 },
-  { value: "premium", label: "Premium", totalMin: 1190, totalMax: 1360 },
+  { value: "budget", label: "Budget", totalMin: 2550, totalMax: 3009 },
+  { value: "mid", label: "Mid-Range", totalMin: 3060, totalMax: 3519 },
+  { value: "premium", label: "Premium", totalMin: 3570, totalMax: 4029 },
 ];
 
 const USER_AGENTS = [
@@ -61,7 +50,7 @@ const USER_AGENTS = [
 // Helpers
 // ---------------------------------------------------------------------------
 
-function randomDelay(minMs = 3000, maxMs = 8000): Promise<void> {
+function randomDelay(minMs = 2000, maxMs = 4000): Promise<void> {
   const ms = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -70,98 +59,43 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function buildAirbnbUrl(
+/** Build an Airbnb search URL matching Airbnb's real browser format */
+export function buildAirbnbSearchUrl(
   checkin: string,
   checkout: string,
-  totalMin: number,
-  totalMax: number
+  priceMin: number,
+  priceMax: number,
+  cursor?: string
 ): string {
   const params = new URLSearchParams({
-    tab_id: "home_tab",
     checkin,
     checkout,
-    adults: String(TOTAL_PEOPLE),
+    adults: String(Math.min(TOTAL_PEOPLE, 16)), // Airbnb caps search at 16 guests
     currency: "USD",
-    price_min: String(totalMin),
-    price_max: String(totalMax),
+    place_id: "ChIJPxw3l3IvUI8RKCAPIt8bL-k", // Tulum
+    query: "Tulum, Quintana Roo, Mexico",
+    search_mode: "regular_search",
+    price_filter_input_type: "2", // total stay price (not nightly)
+    price_filter_num_nights: String(NIGHTS),
+    channel: "EXPLORE",
   });
-
-  // Array params need manual append
-  params.append("property_type_id[]", "4"); // Entire home
+  if (priceMin > 0) params.set("price_min", String(priceMin));
+  if (priceMax > 0) params.set("price_max", String(priceMax));
+  params.append("room_types[]", "Entire home/apt");
   params.append("amenities[]", "7"); // Pool
-
+  params.append("refinement_paths[]", "/homes");
+  if (cursor) params.set("cursor", cursor);
   return `https://www.airbnb.com/s/Tulum--Quintana-Roo--Mexico/homes?${params.toString()}`;
 }
 
 // ---------------------------------------------------------------------------
-// Supabase helpers
+// Scraping: fetch HTML and extract embedded JSON
 // ---------------------------------------------------------------------------
 
-async function isDataFresh(
-  dateRangeId: string,
-  tier: BudgetTier
-): Promise<boolean> {
-  const { data, error } = await supabase
-    .from("airbnb_listings")
-    .select("scraped_at")
-    .eq("date_range_id", dateRangeId)
-    .eq("budget_tier", tier)
-    .order("scraped_at", { ascending: false })
-    .limit(1);
-
-  if (error || !data || data.length === 0) return false;
-
-  const scrapedAt = new Date(data[0].scraped_at).getTime();
-  return Date.now() - scrapedAt < STALE_THRESHOLD_MS;
-}
-
-async function createScrapeJob(): Promise<number> {
-  const { data, error } = await supabase
-    .from("scrape_jobs")
-    .insert({
-      job_type: "airbnb",
-      status: "running",
-      started_at: new Date().toISOString(),
-      github_run_id: process.env.GITHUB_RUN_ID ?? null,
-      progress: { completed: 0, total: 0, current: "initializing" },
-    })
-    .select("id")
-    .single();
-
-  if (error || !data) throw new Error(`Failed to create scrape job: ${error?.message}`);
-  return data.id;
-}
-
-async function updateJobProgress(
-  jobId: number,
-  completed: number,
-  total: number,
-  current: string
-): Promise<void> {
-  await supabase
-    .from("scrape_jobs")
-    .update({ progress: { completed, total, current } })
-    .eq("id", jobId);
-}
-
-async function completeJob(jobId: number, errorMsg?: string): Promise<void> {
-  await supabase
-    .from("scrape_jobs")
-    .update({
-      status: errorMsg ? "failed" : "completed",
-      completed_at: new Date().toISOString(),
-      error_message: errorMsg ?? null,
-    })
-    .eq("id", jobId);
-}
-
-// ---------------------------------------------------------------------------
-// Page scraping
-// ---------------------------------------------------------------------------
-
-interface ScrapedListing {
+export interface ScrapedListing {
   name: string;
-  price: number; // per night (total for the house)
+  price: number; // total price for the stay (3 nights)
+  pricePerNight: number;
   rating: number;
   reviewCount: number;
   bedrooms: number;
@@ -173,161 +107,256 @@ interface ScrapedListing {
   superhost: boolean;
 }
 
-async function scrapeAirbnbPage(
-  page: Page,
-  url: string
-): Promise<ScrapedListing[]> {
-  await page.setUserAgent(pickRandom(USER_AGENTS));
+/**
+ * Fetch a single Airbnb search page and return listings + next-page cursor.
+ */
+async function fetchAirbnbPage(
+  checkin: string,
+  checkout: string,
+  priceMin: number,
+  priceMax: number,
+  cursor?: string
+): Promise<{ listings: ScrapedListing[]; nextCursor: string | null }> {
+  const url = buildAirbnbSearchUrl(checkin, checkout, priceMin, priceMax, cursor);
 
-  // Set language/locale headers
-  await page.setExtraHTTPHeaders({
-    "Accept-Language": "en-US,en;q=0.9",
+  const { data: html } = await axios.get(url, {
+    headers: {
+      "User-Agent": pickRandom(USER_AGENTS),
+      "Accept-Language": "en-US,en;q=0.9",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Cache-Control": "no-cache",
+    },
+    timeout: 30_000,
   });
 
-  await page.goto(url, { waitUntil: "networkidle2", timeout: 60_000 });
+  const htmlStr = html as string;
 
-  // Wait for listing cards to appear
-  try {
-    await page.waitForSelector('[itemprop="itemListElement"], [data-testid="card-container"], .cy5jw6o', {
-      timeout: 15_000,
-    });
-  } catch {
-    // Check for CAPTCHA or bot detection
-    const pageContent = await page.content();
+  // Extract the deferred state JSON from the script tag
+  const deferredMatch = htmlStr.match(
+    /id="data-deferred-state-0"[^>]*>(.*?)<\/script>/s
+  );
+
+  if (!deferredMatch) {
     if (
-      pageContent.includes("captcha") ||
-      pageContent.includes("robot") ||
-      pageContent.includes("blocked")
+      htmlStr.includes("captcha") ||
+      htmlStr.includes("robot") ||
+      htmlStr.includes("blocked")
     ) {
-      console.warn("    CAPTCHA/bot detection hit, skipping this page");
-      return [];
+      console.warn("    Bot detection hit");
     }
-    console.warn("    No listing results found on page, skipping");
-    return [];
+    return { listings: [], nextCursor: null };
   }
 
-  // Extra wait for lazy-loaded content
-  await new Promise((r) => setTimeout(r, 3000));
-
-  // Scroll down to trigger lazy loading of images
-  await page.evaluate(async () => {
-    for (let i = 0; i < 5; i++) {
-      window.scrollBy(0, 800);
-      await new Promise((r) => setTimeout(r, 500));
-    }
-    window.scrollTo(0, 0);
-  });
-
-  await new Promise((r) => setTimeout(r, 2000));
-
-  const listings: ScrapedListing[] = await page.evaluate(() => {
-    const results: ScrapedListing[] = [];
-
-    const cards = document.querySelectorAll(
-      '[itemprop="itemListElement"], [data-testid="card-container"], .cy5jw6o, .g1qv1ctd'
+  try {
+    const json = JSON.parse(deferredMatch[1]);
+    const listings = parseEmbeddedResults(json);
+    const nextCursor = extractNextCursor(json);
+    return { listings, nextCursor };
+  } catch (err) {
+    console.warn(
+      "    Failed to parse embedded JSON:",
+      err instanceof Error ? err.message : err
     );
+    return { listings: [], nextCursor: null };
+  }
+}
 
-    for (const card of cards) {
+/**
+ * Extract pagination cursor from the embedded JSON.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractNextCursor(json: any): string | null {
+  try {
+    const niobeData = json?.niobeClientData;
+    if (!Array.isArray(niobeData) || niobeData.length === 0) return null;
+    const paginationInfo =
+      niobeData[0]?.[1]?.data?.presentation?.staysSearch?.results?.paginationInfo;
+    return paginationInfo?.nextPageCursor ?? paginationInfo?.cursors?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch all pages of Airbnb search results (up to maxPages).
+ */
+const MAX_PAGES = 3;
+
+async function fetchAirbnbListings(
+  checkin: string,
+  checkout: string,
+  priceMin: number,
+  priceMax: number
+): Promise<ScrapedListing[]> {
+  const allListings: ScrapedListing[] = [];
+  let cursor: string | undefined;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const { listings, nextCursor } = await fetchAirbnbPage(
+      checkin, checkout, priceMin, priceMax, cursor
+    );
+    allListings.push(...listings);
+
+    if (!nextCursor || listings.length === 0) break;
+    cursor = nextCursor;
+
+    // Small delay between pages
+    if (page < MAX_PAGES - 1) await randomDelay(1000, 2000);
+  }
+
+  return allListings;
+}
+
+/**
+ * Parse the niobeClientData embedded in the page.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseEmbeddedResults(json: any): ScrapedListing[] {
+  const results: ScrapedListing[] = [];
+
+  try {
+    // Navigate: niobeClientData[0][1].data.presentation.staysSearch.results.searchResults
+    const niobeData = json?.niobeClientData;
+    if (!Array.isArray(niobeData) || niobeData.length === 0) return [];
+
+    const searchResults =
+      niobeData[0]?.[1]?.data?.presentation?.staysSearch?.results
+        ?.searchResults ?? [];
+
+    for (const result of searchResults) {
       try {
-        // Name
-        const nameEl = card.querySelector(
-          '[data-testid="listing-card-title"], [id^="title_"], .t1jojoys'
-        );
-        const name = nameEl?.textContent?.trim() ?? "";
+        // Title
+        const name =
+          result.title ??
+          result.subtitle ??
+          "";
         if (!name) continue;
 
-        // Price per night
-        const priceEl = card.querySelector(
-          '[data-testid="price-availability-row"] span._11jcbg2, ._tyxjp1, .a8jt5op, ._1y74zjx'
-        );
-        let priceText = priceEl?.textContent ?? "";
-        // Try broader price search
-        if (!priceText) {
-          const allSpans = card.querySelectorAll("span");
-          for (const span of allSpans) {
-            const t = span.textContent ?? "";
-            if (t.startsWith("$") && /^\$[\d,]+$/.test(t.trim())) {
-              priceText = t;
-              break;
+        // Price — from accessibilityLabel: "$6,730 for 3 nights, originally $8,176"
+        // or from discountedPrice/price string
+        let totalPrice = 0;
+        const priceInfo = result.structuredDisplayPrice?.primaryLine;
+
+        if (priceInfo) {
+          // Try accessibility label first (most reliable)
+          const labelMatch = priceInfo.accessibilityLabel?.match(
+            /\$([\d,]+)\s+for/
+          );
+          if (labelMatch) {
+            totalPrice =
+              parseInt(labelMatch[1].replace(/,/g, ""), 10) || 0;
+          }
+
+          // Fallback to discountedPrice or price fields
+          if (totalPrice === 0) {
+            const priceStr =
+              priceInfo.discountedPrice ?? priceInfo.price ?? "";
+            if (typeof priceStr === "string") {
+              totalPrice =
+                parseInt(priceStr.replace(/[^0-9]/g, ""), 10) || 0;
             }
           }
         }
-        const priceMatch = priceText.replace(/[^0-9]/g, "");
-        const price = parseInt(priceMatch, 10);
-        if (isNaN(price) || price === 0) continue;
 
-        // Rating
-        const ratingEl = card.querySelector(
-          '[aria-label*="rating"], .r1dxllyb, .ru0q88m'
-        );
-        const ratingText = ratingEl?.textContent ?? "";
-        const ratingMatch = ratingText.match(/([\d.]+)/);
-        const rating = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+        // Also try extracting nightly from explanation data
+        let pricePerNight = 0;
+        const explanationItems =
+          result.structuredDisplayPrice?.explanationData?.priceDetails?.[0]
+            ?.items ?? [];
+        for (const item of explanationItems) {
+          const desc = item.description ?? "";
+          // "3 nights x $2,725.04"
+          const nightlyMatch = desc.match(
+            /\d+\s*nights?\s*x\s*\$([\d,.]+)/
+          );
+          if (nightlyMatch) {
+            pricePerNight =
+              parseFloat(nightlyMatch[1].replace(/,/g, "")) || 0;
+            break;
+          }
+        }
 
-        // Review count
-        const reviewEl = card.querySelector(
-          '[aria-label*="review"], .r1dxllyb, .ru0q88m'
-        );
-        const reviewText = reviewEl?.textContent ?? "";
-        const reviewMatch = reviewText.match(/\((\d+)\)/);
-        const reviewCount = reviewMatch ? parseInt(reviewMatch[1], 10) : 0;
+        if (totalPrice === 0 && pricePerNight > 0) {
+          totalPrice = Math.round(pricePerNight * NIGHTS);
+        }
+        if (totalPrice === 0) continue;
 
-        // Listing details (bedrooms, bathrooms, guests)
-        const detailEls = card.querySelectorAll(
-          '[data-testid="listing-card-subtitle"] span, .f15liw5s span, .s1cjsi4j'
-        );
+        // Always derive per-night from total (total is the discounted price)
+        pricePerNight = Math.round((totalPrice / NIGHTS) * 100) / 100;
+
+        // Rating & reviews from avgRatingLocalized e.g. "4.89 (188)"
+        let rating = 0;
+        let reviewCount = 0;
+        const ratingStr = String(result.avgRatingLocalized ?? "");
+        const ratingMatch = ratingStr.match(/^([\d.]+)\s*\((\d+)\)/);
+        if (ratingMatch) {
+          rating = parseFloat(ratingMatch[1]) || 0;
+          reviewCount = parseInt(ratingMatch[2], 10) || 0;
+        }
+
+        // Room details from structuredContent.primaryLine
         let bedrooms = 0;
         let bathrooms = 0;
         let maxGuests = 0;
+        const primaryLine =
+          result.structuredContent?.primaryLine ?? [];
+        for (const item of primaryLine) {
+          const body = item.body ?? "";
+          const bedroomMatch = body.match(/(\d+)\s*bedroom/i);
+          if (bedroomMatch) bedrooms = parseInt(bedroomMatch[1], 10);
+          const bathMatch = body.match(
+            /(\d+(?:\.5)?)\s*bathroom/i
+          );
+          if (bathMatch) bathrooms = parseFloat(bathMatch[1]);
+          const guestMatch = body.match(/(\d+)\s*guest/i);
+          if (guestMatch) maxGuests = parseInt(guestMatch[1], 10);
+        }
 
-        const detailText = Array.from(detailEls)
-          .map((el) => el.textContent ?? "")
-          .join(" ");
-
-        // Also check full card text for details
-        const fullText = card.textContent ?? "";
-        const textToSearch = detailText || fullText;
-
-        const bedroomMatch = textToSearch.match(/(\d+)\s*bedroom/i);
-        if (bedroomMatch) bedrooms = parseInt(bedroomMatch[1], 10);
-
-        const bathroomMatch = textToSearch.match(/(\d+(?:\.5)?)\s*bathroom/i);
-        if (bathroomMatch) bathrooms = parseFloat(bathroomMatch[1]);
-
-        const guestMatch = textToSearch.match(/(\d+)\s*guest/i);
-        if (guestMatch) maxGuests = parseInt(guestMatch[1], 10);
-
-        // Amenities (from listing subtitle or tags)
+        // Amenities from structuredContent.secondaryLine
         const amenities: string[] = [];
-        if (/pool/i.test(fullText)) amenities.push("Pool");
-        if (/wifi|wi-fi/i.test(fullText)) amenities.push("WiFi");
-        if (/kitchen/i.test(fullText)) amenities.push("Kitchen");
-        if (/parking/i.test(fullText)) amenities.push("Parking");
-        if (/air condition/i.test(fullText)) amenities.push("AC");
-        if (/beach/i.test(fullText)) amenities.push("Beach access");
-        if (/hot tub|jacuzzi/i.test(fullText)) amenities.push("Hot tub");
+        const secondaryLine =
+          result.structuredContent?.secondaryLine ?? [];
+        for (const item of secondaryLine) {
+          const body = item.body ?? "";
+          if (body) amenities.push(body);
+        }
 
         // Image
-        const imgEl = card.querySelector("img");
-        const imageUrl = imgEl?.src ?? "";
+        const imageUrl =
+          result.contextualPictures?.[0]?.picture ?? "";
 
-        // URL
-        const linkEl = card.querySelector("a[href*='/rooms/']");
-        const href = linkEl?.getAttribute("href") ?? "";
-        const airbnbUrl = href.startsWith("http")
-          ? href
-          : href
-            ? `https://www.airbnb.com${href}`
-            : "";
+        // Listing ID from demandStayListing.id (base64 encoded)
+        let listingId = "";
+        const demandId = result.demandStayListing?.id ?? "";
+        if (demandId) {
+          try {
+            const decoded = Buffer.from(demandId, "base64").toString("utf8");
+            // "DemandStayListing:1061667193333229490"
+            const idMatch = decoded.match(/:(\d+)/);
+            if (idMatch) listingId = idMatch[1];
+          } catch {
+            // skip
+          }
+        }
+        const airbnbUrl = listingId
+          ? `https://www.airbnb.com/rooms/${listingId}`
+          : "";
 
-        // Superhost
+        // Superhost from badges
         const superhost =
-          /superhost/i.test(fullText) ||
-          !!card.querySelector('[data-testid="superhost-badge"]');
+          result.badges?.some(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (b: any) =>
+              b?.id === "SUPERHOST" ||
+              b?.text === "Superhost" ||
+              b?.__typename === "SuperhostBadge"
+          ) ?? false;
 
         results.push({
-          name,
-          price,
+          name: `${name}${result.subtitle && result.subtitle !== name ? ` — ${result.subtitle}` : ""}`,
+          price: totalPrice,
+          pricePerNight,
           rating,
           reviewCount,
           bedrooms,
@@ -342,19 +371,159 @@ async function scrapeAirbnbPage(
         // Skip malformed entries
       }
     }
+  } catch (err) {
+    console.error(
+      "  Error parsing embedded results:",
+      err instanceof Error ? err.message : err
+    );
+  }
 
-    return results;
-  });
-
-  return listings;
+  return results;
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Supabase helpers (only used in full mode)
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
-  console.log("=== Airbnb Scraper ===");
+let supabase: SupabaseClient | null = null;
+
+function getSupabase(): SupabaseClient {
+  if (supabase) return supabase;
+  const url = process.env.SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_KEY!;
+  if (!url || !key) {
+    throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY env vars");
+  }
+  supabase = createClient(url, key);
+  return supabase;
+}
+
+async function isDataFresh(
+  dateRangeId: string,
+  tier: BudgetTier
+): Promise<boolean> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("airbnb_listings")
+    .select("scraped_at")
+    .eq("date_range_id", dateRangeId)
+    .eq("budget_tier", tier)
+    .order("scraped_at", { ascending: false })
+    .limit(1);
+  if (error || !data || data.length === 0) return false;
+  return Date.now() - new Date(data[0].scraped_at).getTime() < STALE_THRESHOLD_MS;
+}
+
+async function createScrapeJob(): Promise<number> {
+  const sb = getSupabase();
+  const { data, error } = await sb
+    .from("scrape_jobs")
+    .insert({
+      job_type: "airbnb",
+      status: "running",
+      started_at: new Date().toISOString(),
+      github_run_id: process.env.GITHUB_RUN_ID ?? null,
+      progress: { completed: 0, total: 0, current: "initializing" },
+    })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`Failed to create scrape job: ${error?.message}`);
+  return data.id;
+}
+
+async function updateJobProgress(
+  jobId: number,
+  completed: number,
+  total: number,
+  current: string
+): Promise<void> {
+  await getSupabase()
+    .from("scrape_jobs")
+    .update({ progress: { completed, total, current } })
+    .eq("id", jobId);
+}
+
+async function completeJob(jobId: number, errorMsg?: string): Promise<void> {
+  await getSupabase()
+    .from("scrape_jobs")
+    .update({
+      status: errorMsg ? "failed" : "completed",
+      completed_at: new Date().toISOString(),
+      error_message: errorMsg ?? null,
+    })
+    .eq("id", jobId);
+}
+
+// ---------------------------------------------------------------------------
+// Test mode
+// ---------------------------------------------------------------------------
+
+async function runTest(): Promise<void> {
+  console.log("=== Airbnb Scraper — LOCAL TEST MODE ===\n");
+
+  const dateRanges = generateDateRanges();
+  const testRange = dateRanges[0];
+
+  console.log(`Search parameters:`);
+  console.log(`  Dates: ${testRange.departDate} → ${testRange.returnDate}`);
+  console.log(`  Location: Tulum, Mexico`);
+  console.log(`  Guests: ${TOTAL_PEOPLE}`);
+  console.log(`  Filters: Entire home, Pool, ${Math.min(TOTAL_PEOPLE, 16)}+ guests\n`);
+
+  // Test all tiers + no-filter baseline
+  const allListings: ScrapedListing[] = [];
+
+  for (const tier of BUDGET_TIERS) {
+    const startTime = Date.now();
+    const listings = await fetchAirbnbListings(
+      testRange.departDate,
+      testRange.returnDate,
+      tier.totalMin,
+      tier.totalMax
+    );
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`  ${tier.label} ($${tier.totalMin}-$${tier.totalMax}/night): ${listings.length} listings (${elapsed}s)`);
+    for (const l of listings) {
+      console.log(`    ${l.name} — $${l.price} total ($${l.pricePerNight}/night, $${(l.pricePerNight / TOTAL_PEOPLE).toFixed(0)}/person/night)`);
+      if (l.airbnbUrl) console.log(`      ${l.airbnbUrl}`);
+    }
+    allListings.push(...listings);
+    if (tier !== BUDGET_TIERS[BUDGET_TIERS.length - 1]) await randomDelay(1500, 2500);
+  }
+
+  // Also try no price filter to see total available
+  console.log("");
+  const noFilterStart = Date.now();
+  const noFilterListings = await fetchAirbnbListings(
+    testRange.departDate,
+    testRange.returnDate,
+    0,
+    0
+  );
+  const noFilterElapsed = ((Date.now() - noFilterStart) / 1000).toFixed(1);
+  console.log(`  No price filter: ${noFilterListings.length} listings (${noFilterElapsed}s)`);
+  for (const l of noFilterListings) {
+    console.log(`    ${l.name} — $${l.price} total ($${l.pricePerNight}/night)`);
+  }
+
+  console.log("\n" + "─".repeat(70));
+  console.log(`\nSummary:`);
+  console.log(`  Total across tiers: ${allListings.length} listings`);
+  console.log(`  Total available (no filter): ${noFilterListings.length} listings`);
+  const prices = noFilterListings.map((l) => l.pricePerNight).filter((p) => p > 0);
+  if (prices.length > 0) {
+    console.log(`  Nightly range: $${Math.min(...prices)}-$${Math.max(...prices)}`);
+    const avg = prices.reduce((s, p) => s + p, 0) / prices.length;
+    console.log(`  Average: $${avg.toFixed(0)}/night ($${(avg / TOTAL_PEOPLE).toFixed(0)}/person/night)`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Full mode
+// ---------------------------------------------------------------------------
+
+async function runFull(): Promise<void> {
+  console.log("=== Airbnb Scraper (HTML Parser) ===");
   console.log(`Started at ${new Date().toISOString()}`);
 
   const dateRanges = generateDateRanges();
@@ -366,20 +535,7 @@ async function main(): Promise<void> {
   console.log(`Date ranges: ${dateRanges.length}, Tiers: ${BUDGET_TIERS.length}`);
   console.log(`Total tasks: ${totalTasks}`);
 
-  let browser: Browser | null = null;
-
   try {
-    browser = await puppeteerExtra.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--window-size=1920,1080",
-      ],
-    });
-
     for (const dateRange of dateRanges) {
       console.log(`\nDate range: ${dateRange.id} (${dateRange.format})`);
 
@@ -387,43 +543,36 @@ async function main(): Promise<void> {
         completedTasks++;
         const taskLabel = `${dateRange.id} | ${tier.label}`;
 
-        // Check freshness
         if (await isDataFresh(dateRange.id, tier.value)) {
           console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel} - FRESH, skipping`);
           await updateJobProgress(jobId, completedTasks, totalTasks, `${taskLabel} (skipped)`);
           continue;
         }
 
-        console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel} - scraping...`);
+        console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel} - fetching...`);
         await updateJobProgress(jobId, completedTasks, totalTasks, taskLabel);
 
-        const url = buildAirbnbUrl(
-          dateRange.departDate,
-          dateRange.returnDate,
-          tier.totalMin,
-          tier.totalMax
-        );
-
         try {
-          const page = await browser!.newPage();
-          await page.setViewport({ width: 1920, height: 1080 });
-
-          const listings = await scrapeAirbnbPage(page, url);
+          const listings = await fetchAirbnbListings(
+            dateRange.departDate,
+            dateRange.returnDate,
+            tier.totalMin,
+            tier.totalMax
+          );
           console.log(`    Found ${listings.length} listings`);
-
-          await page.close();
 
           if (listings.length > 0) {
             const now = new Date().toISOString();
+            const sb = getSupabase();
 
             const rows: AirbnbListingRow[] = listings.map((l) => ({
               date_range_id: dateRange.id,
               listing_name: l.name,
-              price_per_night: l.price,
+              price_per_night: l.pricePerNight,
               price_per_person_per_night: parseFloat(
-                (l.price / TOTAL_PEOPLE).toFixed(2)
+                (l.pricePerNight / TOTAL_PEOPLE).toFixed(2)
               ),
-              total_stay_cost: l.price * NIGHTS,
+              total_stay_cost: l.price,
               rating: l.rating,
               review_count: l.reviewCount,
               bedrooms: l.bedrooms,
@@ -437,24 +586,17 @@ async function main(): Promise<void> {
               scraped_at: now,
             }));
 
-            // Delete old listings for this date range + tier, then insert fresh
-            await supabase
+            await sb
               .from("airbnb_listings")
               .delete()
               .eq("date_range_id", dateRange.id)
               .eq("budget_tier", tier.value);
 
-            // Insert in batches of 20
             for (let i = 0; i < rows.length; i += 20) {
               const batch = rows.slice(i, i + 20);
-              const { error } = await supabase
-                .from("airbnb_listings")
-                .insert(batch);
-              if (error) {
-                console.error(`    DB insert error: ${error.message}`);
-              }
+              const { error } = await sb.from("airbnb_listings").insert(batch);
+              if (error) console.error(`    DB insert error: ${error.message}`);
             }
-
             console.log(`    Saved ${rows.length} listings to DB`);
           }
         } catch (err) {
@@ -462,7 +604,6 @@ async function main(): Promise<void> {
           console.error(`    ERROR: ${msg}`);
         }
 
-        // Random delay between page loads
         await randomDelay();
       }
     }
@@ -474,11 +615,21 @@ async function main(): Promise<void> {
     console.error(`Fatal error: ${msg}`);
     await completeJob(jobId, msg);
     process.exit(1);
-  } finally {
-    if (browser) {
-      await browser.close();
-    }
   }
 }
 
-main();
+// ---------------------------------------------------------------------------
+// Entry
+// ---------------------------------------------------------------------------
+
+if (IS_TEST) {
+  runTest().catch((err) => {
+    console.error("Test failed:", err);
+    process.exit(1);
+  });
+} else {
+  runFull().catch((err) => {
+    console.error("Fatal:", err);
+    process.exit(1);
+  });
+}

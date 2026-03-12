@@ -34,6 +34,7 @@ export interface FlightLeg {
   duration: string;
   stops: number;
   layoverAirport?: string;
+  layoverDuration?: string;
 }
 
 export interface AirbnbListing {

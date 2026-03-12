@@ -26,13 +26,38 @@ env:
 
 jobs:
   scrape-flights:
-    name: Scrape Google Flights
+    name: "Flights: ${{ matrix.name }}"
     runs-on: ubuntu-latest
     timeout-minutes: 45
     if: >-
       github.event_name == 'schedule' ||
       github.event_name == 'repository_dispatch' ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.scrape_type == 'all' || github.event.inputs.scrape_type == 'flights'))
+
+    strategy:
+      fail-fast: false
+      max-parallel: 19
+      matrix:
+        include:
+          - { name: "SFO", airports: "SFO" }
+          - { name: "OAK", airports: "OAK" }
+          - { name: "SJC", airports: "SJC" }
+          - { name: "JFK", airports: "JFK" }
+          - { name: "EWR", airports: "EWR" }
+          - { name: "LGA", airports: "LGA" }
+          - { name: "PHL+ONT", airports: "PHL,ONT" }
+          - { name: "IAH", airports: "IAH" }
+          - { name: "HOU+AZA", airports: "HOU,AZA" }
+          - { name: "MSY", airports: "MSY" }
+          - { name: "DCA", airports: "DCA" }
+          - { name: "IAD", airports: "IAD" }
+          - { name: "BWI", airports: "BWI" }
+          - { name: "ORD", airports: "ORD" }
+          - { name: "MDW+PHX", airports: "MDW,PHX" }
+          - { name: "LAX", airports: "LAX" }
+          - { name: "BUR", airports: "BUR" }
+          - { name: "LGB", airports: "LGB" }
+          - { name: "SNA", airports: "SNA" }
 
     steps:
       - name: Checkout repository
@@ -53,7 +78,31 @@ jobs:
       - name: Run flights scraper
         run: npx tsx scripts/scrape-flights.ts
         env:
+          AIRPORTS: ${{ matrix.airports }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+
+  aggregate-flights:
+    name: Aggregate Best Flights
+    runs-on: ubuntu-latest
+    needs: scrape-flights
+    if: always() && !cancelled()
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Aggregate flight results
+        run: npx tsx scripts/aggregate-flights.ts
 
   scrape-airbnb:
     name: Scrape Airbnb Listings
