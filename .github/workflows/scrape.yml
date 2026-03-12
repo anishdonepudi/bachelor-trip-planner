@@ -16,6 +16,11 @@ on:
           - all
           - flights
           - airbnb
+      triggered_by:
+        description: "Who triggered this run"
+        required: false
+        default: "manual"
+        type: string
 
   repository_dispatch:
     types: [config-changed]
