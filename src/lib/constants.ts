@@ -43,7 +43,7 @@ export const BUDGET_TIERS: {
     perPersonMin: 50,
     perPersonMax: 59,
     totalMin: 2550,
-    totalMax: 3009,
+    totalMax: 3059,
   },
   {
     value: "mid",
@@ -52,7 +52,7 @@ export const BUDGET_TIERS: {
     perPersonMin: 60,
     perPersonMax: 69,
     totalMin: 3060,
-    totalMax: 3519,
+    totalMax: 3569,
   },
   {
     value: "premium",

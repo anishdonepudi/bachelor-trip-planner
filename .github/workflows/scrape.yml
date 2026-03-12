@@ -28,7 +28,7 @@ jobs:
   scrape-flights:
     name: "Flights: ${{ matrix.name }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     if: >-
       github.event_name == 'schedule' ||
       github.event_name == 'repository_dispatch' ||

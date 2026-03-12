@@ -24,7 +24,6 @@ export function Dashboard() {
   const [flightCategory, setFlightCategory] =
     useState<FlightCategory>("nonstop_carryon");
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
-  const [selectedWeekend, setSelectedWeekend] = useState<string | null>(null);
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
 
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -37,11 +36,14 @@ export function Dashboard() {
   );
 
   const { data: scrapeData } = useSWR<{
+    jobs: { id: number; job_type: string; status: string; started_at: string | null; progress: { completed: number; total: number; current: string } | null }[];
     lastFlightUpdate: string | null;
   }>("/api/scrape-status", fetcher, {
     revalidateOnFocus: false,
-    refreshInterval: 60000,
+    refreshInterval: 30000, // poll every 30s to detect running jobs faster
   });
+
+  const runningJobs = scrapeData?.jobs?.filter((j) => j.status === "running") ?? [];
 
   // Track initial lastFlightUpdate and show modal when it changes
   useEffect(() => {
@@ -87,10 +89,6 @@ export function Dashboard() {
     );
   }, [weekendData, dateRanges, flightCategory, budgetTier, cities]);
 
-  const filteredWeekendScores = useMemo(() => {
-    if (!selectedWeekend) return weekendScores;
-    return weekendScores.filter((w) => w.dateRange.id === selectedWeekend);
-  }, [weekendScores, selectedWeekend]);
 
   const hasData =
     weekendData &&
@@ -121,6 +119,22 @@ export function Dashboard() {
         </div>
       </header>
 
+      {/* Running jobs banner */}
+      {runningJobs.length > 0 && (
+        <div className="bg-sky-950/60 border-b border-sky-800/40">
+          <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center gap-3">
+            <svg className="w-4 h-4 text-sky-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span className="text-sm text-sky-300">
+              Data refresh in progress — {runningJobs.length} job{runningJobs.length > 1 ? "s" : ""} running.
+              {" "}New prices will appear once all jobs complete.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {weekendsLoading ? (
@@ -131,11 +145,8 @@ export function Dashboard() {
             <FilterBar
               flightCategory={flightCategory}
               budgetTier={budgetTier}
-              selectedWeekend={selectedWeekend}
-              dateRanges={dateRanges}
               onFlightCategoryChange={setFlightCategory}
               onBudgetTierChange={setBudgetTier}
-              onWeekendChange={setSelectedWeekend}
             />
 
             {/* Weekend Cards */}
@@ -159,9 +170,9 @@ export function Dashboard() {
             ) : (
               <div className="space-y-4">
                 <div className="text-sm text-zinc-500">
-                  {filteredWeekendScores.length} weekends ranked by total group cost
+                  {weekendScores.length} weekends ranked by composite score (per-city z-score)
                 </div>
-                {filteredWeekendScores.map((weekend, i) => (
+                {weekendScores.map((weekend, i) => (
                   <WeekendCard
                     key={weekend.dateRange.id}
                     weekend={weekend}

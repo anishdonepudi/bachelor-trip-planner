@@ -23,8 +23,8 @@ export function WeekendCard({
   flightCategory,
   budgetTier,
 }: WeekendCardProps) {
-  const [expanded, setExpanded] = useState(rank <= 3);
-  const { dateRange, score, totalGroupCost, perCityCosts } = weekend;
+  const [expanded, setExpanded] = useState(false);
+  const { dateRange, score, totalGroupCost, perCityCosts, cityAverages } = weekend;
 
   const categoryLabel =
     FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ??
@@ -45,7 +45,7 @@ export function WeekendCard({
         className="w-full flex items-center justify-between p-4 sm:p-5 text-left hover:bg-zinc-900/30 transition-colors"
       >
         <div className="flex items-center gap-4 min-w-0">
-          <ScoreBadge score={score} rank={rank} />
+          <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} />
           <div>
             <h3 className="text-lg font-semibold text-zinc-100">
               {formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}
@@ -102,11 +102,14 @@ export function WeekendCard({
           <FlightSummary
             perCityCosts={perCityCosts}
             flightCategoryLabel={categoryLabel}
+            selectedCategory={flightCategory}
           />
 
           <FlightAllOptions
             flightOptions={weekend.allFlightOptions}
             cities={cities}
+            perCityCosts={perCityCosts}
+            selectedCategory={flightCategory}
           />
 
           <AirbnbGrid
@@ -114,6 +117,7 @@ export function WeekendCard({
             budgetTier={budgetTier}
             departDate={dateRange.departDate}
             returnDate={dateRange.returnDate}
+            selectedAirbnbUrl={weekend.selectedAirbnbUrl}
           />
 
           <CostBreakdownTable

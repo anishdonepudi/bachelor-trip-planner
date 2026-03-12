@@ -32,8 +32,8 @@ interface BudgetTierConfig {
 }
 
 const BUDGET_TIERS: BudgetTierConfig[] = [
-  { value: "budget", label: "Budget", totalMin: 2550, totalMax: 3009 },
-  { value: "mid", label: "Mid-Range", totalMin: 3060, totalMax: 3519 },
+  { value: "budget", label: "Budget", totalMin: 2550, totalMax: 3059 },
+  { value: "mid", label: "Mid-Range", totalMin: 3060, totalMax: 3569 },
   { value: "premium", label: "Premium", totalMin: 3570, totalMax: 4029 },
 ];
 
@@ -559,13 +559,22 @@ async function runFull(): Promise<void> {
             tier.totalMin,
             tier.totalMax
           );
-          console.log(`    Found ${listings.length} listings`);
-
           if (listings.length > 0) {
+            // Deduplicate by airbnb_url
+            const seen = new Set<string>();
+            const uniqueListings = listings.filter((l) => {
+              if (!l.airbnbUrl || seen.has(l.airbnbUrl)) return false;
+              seen.add(l.airbnbUrl);
+              return true;
+            });
+
+            const duped = listings.length - uniqueListings.length;
+            console.log(`    Found ${uniqueListings.length} listings${duped > 0 ? ` (${duped} duplicates removed)` : ""}`);
+
             const now = new Date().toISOString();
             const sb = getSupabase();
 
-            const rows: AirbnbListingRow[] = listings.map((l) => ({
+            const rows: AirbnbListingRow[] = uniqueListings.map((l) => ({
               date_range_id: dateRange.id,
               listing_name: l.name,
               price_per_night: l.pricePerNight,

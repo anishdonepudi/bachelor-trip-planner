@@ -1,10 +1,15 @@
 "use client";
 
 import { CostBreakdown as CostBreakdownType } from "@/lib/types";
+import { FLIGHT_CATEGORIES } from "@/lib/constants";
 
 interface CostBreakdownProps {
   perCityCosts: CostBreakdownType[];
   totalGroupCost: number;
+}
+
+function getCategoryLabel(value: string): string {
+  return FLIGHT_CATEGORIES.find((c) => c.value === value)?.label ?? value;
 }
 
 export function CostBreakdownTable({
@@ -41,7 +46,18 @@ export function CostBreakdownTable({
                   )}
                 </td>
                 <td className="text-right py-2 px-2 font-mono text-zinc-300">
-                  {cost.flightCost !== null ? `$${cost.flightCost}` : "—"}
+                  {cost.flightCost !== null ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      ${cost.flightCost}
+                      {cost.fallbackCategory && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/15 text-amber-400 border border-amber-500/20 font-sans">
+                          {getCategoryLabel(cost.fallbackCategory)}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 <td className="text-right py-2 px-2 font-mono text-zinc-300">
                   ${cost.stayCost.toFixed(0)}

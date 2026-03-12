@@ -135,6 +135,15 @@ export interface CostBreakdown {
   perPersonTotal: number | null;
   cityTotal: number | null;
   flight: Flight | null;
+  /** If the flight came from a different category via fallback */
+  fallbackCategory: FlightCategory | null;
+  /** Up to 3 flight options for the effective category (for toggle) */
+  alternateFlights: FlightOptionRow[];
+}
+
+export interface CityStats {
+  mean: number;
+  std: number;
 }
 
 export interface WeekendScore {
@@ -144,6 +153,8 @@ export interface WeekendScore {
   perCityCosts: CostBreakdown[];
   airbnbListings: AirbnbListingRow[];
   allFlightOptions: FlightOptionRow[];
+  selectedAirbnbUrl: string | null;
+  cityAverages: Record<string, CityStats>;
 }
 
 export interface WeekendData {
