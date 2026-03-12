@@ -1,0 +1,116 @@
+name: Scrape Flights & Airbnb
+
+on:
+  schedule:
+    # Run every 12 hours at 6:00 AM and 6:00 PM UTC
+    - cron: "0 6,18 * * *"
+
+  workflow_dispatch:
+    inputs:
+      scrape_type:
+        description: "What to scrape"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - flights
+          - airbnb
+
+  repository_dispatch:
+    types: [config-changed]
+
+env:
+  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+jobs:
+  scrape-flights:
+    name: Scrape Google Flights
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.scrape_type == 'all' || github.event.inputs.scrape_type == 'flights'))
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            libgbm1 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libasound2
+
+      - name: Run flights scraper
+        run: npx ts-node scripts/scrape-flights.ts
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
+
+  scrape-airbnb:
+    name: Scrape Airbnb Listings
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: >-
+      github.event_name == 'schedule' ||
+      github.event_name == 'repository_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.scrape_type == 'all' || github.event.inputs.scrape_type == 'airbnb'))
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libnss3 \
+            libatk1.0-0 \
+            libatk-bridge2.0-0 \
+            libcups2 \
+            libdrm2 \
+            libxkbcommon0 \
+            libxcomposite1 \
+            libxdamage1 \
+            libxrandr2 \
+            libgbm1 \
+            libpango-1.0-0 \
+            libcairo2 \
+            libasound2
+
+      - name: Run Airbnb scraper
+        run: npx ts-node scripts/scrape-airbnb.ts
+        env:
+          GITHUB_RUN_ID: ${{ github.run_id }}
