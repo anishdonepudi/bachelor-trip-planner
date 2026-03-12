@@ -40,7 +40,12 @@ export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStat
         body: JSON.stringify({ scrape_type: "all" }),
       });
       if (res.ok) {
-        setMessage("Scrape triggered! Data will update in ~30-45 min.");
+        const data = await res.json();
+        if (data.already_running) {
+          setMessage("Scrape already in progress.");
+        } else {
+          setMessage("Scrape triggered! Data will update in ~30-45 min.");
+        }
         onTriggered?.();
       } else {
         setMessage("Failed to trigger scrape. Check GitHub config.");

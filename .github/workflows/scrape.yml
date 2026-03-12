@@ -20,6 +20,10 @@ on:
   repository_dispatch:
     types: [config-changed]
 
+concurrency:
+  group: scrape-flights
+  cancel-in-progress: false
+
 env:
   SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
