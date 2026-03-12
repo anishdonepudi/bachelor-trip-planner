@@ -574,7 +574,8 @@ async function runFull(): Promise<void> {
             const now = new Date().toISOString();
             const sb = getSupabase();
 
-            const rows: AirbnbListingRow[] = uniqueListings.map((l) => ({
+            const runId = process.env.GITHUB_RUN_ID ?? null;
+            const rows = uniqueListings.map((l) => ({
               date_range_id: dateRange.id,
               listing_name: l.name,
               price_per_night: l.pricePerNight,
@@ -593,17 +594,20 @@ async function runFull(): Promise<void> {
               superhost: l.superhost,
               budget_tier: tier.value,
               scraped_at: now,
+              run_id: runId,
             }));
 
-            await sb
-              .from("airbnb_listings")
+            const delQuery = sb
+              .from("airbnb_listings_staging")
               .delete()
               .eq("date_range_id", dateRange.id)
               .eq("budget_tier", tier.value);
+            if (runId) delQuery.eq("run_id", runId);
+            await delQuery;
 
             for (let i = 0; i < rows.length; i += 20) {
               const batch = rows.slice(i, i + 20);
-              const { error } = await sb.from("airbnb_listings").insert(batch);
+              const { error } = await sb.from("airbnb_listings_staging").insert(batch);
               if (error) console.error(`    DB insert error: ${error.message}`);
             }
             console.log(`    Saved ${rows.length} listings to DB`);

@@ -57,7 +57,7 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
           onClick={(e) => e.stopPropagation()}
         >
           <div className="text-zinc-400 font-semibold uppercase tracking-wider mb-1">
-            {tier.label} (score: {score}/100)
+            {tier.label}
           </div>
           <p className="text-zinc-500 mb-3 leading-relaxed">
             Each city is compared to its own average across all weekends.

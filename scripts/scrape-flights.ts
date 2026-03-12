@@ -740,7 +740,8 @@ async function main(): Promise<void> {
           if (allScraped.length === 0) continue;
 
           // Build flight_options rows
-          const optionRows: FlightOptionRow[] = allScraped.map((f) => ({
+          const runId = process.env.GITHUB_RUN_ID ?? null;
+          const optionRows = allScraped.map((f) => ({
             date_range_id: dateRange.id,
             origin_city: city,
             category: f.category,
@@ -752,20 +753,23 @@ async function main(): Promise<void> {
             google_flights_url: f.filteredUrl,
             is_best: false,
             scraped_at: now,
+            run_id: runId,
           }));
 
-          // Delete old options for this airport + date range + city
-          await supabase
-            .from("flight_options")
+          // Delete old staging options for this airport + date range + city + run
+          const delQuery = supabase
+            .from("flight_options_staging")
             .delete()
             .eq("date_range_id", dateRange.id)
             .eq("origin_city", city)
             .eq("airport_used", airport);
+          if (runId) delQuery.eq("run_id", runId);
+          await delQuery;
 
           // Insert in batches of 50
           for (let i = 0; i < optionRows.length; i += 50) {
             const batch = optionRows.slice(i, i + 50);
-            const { error } = await supabase.from("flight_options").insert(batch);
+            const { error } = await supabase.from("flight_options_staging").insert(batch);
             if (error) {
               console.error(`    DB insert error (flight_options, ${city}): ${error.message}`);
             }

@@ -17,6 +17,7 @@ import { ScrapeStatus } from "./ScrapeStatus";
 import { ConfigModal } from "./ConfigModal";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 import { DataUpdateModal } from "./DataUpdateModal";
+import { JobsPanel } from "./JobsPanel";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -37,14 +38,22 @@ export function Dashboard() {
   );
 
   const { data: scrapeData } = useSWR<{
-    jobs: { id: number; job_type: string; status: string; started_at: string | null; progress: { completed: number; total: number; current: string } | null }[];
+    runs: {
+      run_id: number;
+      status: string;
+      created_at: string;
+      updated_at: string;
+      url: string;
+      jobs: { id: number; name: string; status: string; started_at: string | null; completed_at: string | null }[];
+    }[];
     lastFlightUpdate: string | null;
   }>("/api/scrape-status", fetcher, {
     revalidateOnFocus: false,
-    refreshInterval: 30000, // poll every 30s to detect running jobs faster
+    refreshInterval: 30000,
   });
 
-  const runningJobs = scrapeData?.jobs?.filter((j) => j.status === "running") ?? [];
+  const allJobs = scrapeData?.runs?.flatMap((r) => r.jobs) ?? [];
+  const runningJobs = allJobs.filter((j) => j.status === "running" || j.status === "queued");
 
   // Track initial lastFlightUpdate and show modal when it changes
   useEffect(() => {
@@ -113,6 +122,7 @@ export function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <JobsPanel runs={scrapeData?.runs ?? []} />
             <ScrapeStatus
               lastUpdated={scrapeData?.lastFlightUpdate ?? null}
               isRunning={runningJobs.length > 0}
