@@ -38,7 +38,7 @@ export function WeekendCard({
   const cities = perCityCosts.map((c) => c.city);
 
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 overflow-hidden hover:border-zinc-700/70 transition-colors">
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 hover:border-zinc-700/70 transition-colors">
       {/* Header - always visible */}
       <button
         onClick={() => setExpanded(!expanded)}
