@@ -6,7 +6,7 @@ export interface DateRange {
   id: string; // e.g. "2026-06-04_2026-06-07"
   departDate: string; // ISO date string
   returnDate: string;
-  format: "Thu-Sun" | "Fri-Mon";
+  format: string; // e.g. "June 4 - June 7"
 }
 
 export interface CityConfig {

@@ -38,7 +38,7 @@ export function generateDateRanges(): DateRange[] {
             id: `${departStr}_${formatDate(returnDate)}`,
             departDate: departStr,
             returnDate: formatDate(returnDate),
-            format: "Thu-Sun",
+            format: formatDateRangeDisplay(departStr, formatDate(returnDate)),
           });
         }
       }
@@ -57,7 +57,7 @@ export function generateDateRanges(): DateRange[] {
             id: `${departStr}_${formatDate(returnDate)}`,
             departDate: departStr,
             returnDate: formatDate(returnDate),
-            format: "Fri-Mon",
+            format: formatDateRangeDisplay(departStr, formatDate(returnDate)),
           });
         }
       }
@@ -94,11 +94,8 @@ export function formatDateRangeDisplay(
   const depart = new Date(departDate + "T00:00:00");
   const ret = new Date(returnDate + "T00:00:00");
 
-  const departMonth = depart.toLocaleDateString("en-US", { month: "short" });
-  const returnMonth = ret.toLocaleDateString("en-US", { month: "short" });
+  const departMonth = depart.toLocaleDateString("en-US", { month: "long" });
+  const returnMonth = ret.toLocaleDateString("en-US", { month: "long" });
 
-  if (departMonth === returnMonth) {
-    return `${departMonth} ${depart.getDate()}-${ret.getDate()}`;
-  }
   return `${departMonth} ${depart.getDate()} - ${returnMonth} ${ret.getDate()}`;
 }
