@@ -30,7 +30,7 @@ export function Dashboard() {
 
   const [priorityCity, setPriorityCity] = useState("all");
   const [configChanged, setConfigChanged] = useState(false);
-  const [showComboView, setShowComboView] = useState(false);
+  const [showComboView, setShowComboView] = useState(true);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [scrapeTriggered, setScrapeTriggered] = useState(false);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
@@ -202,20 +202,19 @@ export function Dashboard() {
           <LoadingSkeleton />
         ) : (
           <>
-            {/* Filters */}
-            <FilterBar
-              flightCategory={flightCategory}
-              budgetTier={budgetTier}
-              priorityCity={priorityCity}
-              cities={cities}
-              onFlightCategoryChange={setFlightCategory}
-              onBudgetTierChange={setBudgetTier}
-              onPriorityCityChange={setPriorityCity}
-            />
-
             {/* View toggle */}
             {hasData && (
               <div className="flex items-center gap-1 p-1 rounded-lg bg-zinc-900 border border-zinc-800 w-fit">
+                <button
+                  onClick={() => setShowComboView(true)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    showComboView
+                      ? "bg-zinc-700 text-zinc-100"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  Overview
+                </button>
                 <button
                   onClick={() => setShowComboView(false)}
                   className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -226,18 +225,19 @@ export function Dashboard() {
                 >
                   Ranked List
                 </button>
-                <button
-                  onClick={() => setShowComboView(true)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    showComboView
-                      ? "bg-zinc-700 text-zinc-100"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  All Combos
-                </button>
               </div>
             )}
+
+            {/* Filters */}
+            <FilterBar
+              flightCategory={flightCategory}
+              budgetTier={budgetTier}
+              priorityCity={priorityCity}
+              cities={cities}
+              onFlightCategoryChange={setFlightCategory}
+              onBudgetTierChange={setBudgetTier}
+              onPriorityCityChange={setPriorityCity}
+            />
 
             {/* Weekend Cards */}
             {!hasData ? (

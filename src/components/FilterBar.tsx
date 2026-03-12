@@ -23,7 +23,9 @@ export function FilterBar({
   onPriorityCityChange,
 }: FilterBarProps) {
   return (
-    <div className="flex flex-col sm:flex-row gap-6 p-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl">
+    <div className="p-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl space-y-4">
+      <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Filters</h2>
+      <div className="flex flex-col sm:flex-row gap-6">
       {/* Flight Category */}
       <div className="flex-1">
         <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
@@ -86,6 +88,7 @@ export function FilterBar({
             </option>
           ))}
         </select>
+      </div>
       </div>
     </div>
   );

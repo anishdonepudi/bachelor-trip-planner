@@ -125,6 +125,7 @@ export function ComboSummary({
                             key={ws.dateRange.id}
                             weekend={ws}
                             rank={i + 1}
+                            priorityCity={priorityCity}
                           />
                         ))}
                       </div>
@@ -143,11 +144,18 @@ export function ComboSummary({
 function WeekendPill({
   weekend,
   rank,
+  priorityCity,
 }: {
   weekend: WeekendScore;
   rank: number;
+  priorityCity: string;
 }) {
   const { dateRange, score, totalGroupCost, perCityCosts, cityAverages } = weekend;
+
+  const selectedCityCost =
+    priorityCity !== "all"
+      ? perCityCosts.find((c) => c.city === priorityCity)
+      : null;
 
   return (
     <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-zinc-900/60 border border-zinc-800/60">
@@ -158,9 +166,30 @@ function WeekendPill({
         perCityCosts={perCityCosts}
         cityAverages={cityAverages}
       />
-      <div className="text-xs font-medium text-zinc-200 truncate">
-        {formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}
+      <div className="flex-1 min-w-0 text-center">
+        <div className="text-xs font-medium text-zinc-200 truncate">
+          {formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}
+        </div>
+        <div className="text-[10px] text-zinc-500">
+          {new Date(dateRange.departDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" })} – {new Date(dateRange.returnDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" })}
+        </div>
       </div>
+      {selectedCityCost && selectedCityCost.perPersonTotal != null && (
+        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 shrink-0">
+          <span className="text-[10px] text-zinc-500">
+            ${selectedCityCost.flightCost ?? 0}
+          </span>
+          <span className="text-zinc-600 text-[10px]">+</span>
+          <span className="text-[10px] text-zinc-500">
+            ${Math.round(selectedCityCost.stayCost)}
+          </span>
+          <span className="text-zinc-600 text-[10px]">=</span>
+          <span className="text-xs font-semibold font-mono text-cyan-300">
+            ${Math.round(selectedCityCost.perPersonTotal)}
+          </span>
+          <span className="text-[10px] text-cyan-400/70">pp</span>
+        </div>
+      )}
     </div>
   );
 }
