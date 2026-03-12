@@ -1,13 +1,21 @@
 /**
- * Google Flights Scraper (Airport-Centric, Filter-Based)
+ * Google Flights Scraper (API Interception)
  *
- * Each GitHub Actions job passes AIRPORTS env var (e.g. "SFO").
- * For each date range, this script loads Google Flights 4 times (once per
- * category), applies UI filters (stops, bags, duration < 10hrs, sort by price),
- * grabs the top 3 outbound flights, clicks each to find the cheapest return,
- * and writes results to flight_options for every city that uses the airport.
+ * Uses network interception to capture structured flight data from Google's
+ * internal GetShoppingResults API instead of fragile DOM scraping.
  *
- * Usage: AIRPORTS=SFO npx tsx scripts/scrape-flights.ts
+ * Per airport + date range, runs 2 phases:
+ *   Phase 1 (no filter):   nonstop_no_carryon + onestop_no_carryon
+ *   Phase 2 (carry-on):    nonstop_carryon + onestop_carryon
+ *
+ * Each phase:
+ *   1. Load page, optionally apply carry-on bag filter
+ *   2. Intercept outbound API → filter by stops + duration, sort by price
+ *   3. For each top N outbound: click it → intercept return API → go back
+ *   4. Pair each outbound with its specific return flight
+ *   5. Skip records with no valid return
+ *
+ * Usage: AIRPORTS=IAH,SFO npx tsx scripts/scrape-flights.ts
  */
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
@@ -18,7 +26,6 @@ import { generateDateRanges } from "../src/lib/date-ranges";
 import type {
   FlightCategory,
   FlightLeg,
-  FlightOptionRow,
 } from "../src/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -39,22 +46,15 @@ const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY
 
 const DESTINATION_AIRPORT = "CUN";
 
-const FLIGHT_CATEGORIES: FlightCategory[] = [
+const CATEGORIES_TO_SCRAPE: FlightCategory[] = [
   "nonstop_carryon",
   "nonstop_no_carryon",
   "onestop_carryon",
   "onestop_no_carryon",
 ];
 
-// Category → filter settings
-const CATEGORY_FILTERS: Record<FlightCategory, { stops: "nonstop" | "1stop"; bags: "carryon" | "none" }> = {
-  nonstop_carryon: { stops: "nonstop", bags: "carryon" },
-  nonstop_no_carryon: { stops: "nonstop", bags: "none" },
-  onestop_carryon: { stops: "1stop", bags: "carryon" },
-  onestop_no_carryon: { stops: "1stop", bags: "none" },
-};
-
-const TOP_N_OUTBOUND = 3;
+const TOP_N_PER_CATEGORY = 3;
+const MAX_DURATION_MINUTES = 10 * 60; // 10 hours
 
 // Built dynamically from Supabase config at startup
 let AIRPORT_TO_CITIES: Record<string, string[]> = {};
@@ -82,7 +82,7 @@ async function loadAirportToCities(): Promise<void> {
   }
 
   AIRPORT_TO_CITIES = map;
-  console.log(`Loaded airport map from config: ${Object.keys(map).length} airports, ${cities.length} cities`);
+  console.log(`Loaded airport map: ${Object.keys(map).length} airports, ${cities.length} cities`);
 }
 
 const USER_AGENTS = [
@@ -163,536 +163,487 @@ async function completeJob(jobId: number, errorMsg?: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Google Flights filter helpers
+// API Response Parsing
 // ---------------------------------------------------------------------------
 
-/** Click a dropdown option by matching text content inside the currently open dropdown */
-async function clickDropdownOption(page: Page, textMatch: string): Promise<boolean> {
-  return page.evaluate((text: string) => {
-    const allEls = document.querySelectorAll("li, label, div[role='option'], div[role='menuitem'], span");
-    for (const el of allEls) {
-      const elText = el.textContent?.trim() ?? "";
-      if (elText === text || elText.includes(text)) {
-        (el as HTMLElement).click();
-        return true;
-      }
-    }
-    return false;
-  }, textMatch);
+interface ApiParsedFlight {
+  airline: string;
+  airlineCode: string;
+  origin: string;
+  dest: string;
+  departTime: string;
+  arriveTime: string;
+  departDate: string;
+  arriveDate: string;
+  duration: number;
+  stops: number;
+  price: number;
+  layoverAirport?: string;
+  layoverDuration?: number;
 }
 
-/** Close an open dropdown by clicking Done/Close button or body */
-async function closeDropdown(page: Page): Promise<void> {
-  const closed = await page.evaluate(() => {
-    const buttons = document.querySelectorAll("button");
-    for (const b of buttons) {
-      const text = b.textContent?.trim() ?? "";
-      if (text === "Done" || text === "Close") {
-        (b as HTMLElement).click();
-        return true;
-      }
-    }
-    return false;
-  });
-  if (!closed) {
-    await page.click("body");
-  }
-  await new Promise((r) => setTimeout(r, 1000));
+interface CapturedApiCall {
+  body: string;
+  resolved: boolean;
 }
 
 /**
- * Apply the "Stops" filter on Google Flights.
+ * Parse Google's multi-part response format.
+ * Response starts with )]}' prefix, then alternating length\njson\n blocks.
  */
-async function applyStopsFilter(page: Page, stops: "nonstop" | "1stop"): Promise<void> {
-  const btn = await page.$('button[aria-label^="Stops"]');
-  if (!btn) {
-    console.warn("      Could not find Stops filter button");
-    return;
+function parseMultiPart(body: string): unknown[] {
+  let cleaned = body;
+  if (cleaned.startsWith(")]}'")) cleaned = cleaned.substring(4).trim();
+  const lines = cleaned.split("\n");
+  const parts: unknown[] = [];
+  let pos = 0;
+  while (pos < lines.length) {
+    const lenStr = lines[pos]?.trim();
+    if (!lenStr || !/^\d+$/.test(lenStr)) { pos++; continue; }
+    pos++;
+    if (pos >= lines.length) break;
+    const jsonStr = lines[pos].trim();
+    pos++;
+    try { parts.push(JSON.parse(jsonStr)); } catch {}
   }
-  await btn.click();
-  await new Promise((r) => setTimeout(r, 1500));
-
-  const target = stops === "nonstop" ? "Nonstop only" : "1 stop or fewer";
-  const clicked = await clickDropdownOption(page, target);
-  if (!clicked) console.warn(`      Could not find "${target}" option`);
-
-  await new Promise((r) => setTimeout(r, 1000));
-  await page.click("body");
-  await new Promise((r) => setTimeout(r, 1500));
+  return parts;
 }
 
 /**
- * Apply the "Bags" filter: increment carry-on bag count to 1.
+ * Extract inner flight data from wrb.fr wrapper.
  */
-async function applyBagsFilter(page: Page, bags: "carryon" | "none"): Promise<void> {
-  if (bags === "none") return;
-
-  const btn = await page.$('button[aria-label^="Bags"]');
-  if (!btn) {
-    console.warn("      Could not find Bags filter button");
-    return;
+function extractInner(parts: unknown[]): any[] {
+  const results: any[] = [];
+  for (const part of parts) {
+    if (!Array.isArray(part) || !part[0]) continue;
+    const wrapper = part[0];
+    if (!Array.isArray(wrapper) || wrapper[0] !== "wrb.fr") continue;
+    const innerStr = wrapper[2];
+    if (typeof innerStr !== "string") continue;
+    try { results.push(JSON.parse(innerStr)); } catch {}
   }
-  await btn.click();
+  return results;
+}
+
+/**
+ * Parse structured flight data from API inner response.
+ * Filters: duration ≤ MAX_DURATION_MINUTES, stops 0 or 1.
+ * Sorts by price ascending.
+ */
+function parseFlightsFromApi(inner: any[]): { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } {
+  const nonstop: ApiParsedFlight[] = [];
+  const onestop: ApiParsedFlight[] = [];
+
+  for (const idx of [2, 3]) {
+    if (!inner[idx]?.[0] || !Array.isArray(inner[idx][0])) continue;
+    const flights = inner[idx][0];
+
+    for (const item of flights) {
+      const d = item[0];
+      if (!d) continue;
+
+      const segments = d[2] ?? [];
+      const stops = segments.length > 0 ? segments.length - 1 : 0;
+      const dep = d[5];
+      const arr = d[8];
+      const depDate = segments[0]?.[20];
+      const arrDate = segments[segments.length - 1]?.[21];
+
+      let layoverAirport: string | undefined;
+      let layoverDuration: number | undefined;
+      if (stops === 1 && d[13]?.[0]) {
+        layoverDuration = d[13][0][0];
+        layoverAirport = d[13][0][1] ?? d[13][0][2];
+      }
+
+      const flight: ApiParsedFlight = {
+        airline: d[1]?.[0] ?? d[0] ?? "Unknown",
+        airlineCode: d[0] ?? "??",
+        origin: d[3] ?? "?",
+        dest: d[6] ?? "?",
+        departTime: dep && dep[0] != null ? `${dep[0]}:${String(dep[1] ?? 0).padStart(2, "0")}` : "?",
+        arriveTime: arr && arr[0] != null ? `${arr[0]}:${String(arr[1] ?? 0).padStart(2, "0")}` : "?",
+        departDate: depDate ? `${depDate[0]}-${String(depDate[1]).padStart(2, "0")}-${String(depDate[2]).padStart(2, "0")}` : "?",
+        arriveDate: arrDate ? `${arrDate[0]}-${String(arrDate[1]).padStart(2, "0")}-${String(arrDate[2]).padStart(2, "0")}` : "?",
+        duration: d[9] ?? 0,
+        stops,
+        price: item[1]?.[0]?.[1] ?? 0,
+        layoverAirport,
+        layoverDuration,
+      };
+
+      if (flight.duration > MAX_DURATION_MINUTES) continue;
+
+      if (stops === 0) nonstop.push(flight);
+      else if (stops === 1) onestop.push(flight);
+    }
+  }
+
+  nonstop.sort((a, b) => a.price - b.price);
+  onestop.sort((a, b) => a.price - b.price);
+
+  return { nonstop, onestop };
+}
+
+// ---------------------------------------------------------------------------
+// Page Interaction
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply carry-on bag filter. Returns true if successful.
+ */
+async function applyCarryOnFilter(page: Page): Promise<boolean> {
+  const bagsBtn = await page.$('button[aria-label^="Bags"]');
+  if (!bagsBtn) {
+    console.warn("      Could not find Bags button");
+    return false;
+  }
+  await bagsBtn.click();
   await new Promise((r) => setTimeout(r, 1500));
 
-  // Click the "Add carry-on bag" button
   const clicked = await page.evaluate(() => {
-    const buttons = document.querySelectorAll("button");
-    for (const b of buttons) {
-      const aria = b.getAttribute("aria-label") ?? "";
-      if (aria.toLowerCase().includes("carry-on") &&
-          (aria.toLowerCase().includes("add") || aria.toLowerCase().includes("increase"))) {
-        (b as HTMLElement).click();
-        return true;
-      }
-    }
+    const btn = document.querySelector('button[aria-label="Add carry-on bag"]');
+    if (btn) { (btn as HTMLElement).click(); return true; }
     return false;
   });
-  if (!clicked) console.warn("      Could not find carry-on increment button");
 
-  await new Promise((r) => setTimeout(r, 1500));
-  await closeDropdown(page);
+  if (!clicked) {
+    console.warn("      Could not find 'Add carry-on bag' button");
+    return false;
+  }
+
+  await new Promise((r) => setTimeout(r, 500));
+  await page.click("body");
+  return true;
 }
 
 /**
- * Apply the "Duration" filter: set max flight duration to 10 hours.
- * The duration dropdown has an <input type="range" aria-label="Duration">.
+ * Set up API interception on a page.
  */
-async function applyDurationFilter(page: Page): Promise<void> {
-  const btn = await page.$('button[aria-label^="Duration"]');
-  if (!btn) {
-    console.warn("      Could not find Duration filter button");
-    return;
-  }
-  await btn.click();
-  await new Promise((r) => setTimeout(r, 1500));
-
-  // The slider is an <input type="range" aria-label="Duration">
-  const adjusted = await page.evaluate(() => {
-    const slider = document.querySelector('input[aria-label="Duration"]') as HTMLInputElement | null;
-    if (!slider) return null;
-
-    const max = parseInt(slider.max || (slider.getAttribute("aria-valuemax") ?? "0"), 10);
-    const min = parseInt(slider.min || (slider.getAttribute("aria-valuemin") ?? "0"), 10);
-    const current = parseInt(slider.value || (slider.getAttribute("aria-valuenow") ?? "0"), 10);
-    const target = 10; // 10 hours
-
-    if (target >= max || target <= min) return { min, max, current, target, moved: false };
-
-    // Focus the slider for keyboard interaction
-    slider.focus();
-    return { min, max, current, target, moved: true };
+function setupApiInterception(page: Page, captured: CapturedApiCall[]): void {
+  page.on("request", (req) => {
+    if (req.url().includes("GetShoppingResults")) {
+      captured.push({ body: "", resolved: false });
+    }
+    req.continue();
   });
 
-  if (adjusted?.moved) {
-    // Press Home to go to min, then ArrowRight to reach target
-    await page.keyboard.press("Home");
-    await new Promise((r) => setTimeout(r, 200));
+  page.on("response", async (res) => {
+    if (res.url().includes("GetShoppingResults") && res.status() === 200) {
+      try {
+        const body = await res.text();
+        const pending = captured.find((c) => !c.resolved);
+        if (pending) { pending.body = body; pending.resolved = true; }
+      } catch {}
+    }
+  });
+}
 
-    const stepsNeeded = adjusted.target - adjusted.min;
-    for (let i = 0; i < stepsNeeded; i++) {
-      await page.keyboard.press("ArrowRight");
+/**
+ * Wait for a new API response after the given index.
+ */
+async function waitForApiResponse(
+  captured: CapturedApiCall[],
+  afterIndex: number,
+  timeoutMs = 15_000
+): Promise<{ nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    for (let i = captured.length - 1; i >= afterIndex; i--) {
+      const c = captured[i];
+      if (!c.body) continue;
+      const parts = parseMultiPart(c.body);
+      const inners = extractInner(parts);
+      for (const inner of inners) {
+        const parsed = parseFlightsFromApi(inner);
+        if (parsed.nonstop.length > 0 || parsed.onestop.length > 0) {
+          return parsed;
+        }
+      }
     }
     await new Promise((r) => setTimeout(r, 500));
-
-    // Verify new value
-    const newVal = await page.evaluate(() => {
-      const s = document.querySelector('input[aria-label="Duration"]') as HTMLInputElement | null;
-      return s?.value ?? "unknown";
-    });
-    console.log(`      Duration slider set to ${newVal} hours`);
-  } else if (adjusted) {
-    console.log(`      Duration slider range ${adjusted.min}-${adjusted.max}h, no adjustment needed`);
-  } else {
-    console.warn("      Could not find duration slider");
   }
-
-  await closeDropdown(page);
+  return null;
 }
 
 /**
- * Sort results by price using the "Sorted by" dropdown.
- * The dropdown renders sort options as li.VfPpkd-StrnGf-rymPhb-ibnC6b elements.
+ * Format price as it appears in the Google Flights DOM.
  */
-async function applySortByPrice(page: Page): Promise<void> {
-  const btn = await page.$('button[aria-label^="Sorted by"]');
-  if (!btn) {
-    console.warn("      Could not find Sort dropdown");
-    return;
+function formatPriceForDom(price: number): string {
+  if (price >= 1000) {
+    const thousands = Math.floor(price / 1000);
+    const remainder = price % 1000;
+    return `$${thousands},${String(remainder).padStart(3, "0")}`;
   }
-  await btn.click();
-  await new Promise((r) => setTimeout(r, 1500));
-
-  // Click the "Price" option in the sort dropdown
-  // Try multiple strategies since Google changes DOM frequently
-  const clicked = await page.evaluate(() => {
-    // Strategy 1: Look for li with span text "Price"
-    const allLis = document.querySelectorAll("li");
-    for (const li of allLis) {
-      const text = li.textContent?.trim();
-      if (text === "Price") {
-        (li as HTMLElement).click();
-        return "li-text";
-      }
-    }
-    // Strategy 2: Look for any clickable element containing "Price" inside a dropdown/menu
-    const allElements = document.querySelectorAll('[role="option"], [role="menuitem"], [role="menuitemradio"]');
-    for (const el of allElements) {
-      if (el.textContent?.trim() === "Price") {
-        (el as HTMLElement).click();
-        return "role-option";
-      }
-    }
-    // Strategy 3: Look for span with exact text "Price" and click its closest interactive parent
-    const spans = document.querySelectorAll("span");
-    for (const span of spans) {
-      if (span.textContent?.trim() === "Price") {
-        const clickable = span.closest("li, [role='option'], [role='menuitem'], button") as HTMLElement | null;
-        if (clickable) {
-          clickable.click();
-          return "span-parent";
-        }
-        (span as HTMLElement).click();
-        return "span-direct";
-      }
-    }
-    return null;
-  });
-
-  if (clicked) {
-    console.log(`      Sort by Price applied (via ${clicked})`);
-  } else {
-    console.warn("      Could not find Price sort option");
-  }
-  await new Promise((r) => setTimeout(r, 2000));
+  return `$${price}`;
 }
 
 /**
- * Apply all filters for a given category.
- * Order: stops → bags → duration → sort by price
+ * Find a specific outbound flight in the DOM and click it using Puppeteer's
+ * native click. Matches by price text + airline name.
  */
-async function applyFilters(page: Page, category: FlightCategory): Promise<void> {
-  const filters = CATEGORY_FILTERS[category];
-  console.log(`      Applying filters: stops=${filters.stops}, bags=${filters.bags}`);
-
-  await applyStopsFilter(page, filters.stops);
-  await applyBagsFilter(page, filters.bags);
-  await applyDurationFilter(page);
-  await applySortByPrice(page);
-
-  // Wait for results to reload after filtering
-  await new Promise((r) => setTimeout(r, 2000));
-}
-
-// ---------------------------------------------------------------------------
-// Page scraping
-// ---------------------------------------------------------------------------
-
-interface ScrapedFlight {
-  price: number;
-  airline: string;
-  stops: number;
-  duration: string;
-  departTime: string;
-  arriveTime: string;
-  returnDepartTime: string;
-  returnArriveTime: string;
-  returnDuration: string;
-  returnStops: number;
-  layoverAirport?: string;
-  layoverDuration?: string;
-  returnLayoverAirport?: string;
-  returnLayoverDuration?: string;
-  category: FlightCategory;
-  filteredUrl: string;
-}
-
-interface ParsedFlightInfo {
-  price: number;
-  airline: string;
-  stops: number;
-  duration: string;
-  departTime: string;
-  arriveTime: string;
-  layoverAirport?: string;
-  layoverDuration?: string;
-}
-
-/** Parse flight info from an aria-label string */
-function parseAriaLabel(ariaLabel: string): ParsedFlightInfo | null {
-  const priceMatch = ariaLabel.match(/(\d[\d,]*)\s*US\s*dollars/i);
-  if (!priceMatch) return null;
-  const price = parseInt(priceMatch[1].replace(/,/g, ""), 10);
-  if (!price || price === 0 || price > 99999999) return null;
-
-  let stops = 0;
-  if (!/nonstop/i.test(ariaLabel)) {
-    const stopMatch = ariaLabel.match(/(\d+)\s*stop/i);
-    stops = stopMatch ? parseInt(stopMatch[1], 10) : 0;
-  }
-
-  let duration = "";
-  const totalDurMatch = ariaLabel.match(/Total duration\s+(.+?)(?:\.|$)/i);
-  if (totalDurMatch) duration = totalDurMatch[1].trim();
-
-  let airline = "Unknown";
-  const airlineMatch = ariaLabel.match(/flight with\s+(.+?)\./i);
-  if (airlineMatch) airline = airlineMatch[1].trim();
-
-  let departTime = "";
-  let arriveTime = "";
-  const timeMatches = ariaLabel.match(
-    /Leaves\s+.+?\s+at\s+(\d{1,2}:\d{2}\s*[AP]M).+?arrives\s+at\s+.+?\s+at\s+(\d{1,2}:\d{2}\s*[AP]M)/i
-  );
-  if (timeMatches) {
-    departTime = timeMatches[1];
-    arriveTime = timeMatches[2];
-  }
-
-  let layoverDuration: string | undefined;
-  const layoverDurMatch = ariaLabel.match(
-    /(?:is\s+a\s+)?(\d+\s*hr?\s*(?:\d+\s*min)?|\d+\s*min)\s+(?:overnight\s+)?layover\s+at/i
-  );
-  if (layoverDurMatch && stops > 0) layoverDuration = layoverDurMatch[1].trim();
-
-  let layoverAirport: string | undefined;
-  const layoverMatch = ariaLabel.match(/layover\s+at\s+(.+?)(?:\.\s|$)/i);
-  if (layoverMatch && stops > 0) layoverAirport = layoverMatch[1].trim();
-
-  return { price, airline, stops, duration, departTime, arriveTime, layoverAirport, layoverDuration };
-}
-
-/** Parse list items on the current page into flight data using aria-labels */
-function parseFlightItems(items: { ariaLabel: string }[]): ParsedFlightInfo[] {
-  const results: ParsedFlightInfo[] = [];
-  for (const item of items) {
-    const parsed = parseAriaLabel(item.ariaLabel);
-    if (!parsed) continue;
-    results.push(parsed);
-  }
-  return results;
-}
-
-/** Extract aria-label data from all li.pIav2d items on the page */
-async function extractPageItems(page: Page): Promise<{ ariaLabel: string }[]> {
-  return page.evaluate(() => {
-    const items = document.querySelectorAll("li.pIav2d");
-    const results: { ariaLabel: string }[] = [];
-    for (const item of items) {
-      // Try the li's own aria-label first
-      let ariaLabel = item.getAttribute("aria-label") ?? "";
-      // If empty, look for the child link/div with flight details
-      if (!ariaLabel) {
-        const linkEl = item.querySelector('[role="link"][aria-label], div[aria-label]');
-        ariaLabel = linkEl?.getAttribute("aria-label") ?? "";
-      }
-      if (!ariaLabel) continue;
-      results.push({ ariaLabel });
-    }
-    return results;
-  });
-}
-
-/**
- * Scrape a single category for an airport+date range.
- * 1. Load Google Flights page
- * 2. Apply filters (stops, bags, duration, sort)
- * 3. Get top 3 outbound flights
- * 4. Click each → get cheapest return
- * 5. Capture filtered URL
- */
-async function scrapeCategoryPage(
+async function findAndClickOutbound(
   page: Page,
-  baseUrl: string,
-  category: FlightCategory
-): Promise<ScrapedFlight[]> {
-  await page.setUserAgent(pickRandom(USER_AGENTS));
-  await page.goto(baseUrl, { waitUntil: "networkidle2", timeout: 60_000 });
+  target: ApiParsedFlight,
+  skipIndices: number[]
+): Promise<number> {
+  const priceStr = formatPriceForDom(target.price);
+  const items = await page.$$("li.pIav2d");
 
-  try {
-    await page.waitForSelector("li.pIav2d", { timeout: 15_000 });
-  } catch {
-    const captcha = await page.$('iframe[src*="recaptcha"], #captcha-form, .g-recaptcha');
-    if (captcha) {
-      console.warn("    CAPTCHA detected, skipping");
-      return [];
+  // First pass: price + airline
+  for (let i = 0; i < items.length; i++) {
+    if (skipIndices.includes(i)) continue;
+    const text = await items[i].evaluate(el => el.textContent ?? "");
+    if (text.includes(priceStr) && text.includes(target.airline)) {
+      await items[i].click();
+      return i;
     }
-    console.warn("    No flight results found on page, skipping");
-    return [];
   }
 
-  await new Promise((r) => setTimeout(r, 2000));
+  // Second pass: price only
+  for (let i = 0; i < items.length; i++) {
+    if (skipIndices.includes(i)) continue;
+    const text = await items[i].evaluate(el => el.textContent ?? "");
+    if (text.includes(priceStr)) {
+      await items[i].click();
+      return i;
+    }
+  }
 
-  // Apply filters for this category
-  await applyFilters(page, category);
+  return -1;
+}
 
-  // Wait for results to update after filtering
+/**
+ * Click an outbound flight, capture its specific return flights, then go back.
+ */
+async function getReturnForOutbound(
+  page: Page,
+  captured: CapturedApiCall[],
+  target: ApiParsedFlight,
+  skipIndices: number[],
+  returnUrl: string,
+  isCarryon: boolean
+): Promise<{ returns: { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null; clickedIndex: number }> {
+  const preClickCount = captured.length;
+
+  const clickedIdx = await findAndClickOutbound(page, target, skipIndices);
+  if (clickedIdx === -1) {
+    return { returns: null, clickedIndex: -1 };
+  }
+
   try {
+    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 15_000 });
+  } catch {}
+  await new Promise((r) => setTimeout(r, 3000));
+
+  const returns = await waitForApiResponse(captured, preClickCount, 10_000);
+
+  // Navigate back to outbound list
+  try {
+    await page.goBack({ waitUntil: "networkidle2", timeout: 15_000 });
     await page.waitForSelector("li.pIav2d", { timeout: 10_000 });
   } catch {
-    console.warn(`      No results after applying ${category} filters`);
-    return [];
+    // goBack failed — reload the page
+    await page.goto(returnUrl, { waitUntil: "networkidle2", timeout: 60_000 });
+    try { await page.waitForSelector("li.pIav2d", { timeout: 15_000 }); } catch {}
+    if (isCarryon) {
+      await applyCarryOnFilter(page);
+      await new Promise((r) => setTimeout(r, 3000));
+    }
   }
+  await new Promise((r) => setTimeout(r, 2000));
 
-  await new Promise((r) => setTimeout(r, 1500));
+  return { returns, clickedIndex: clickedIdx };
+}
 
-  // Capture the filtered URL from address bar
-  const filteredUrl = page.url();
+// ---------------------------------------------------------------------------
+// Core scrape function
+// ---------------------------------------------------------------------------
 
-  // Get outbound flights (already sorted by price due to filter)
-  const outboundData = await extractPageItems(page);
-  const outboundFlights = parseFlightItems(outboundData);
+interface ScrapeResult {
+  category: FlightCategory;
+  price: number;
+  airline: string;
+  outbound: ApiParsedFlight;
+  return_: ApiParsedFlight;
+  googleFlightsUrl: string;
+}
 
-  if (outboundFlights.length === 0) {
-    console.log(`      No outbound flights found for ${category}`);
-    return [];
-  }
+/**
+ * Scrape a single category on its own page.
+ * Each category gets its own browser context + page for isolation.
+ */
+async function scrapeSingleCategory(
+  browser: Browser,
+  baseUrl: string,
+  category: FlightCategory,
+  stopType: "nonstop" | "onestop",
+  isCarryon: boolean
+): Promise<ScrapeResult[]> {
+  const context = await browser.createBrowserContext();
+  const page = await context.newPage();
+  await page.setViewport({ width: 1920, height: 1080 });
+  await page.setUserAgent(pickRandom(USER_AGENTS));
 
-  // Take top N outbound flights
-  const topOutbounds = outboundFlights.slice(0, TOP_N_OUTBOUND);
-  console.log(`      Found ${outboundFlights.length} outbounds, taking top ${topOutbounds.length}`);
+  const captured: CapturedApiCall[] = [];
+  await page.setRequestInterception(true);
+  setupApiInterception(page, captured);
 
-  const results: ScrapedFlight[] = [];
+  const results: ScrapeResult[] = [];
 
-  // Click each top outbound to get cheapest return
-  for (let i = 0; i < topOutbounds.length; i++) {
-    const outbound = topOutbounds[i];
+  try {
+    // Step 1: Load page
+    const preLoadCount = captured.length;
+    await page.goto(baseUrl, { waitUntil: "networkidle2", timeout: 60_000 });
 
     try {
-      const items = await page.$$("li.pIav2d");
-      if (i >= items.length) {
-        console.warn(`      Outbound index ${i} out of range (${items.length} items)`);
-        continue;
+      await page.waitForSelector("li.pIav2d", { timeout: 15_000 });
+    } catch {
+      const captcha = await page.$('iframe[src*="recaptcha"], #captcha-form, .g-recaptcha');
+      if (captcha) {
+        console.warn(`      [${category}] CAPTCHA detected, skipping`);
+      } else {
+        console.warn(`      [${category}] No flight results found, skipping`);
       }
+      return results;
+    }
+    await new Promise((r) => setTimeout(r, 2000));
 
-      // Remember outbound count so we can detect the page transition
-      const outboundCount = items.length;
-      await items[i].click();
+    // Step 2: Optionally apply carry-on filter
+    let outbound: { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null = null;
 
-      // Wait for Google Flights to transition to the return flights view.
-      // Detect by: URL change, heading text change, or flight list count change.
-      let returnLoaded = false;
-      try {
-        await page.waitForFunction(
-          (prevCount: number) => {
-            // Check if a "Return" or "returning" heading appeared
-            const headings = document.querySelectorAll("h3, h2, [role='heading']");
-            for (const h of headings) {
-              const text = h.textContent?.toLowerCase() ?? "";
-              if (text.includes("return") || text.includes("choose your return")) return true;
-            }
-            // Or if the flight list changed significantly (different items)
-            const currentItems = document.querySelectorAll("li.pIav2d");
-            if (currentItems.length > 0 && currentItems.length !== prevCount) return true;
-            // Check for aria-labels that differ (return flights have different routes)
-            const firstLabel = currentItems[0]?.getAttribute("aria-label") ?? "";
-            if (firstLabel && !firstLabel.includes("Outbound")) return true;
-            return false;
-          },
-          { timeout: 12_000 },
-          outboundCount
-        );
-        returnLoaded = true;
-      } catch {
-        // Fallback: just wait and check if we have any flight items
+    if (isCarryon) {
+      const preFilterCount = captured.length;
+      const filterApplied = await applyCarryOnFilter(page);
+      if (filterApplied) {
         await new Promise((r) => setTimeout(r, 3000));
-        const currentItems = await page.$$("li.pIav2d");
-        returnLoaded = currentItems.length > 0;
-      }
-
-      if (!returnLoaded) {
-        console.warn(`      No return flights loaded for outbound #${i + 1}`);
-        await page.goBack({ waitUntil: "networkidle2", timeout: 30_000 });
-        await new Promise((r) => setTimeout(r, 2000));
-        continue;
-      }
-
-      await new Promise((r) => setTimeout(r, 1500));
-
-      // Parse return flights and find cheapest
-      const returnData = await extractPageItems(page);
-      const returnFlights = parseFlightItems(returnData);
-
-      const bestReturn = returnFlights.length > 0
-        ? returnFlights.reduce((a, b) => (a.price <= b.price ? a : b))
-        : null;
-
-      results.push({
-        price: outbound.price,
-        airline: outbound.airline,
-        stops: outbound.stops,
-        duration: outbound.duration,
-        departTime: outbound.departTime,
-        arriveTime: outbound.arriveTime,
-        layoverAirport: outbound.layoverAirport,
-        layoverDuration: outbound.layoverDuration,
-        returnDepartTime: bestReturn?.departTime ?? "",
-        returnArriveTime: bestReturn?.arriveTime ?? "",
-        returnDuration: bestReturn?.duration ?? "",
-        returnStops: bestReturn?.stops ?? outbound.stops,
-        returnLayoverAirport: bestReturn?.layoverAirport,
-        returnLayoverDuration: bestReturn?.layoverDuration,
-        category,
-        filteredUrl,
-      });
-
-      const layoverInfo = outbound.layoverAirport
-        ? ` | layover: ${outbound.layoverDuration} at ${outbound.layoverAirport}`
-        : "";
-      const retLayoverInfo = bestReturn?.layoverAirport
-        ? ` | layover: ${bestReturn.layoverDuration} at ${bestReturn.layoverAirport}`
-        : "";
-      console.log(
-        `        #${i + 1}: $${outbound.price} ${outbound.airline} (${outbound.stops} stops, ${outbound.duration})${layoverInfo}`
-      );
-      console.log(
-        `          Return: ${bestReturn ? `${bestReturn.airline} (${bestReturn.stops} stops, ${bestReturn.duration})${retLayoverInfo}` : "none"}`
-      );
-
-      // Go back to outbound list
-      await page.goBack({ waitUntil: "networkidle2", timeout: 30_000 });
-      await new Promise((r) => setTimeout(r, 2000));
-
-      try {
-        await page.waitForSelector("li.pIav2d", { timeout: 10_000 });
-      } catch {
-        console.warn("      Could not return to outbound list, stopping click-through");
-        break;
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`      Click-through error for outbound #${i + 1}: ${msg}`);
-      try {
-        await page.goBack({ waitUntil: "networkidle2", timeout: 15_000 });
-        await new Promise((r) => setTimeout(r, 2000));
-      } catch {
-        break;
+        outbound = await waitForApiResponse(captured, preFilterCount, 10_000);
+        console.log(`      [${category}] Carry-on filter applied`);
       }
     }
+
+    if (!outbound) {
+      outbound = await waitForApiResponse(captured, preLoadCount, 5_000);
+    }
+
+    if (!outbound) {
+      console.warn(`      [${category}] No outbound API data, skipping`);
+      return results;
+    }
+
+    const googleFlightsUrl = page.url();
+    const outboundList = stopType === "nonstop" ? outbound.nonstop : outbound.onestop;
+    const topCount = Math.min(TOP_N_PER_CATEGORY, outboundList.length);
+
+    console.log(`      [${category}] ${outboundList.length} outbound, clicking top ${topCount}`);
+
+    if (topCount === 0) return results;
+
+    // Step 3: Click top N outbound to get per-outbound returns
+    const clickedDomIndices: number[] = [];
+
+    for (let i = 0; i < topCount; i++) {
+      const target = outboundList[i];
+
+      const { returns, clickedIndex } = await getReturnForOutbound(
+        page, captured, target, clickedDomIndices, baseUrl, isCarryon
+      );
+
+      if (clickedIndex >= 0) clickedDomIndices.push(clickedIndex);
+
+      // Pick best return for this category
+      let bestReturn: ApiParsedFlight | null = null;
+      if (returns) {
+        if (stopType === "nonstop") {
+          bestReturn = returns.nonstop.find(r => r.stops === 0) ?? null;
+        } else {
+          bestReturn = returns.onestop[0] ?? returns.nonstop[0] ?? null;
+        }
+      }
+
+      // Validate: skip if no valid return
+      if (!bestReturn) {
+        console.log(`      [${category}] #${i + 1}: no return, skipping`);
+        continue;
+      }
+      if (stopType === "nonstop" && bestReturn.stops > 0) {
+        console.log(`      [${category}] #${i + 1}: return has ${bestReturn.stops} stops, skipping`);
+        continue;
+      }
+
+      results.push({
+        category,
+        price: target.price,
+        airline: target.airline,
+        outbound: target,
+        return_: bestReturn,
+        googleFlightsUrl,
+      });
+    }
+  } finally {
+    await page.close();
+    await context.close();
   }
 
   return results;
 }
 
-function buildFlightLeg(flight: ScrapedFlight, leg: "outbound" | "return"): FlightLeg {
-  if (leg === "outbound") {
-    return {
-      departTime: flight.departTime,
-      arriveTime: flight.arriveTime,
-      duration: flight.duration,
-      stops: flight.stops,
-      layoverAirport: flight.layoverAirport,
-      layoverDuration: flight.layoverDuration,
-    };
+/**
+ * Scrape all 4 categories for one airport + date range.
+ *
+ * Launches 4 parallel pages (one per category) with staggered loads
+ * and separate browser contexts to minimize CAPTCHA risk.
+ */
+async function scrapeAirportDate(
+  browser: Browser,
+  baseUrl: string,
+  _airport: string
+): Promise<ScrapeResult[]> {
+  const categoryDefs: { category: FlightCategory; stopType: "nonstop" | "onestop"; isCarryon: boolean }[] = [
+    { category: "nonstop_no_carryon", stopType: "nonstop", isCarryon: false },
+    { category: "onestop_no_carryon", stopType: "onestop", isCarryon: false },
+    { category: "nonstop_carryon",    stopType: "nonstop", isCarryon: true },
+    { category: "onestop_carryon",    stopType: "onestop", isCarryon: true },
+  ];
+
+  // Stagger launches: start each category 3-5s apart to avoid burst requests
+  const promises: Promise<ScrapeResult[]>[] = [];
+  for (let i = 0; i < categoryDefs.length; i++) {
+    const def = categoryDefs[i];
+    const delay = i * (3000 + Math.random() * 2000); // 3-5s stagger
+    promises.push(
+      new Promise<ScrapeResult[]>((resolve) => setTimeout(resolve, delay)).then(() =>
+        scrapeSingleCategory(browser, baseUrl, def.category, def.stopType, def.isCarryon)
+      )
+    );
   }
-  return {
-    departTime: flight.returnDepartTime,
-    arriveTime: flight.returnArriveTime,
-    duration: flight.returnDuration,
-    stops: flight.returnStops,
-    layoverAirport: flight.returnLayoverAirport,
-    layoverDuration: flight.returnLayoverDuration,
+
+  const allResults = await Promise.all(promises);
+  return allResults.flat();
+}
+
+// ---------------------------------------------------------------------------
+// Build DB rows
+// ---------------------------------------------------------------------------
+
+function formatDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0 && m > 0) return `${h} hr ${m} min`;
+  if (h > 0) return `${h} hr`;
+  return `${m} min`;
+}
+
+function apiFlightToLeg(f: ApiParsedFlight): FlightLeg {
+  const leg: FlightLeg = {
+    departTime: f.departTime,
+    arriveTime: f.arriveTime,
+    duration: formatDuration(f.duration),
+    stops: f.stops,
   };
+  if (f.layoverAirport) leg.layoverAirport = f.layoverAirport;
+  if (f.layoverDuration) leg.layoverDuration = formatDuration(f.layoverDuration);
+  return leg;
 }
 
 // ---------------------------------------------------------------------------
@@ -706,12 +657,10 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // Load airport-to-city mapping from Supabase config
   await loadAirportToCities();
 
   const inputAirports = airportsEnv.split(",").map((a) => a.trim());
 
-  // Derive all cities served by these airports
   const targetCities = new Set<string>();
   for (const airport of inputAirports) {
     const cities = AIRPORT_TO_CITIES[airport];
@@ -727,18 +676,19 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log("=== Google Flights Scraper (Filter-Based) ===");
+  console.log("=== Google Flights Scraper (API Interception) ===");
   console.log(`Started at ${new Date().toISOString()}`);
   console.log(`Airports: ${inputAirports.join(", ")}`);
   console.log(`Target cities: ${[...targetCities].join(", ")}`);
 
   const dateRanges = generateDateRanges();
-  // 4 categories per airport per date range
-  const totalTasks = inputAirports.length * dateRanges.length * FLIGHT_CATEGORIES.length;
+  const totalTasks = inputAirports.length * dateRanges.length;
   let completedTasks = 0;
 
   console.log(`Date ranges: ${dateRanges.length}`);
-  console.log(`Categories: ${FLIGHT_CATEGORIES.length}`);
+  console.log(`Categories: ${CATEGORIES_TO_SCRAPE.join(", ")}`);
+  console.log(`Top N per category: ${TOP_N_PER_CATEGORY}`);
+  console.log(`Max duration: ${MAX_DURATION_MINUTES} min`);
   console.log(`Total tasks: ${totalTasks}\n`);
 
   const jobId = await createScrapeJob(inputAirports);
@@ -761,56 +711,41 @@ async function main(): Promise<void> {
       console.log(`\n--- ${dateRange.id} (${dateRange.format}) ---`);
 
       for (const airport of inputAirports) {
+        completedTasks++;
+        const taskLabel = `${airport} | ${dateRange.id}`;
+        console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel}`);
+        await updateJobProgress(jobId, completedTasks, totalTasks, taskLabel);
+
         const baseUrl = buildFlightsUrl(airport, dateRange.departDate, dateRange.returnDate);
 
-        // All scraped flights for this airport + date range (across categories)
-        const allScraped: ScrapedFlight[] = [];
+        let scrapeResults: ScrapeResult[] = [];
 
-        for (const category of FLIGHT_CATEGORIES) {
-          completedTasks++;
-          const taskLabel = `${airport} | ${dateRange.id} | ${category}`;
-          console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel}`);
-          await updateJobProgress(jobId, completedTasks, totalTasks, taskLabel);
-
-          try {
-            const page = await browser!.newPage();
-            await page.setViewport({ width: 1920, height: 1080 });
-
-            const flights = await scrapeCategoryPage(page, baseUrl, category);
-            console.log(`    ${category}: ${flights.length} results`);
-            allScraped.push(...flights);
-
-            await page.close();
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            console.error(`    ${category}: ERROR - ${msg}`);
-          }
-
-          // Small delay between category page loads
-          await randomDelay(1500, 3000);
+        try {
+          scrapeResults = await scrapeAirportDate(browser!, baseUrl, airport);
+          console.log(`    Total results: ${scrapeResults.length}`);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`    ERROR: ${msg}`);
         }
 
         // Write results for each target city
         const now = new Date().toISOString();
+        const runId = process.env.GITHUB_RUN_ID ?? null;
 
         for (const city of targetCities) {
-          // Only write if this airport serves this city
           if (!AIRPORT_TO_CITIES[airport]?.includes(city)) continue;
+          if (scrapeResults.length === 0) continue;
 
-          if (allScraped.length === 0) continue;
-
-          // Build flight_options rows
-          const runId = process.env.GITHUB_RUN_ID ?? null;
-          const optionRows = allScraped.map((f) => ({
+          const optionRows = scrapeResults.map((r) => ({
             date_range_id: dateRange.id,
             origin_city: city,
-            category: f.category,
+            category: r.category,
             airport_used: airport,
-            price: f.price,
-            airline: f.airline,
-            outbound_details: buildFlightLeg(f, "outbound"),
-            return_details: buildFlightLeg(f, "return"),
-            google_flights_url: f.filteredUrl,
+            price: r.price,
+            airline: r.airline,
+            outbound_details: apiFlightToLeg(r.outbound),
+            return_details: apiFlightToLeg(r.return_),
+            google_flights_url: r.googleFlightsUrl,
             is_best: false,
             scraped_at: now,
             run_id: runId,
@@ -831,14 +766,13 @@ async function main(): Promise<void> {
             const batch = optionRows.slice(i, i + 50);
             const { error } = await supabase.from("flight_options_staging").insert(batch);
             if (error) {
-              console.error(`    DB insert error (flight_options, ${city}): ${error.message}`);
+              console.error(`    DB insert error (${city}): ${error.message}`);
             }
           }
 
-          console.log(`    → ${city}: ${optionRows.length} options saved`);
+          console.log(`    -> ${city}: ${optionRows.length} rows saved`);
         }
 
-        // Delay between airports if there are multiple
         if (inputAirports.length > 1) await randomDelay();
       }
     }

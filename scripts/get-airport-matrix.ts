@@ -45,27 +45,37 @@ async function main() {
   const airports = [...allAirports].sort();
   console.error(`Found ${airports.length} unique airports from ${cities.length} cities`);
 
-  // If we have more airports than max jobs, group them
-  let entries: { name: string; airports: string }[];
+  // Always distribute airports across exactly MAX_JOBS jobs
+  const entries: { name: string; airports: string }[] = [];
 
-  if (airports.length <= MAX_JOBS) {
-    // One job per airport
-    entries = airports.map((apt) => ({ name: apt, airports: apt }));
-  } else {
-    // Group airports to fit within MAX_JOBS
-    const groupSize = Math.ceil(airports.length / MAX_JOBS);
-    entries = [];
-    for (let i = 0; i < airports.length; i += groupSize) {
-      const group = airports.slice(i, i + groupSize);
-      entries.push({
-        name: group.join("+"),
-        airports: group.join(","),
-      });
-    }
+  if (airports.length === 0) {
+    console.error("No airports found");
+    process.exit(1);
   }
 
+  // Initialize job buckets
+  for (let i = 0; i < MAX_JOBS; i++) {
+    entries.push({ name: "", airports: "" });
+  }
+
+  // Round-robin distribute airports across jobs
+  for (let i = 0; i < airports.length; i++) {
+    const jobIdx = i % MAX_JOBS;
+    const existing = entries[jobIdx].airports;
+    entries[jobIdx].airports = existing ? `${existing},${airports[i]}` : airports[i];
+  }
+
+  // Remove empty jobs (only if fewer airports than MAX_JOBS) and set names
+  const filledEntries = entries
+    .filter((e) => e.airports !== "")
+    .map((e) => ({
+      name: e.airports.replace(/,/g, "+"),
+      airports: e.airports,
+    }));
+
   // Output the matrix JSON to stdout (GitHub Actions reads this)
-  const matrix = { include: entries };
+  const matrix = { include: filledEntries };
+  console.error(`Created ${filledEntries.length} jobs for ${airports.length} airports`);
   console.log(JSON.stringify(matrix));
 }
 
