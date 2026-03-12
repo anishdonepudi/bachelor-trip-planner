@@ -203,7 +203,7 @@ export function JobsPanel({ runs }: JobsPanelProps) {
         onClick={() => setOpen(true)}
         className={`inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-all ${
           hasRunning
-            ? "bg-sky-500/10 border-sky-500/30 text-sky-400 opacity-100"
+            ? "opacity-0 hover:opacity-100 bg-sky-500/10 border-sky-500/30 text-sky-400"
             : "opacity-0 hover:opacity-100 bg-zinc-800/60 border-transparent hover:border-zinc-700/40 text-zinc-400 hover:text-zinc-200"
         }`}
         title="Data Refresh Job Run History"
