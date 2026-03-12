@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 interface ScrapeStatusProps {
   lastUpdated: string | null;
@@ -11,6 +11,13 @@ interface ScrapeStatusProps {
 export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStatusProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [, setTick] = useState(0);
+
+  // Re-render every 30s to keep "time ago" fresh
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const getTimeAgo = (dateStr: string | null) => {
     if (!dateStr) return "Never";
