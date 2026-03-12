@@ -134,7 +134,7 @@ async function fetchAirbnbPage(
 
   // Extract the deferred state JSON from the script tag
   const deferredMatch = htmlStr.match(
-    /id="data-deferred-state-0"[^>]*>(.*?)<\/script>/s
+    /id="data-deferred-state-0"[^>]*>([\s\S]*?)<\/script>/
   );
 
   if (!deferredMatch) {
