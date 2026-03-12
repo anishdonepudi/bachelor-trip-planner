@@ -23,6 +23,7 @@ export function Dashboard() {
   const [flightCategory, setFlightCategory] =
     useState<FlightCategory>("nonstop_carryon");
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
+  const [selectedWeekend, setSelectedWeekend] = useState<string | null>(null);
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
 
   const { data: weekendData, isLoading: weekendsLoading } = useSWR<WeekendData>(
@@ -63,6 +64,11 @@ export function Dashboard() {
     );
   }, [weekendData, dateRanges, flightCategory, budgetTier, cities]);
 
+  const filteredWeekendScores = useMemo(() => {
+    if (!selectedWeekend) return weekendScores;
+    return weekendScores.filter((w) => w.dateRange.id === selectedWeekend);
+  }, [weekendScores, selectedWeekend]);
+
   const hasData =
     weekendData &&
     ((weekendData.flights?.length ?? 0) > 0 ||
@@ -102,8 +108,11 @@ export function Dashboard() {
             <FilterBar
               flightCategory={flightCategory}
               budgetTier={budgetTier}
+              selectedWeekend={selectedWeekend}
+              dateRanges={dateRanges}
               onFlightCategoryChange={setFlightCategory}
               onBudgetTierChange={setBudgetTier}
+              onWeekendChange={setSelectedWeekend}
             />
 
             {/* Weekend Cards */}
@@ -127,9 +136,9 @@ export function Dashboard() {
             ) : (
               <div className="space-y-4">
                 <div className="text-sm text-zinc-500">
-                  {weekendScores.length} weekends ranked by total group cost
+                  {filteredWeekendScores.length} weekends ranked by total group cost
                 </div>
-                {weekendScores.map((weekend, i) => (
+                {filteredWeekendScores.map((weekend, i) => (
                   <WeekendCard
                     key={weekend.dateRange.id}
                     weekend={weekend}
