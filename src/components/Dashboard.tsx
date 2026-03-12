@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import useSWR from "swr";
 import {
   FlightCategory,
@@ -16,6 +16,7 @@ import { WeekendCard } from "./WeekendCard";
 import { ScrapeStatus } from "./ScrapeStatus";
 import { ConfigModal } from "./ConfigModal";
 import { LoadingSkeleton } from "./LoadingSkeleton";
+import { DataUpdateModal } from "./DataUpdateModal";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -26,7 +27,10 @@ export function Dashboard() {
   const [selectedWeekend, setSelectedWeekend] = useState<string | null>(null);
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
 
-  const { data: weekendData, isLoading: weekendsLoading } = useSWR<WeekendData>(
+  const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const initialLastUpdated = useRef<string | null | undefined>(undefined);
+
+  const { data: weekendData, isLoading: weekendsLoading, mutate: mutateWeekends } = useSWR<WeekendData>(
     "/api/weekends",
     fetcher,
     { revalidateOnFocus: false, dedupingInterval: 1800000 } // 30 min
@@ -38,6 +42,25 @@ export function Dashboard() {
     revalidateOnFocus: false,
     refreshInterval: 60000,
   });
+
+  // Track initial lastFlightUpdate and show modal when it changes
+  useEffect(() => {
+    if (!scrapeData?.lastFlightUpdate) return;
+
+    if (initialLastUpdated.current === undefined) {
+      // First load — store the baseline
+      initialLastUpdated.current = scrapeData.lastFlightUpdate;
+    } else if (scrapeData.lastFlightUpdate !== initialLastUpdated.current) {
+      // Data has been updated since page load
+      setShowUpdateModal(true);
+    }
+  }, [scrapeData?.lastFlightUpdate]);
+
+  const handleDataRefresh = useCallback(() => {
+    setShowUpdateModal(false);
+    initialLastUpdated.current = scrapeData?.lastFlightUpdate ?? null;
+    mutateWeekends();
+  }, [scrapeData?.lastFlightUpdate, mutateWeekends]);
 
   const { data: configData } = useSWR("/api/config", fetcher, {
     revalidateOnFocus: false,
@@ -152,6 +175,11 @@ export function Dashboard() {
           </>
         )}
       </main>
+
+      <DataUpdateModal
+        open={showUpdateModal}
+        onRefresh={handleDataRefresh}
+      />
     </div>
   );
 }
