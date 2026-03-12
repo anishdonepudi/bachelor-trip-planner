@@ -51,7 +51,7 @@ jobs:
         run: npx puppeteer browsers install chrome
 
       - name: Run flights scraper
-        run: npx ts-node scripts/scrape-flights.ts
+        run: npx tsx scripts/scrape-flights.ts
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
 
@@ -81,6 +81,6 @@ jobs:
         run: npx puppeteer browsers install chrome
 
       - name: Run Airbnb scraper
-        run: npx ts-node scripts/scrape-airbnb.ts
+        run: npx tsx scripts/scrape-airbnb.ts
         env:
           GITHUB_RUN_ID: ${{ github.run_id }}
