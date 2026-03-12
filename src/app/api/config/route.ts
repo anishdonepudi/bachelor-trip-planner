@@ -72,7 +72,7 @@ export async function PUT(request: Request) {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              event_type: "scrape-requested",
+              event_type: "config-changed",
             }),
           }
         );

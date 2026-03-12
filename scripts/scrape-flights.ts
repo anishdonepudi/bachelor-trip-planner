@@ -56,31 +56,34 @@ const CATEGORY_FILTERS: Record<FlightCategory, { stops: "nonstop" | "1stop"; bag
 
 const TOP_N_OUTBOUND = 3;
 
-// Maps each airport to the cities it serves
-const AIRPORT_TO_CITIES: Record<string, string[]> = {
-  SFO: ["San Francisco"],
-  OAK: ["San Francisco"],
-  SJC: ["San Francisco"],
-  JFK: ["New York City"],
-  EWR: ["New York City"],
-  LGA: ["New York City"],
-  PHL: ["Philadelphia"],
-  IAH: ["Houston"],
-  HOU: ["Houston"],
-  MSY: ["New Orleans"],
-  DCA: ["Washington DC"],
-  IAD: ["Washington DC"],
-  BWI: ["Washington DC"],
-  ORD: ["Chicago"],
-  MDW: ["Chicago"],
-  LAX: ["Los Angeles", "Irvine"],
-  BUR: ["Los Angeles"],
-  LGB: ["Los Angeles", "Irvine"],
-  SNA: ["Los Angeles", "Irvine"],
-  PHX: ["Phoenix"],
-  AZA: ["Phoenix"],
-  ONT: ["Irvine"],
-};
+// Built dynamically from Supabase config at startup
+let AIRPORT_TO_CITIES: Record<string, string[]> = {};
+
+async function loadAirportToCities(): Promise<void> {
+  const { data, error } = await supabase
+    .from("config")
+    .select("cities")
+    .limit(1)
+    .single();
+
+  if (error || !data?.cities) {
+    console.error("Failed to load config from Supabase, using empty map");
+    return;
+  }
+
+  const cities = data.cities as { city: string; primaryAirports: string[]; nearbyAirports: string[] }[];
+  const map: Record<string, string[]> = {};
+
+  for (const c of cities) {
+    for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) {
+      if (!map[apt]) map[apt] = [];
+      if (!map[apt].includes(c.city)) map[apt].push(c.city);
+    }
+  }
+
+  AIRPORT_TO_CITIES = map;
+  console.log(`Loaded airport map from config: ${Object.keys(map).length} airports, ${cities.length} cities`);
+}
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -643,17 +646,25 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Load airport-to-city mapping from Supabase config
+  await loadAirportToCities();
+
   const inputAirports = airportsEnv.split(",").map((a) => a.trim());
 
   // Derive all cities served by these airports
   const targetCities = new Set<string>();
   for (const airport of inputAirports) {
     const cities = AIRPORT_TO_CITIES[airport];
-    if (!cities) {
-      console.error(`Unknown airport: ${airport}`);
-      process.exit(1);
+    if (!cities || cities.length === 0) {
+      console.warn(`No cities mapped for airport: ${airport}, skipping`);
+      continue;
     }
     for (const city of cities) targetCities.add(city);
+  }
+
+  if (targetCities.size === 0) {
+    console.error("No target cities found for given airports");
+    process.exit(1);
   }
 
   console.log("=== Google Flights Scraper (Filter-Based) ===");

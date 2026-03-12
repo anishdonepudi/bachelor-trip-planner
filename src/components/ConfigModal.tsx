@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CityConfig } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
+import { CitySelect } from "./CitySelect";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,12 @@ export function ConfigModal({ cities: initialCities, onSave }: ConfigModalProps)
   const [open, setOpen] = useState(false);
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
   const [saving, setSaving] = useState(false);
+
+  // Reset local state when dialog opens or initialCities changes
+  const handleOpenChange = (isOpen: boolean) => {
+    if (isOpen) setCities(initialCities);
+    setOpen(isOpen);
+  };
 
   const totalPeople = cities.reduce((sum, c) => sum + c.people, 0);
   const hasChanges = JSON.stringify(cities) !== JSON.stringify(initialCities);
@@ -73,8 +80,11 @@ export function ConfigModal({ cities: initialCities, onSave }: ConfigModalProps)
     }
   };
 
+  // Cities already selected (for excluding from dropdown)
+  const selectedCityNames = cities.map((c) => c.city).filter(Boolean);
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-all text-sm font-medium" />
@@ -113,43 +123,43 @@ export function ConfigModal({ cities: initialCities, onSave }: ConfigModalProps)
           {cities.map((city, i) => (
             <div
               key={i}
-              className="flex items-center gap-2 p-3 rounded-lg bg-zinc-900 border border-zinc-800"
+              className="p-3 rounded-lg bg-zinc-900 border border-zinc-800"
             >
-              <input
-                type="text"
-                value={city.city}
-                onChange={(e) => updateCity(i, "city", e.target.value)}
-                placeholder="City name"
-                className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500"
-              />
-              <input
-                type="number"
-                value={city.people}
-                onChange={(e) =>
-                  updateCity(i, "people", parseInt(e.target.value) || 1)
-                }
-                min={1}
-                className="w-16 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-200 text-center focus:outline-none focus:border-zinc-500"
-              />
-              <span className="text-xs text-zinc-500 w-6">ppl</span>
-              <button
-                onClick={() => removeCity(i)}
-                className="text-zinc-600 hover:text-red-400 transition-colors p-1"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+              <div className="flex items-center gap-2">
+                <CitySelect
+                  value={city.city}
+                  onChange={(name) => updateCity(i, "city", name)}
+                  excludeCities={selectedCityNames.filter((c) => c !== city.city)}
+                />
+                <input
+                  type="number"
+                  value={city.people}
+                  onChange={(e) =>
+                    updateCity(i, "people", parseInt(e.target.value) || 1)
+                  }
+                  min={1}
+                  className="w-16 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-200 text-center focus:outline-none focus:border-zinc-500"
+                />
+                <span className="text-xs text-zinc-500 w-6">ppl</span>
+                <button
+                  onClick={() => removeCity(i)}
+                  className="text-zinc-600 hover:text-red-400 transition-colors p-1"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
           ))}
 

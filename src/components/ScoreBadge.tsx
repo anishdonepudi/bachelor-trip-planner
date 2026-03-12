@@ -27,13 +27,15 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
       ? Math.round(totalGroupCost / TOTAL_PEOPLE)
       : null;
 
-  const getColor = (score: number) => {
-    if (score >= 80) return "bg-emerald-500/15 text-emerald-400 border-emerald-500/30";
-    if (score >= 60) return "bg-sky-500/15 text-sky-400 border-sky-500/30";
-    if (score >= 40) return "bg-amber-500/15 text-amber-400 border-amber-500/30";
-    if (score >= 20) return "bg-orange-500/15 text-orange-400 border-orange-500/30";
-    return "bg-red-500/15 text-red-400 border-red-500/30";
+  const getTier = (score: number): { label: string; color: string } => {
+    if (score >= 80) return { label: "Best Value", color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
+    if (score >= 60) return { label: "Good", color: "bg-sky-500/15 text-sky-400 border-sky-500/30" };
+    if (score >= 40) return { label: "Average", color: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+    if (score >= 20) return { label: "Below Avg", color: "bg-orange-500/15 text-orange-400 border-orange-500/30" };
+    return { label: "Pricey", color: "bg-red-500/15 text-red-400 border-red-500/30" };
   };
+
+  const tier = getTier(score);
 
   return (
     <div
@@ -43,10 +45,9 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
     >
       <span className="text-sm font-mono text-zinc-500">#{rank}</span>
       <div
-        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-sm font-semibold ${getColor(score)}`}
+        className={`inline-flex items-center px-3 py-1 rounded-full border text-sm font-semibold ${tier.color}`}
       >
-        <span>{score}</span>
-        <span className="text-[10px] opacity-70">/100</span>
+        {tier.label}
       </div>
 
       {/* Hover tooltip */}
@@ -56,7 +57,7 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
           onClick={(e) => e.stopPropagation()}
         >
           <div className="text-zinc-400 font-semibold uppercase tracking-wider mb-1">
-            Score: {score}/100
+            {tier.label} (score: {score}/100)
           </div>
           <p className="text-zinc-500 mb-3 leading-relaxed">
             Each city is compared to its own average across all weekends.
