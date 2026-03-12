@@ -70,7 +70,7 @@ export function WeekendCard({
         <div className="flex items-center gap-3 shrink-0">
           {/* Per-person cost breakdown for selected city */}
           {selectedCityCost && selectedCityCost.perPersonTotal != null && (
-            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
               <span className="text-xs text-zinc-500">
                 ${selectedCityCost.flightCost ?? 0} flight
               </span>
@@ -79,10 +79,10 @@ export function WeekendCard({
                 ${Math.round(selectedCityCost.stayCost)} stay
               </span>
               <span className="text-zinc-600">=</span>
-              <span className="text-sm font-semibold font-mono text-amber-300">
+              <span className="text-sm font-semibold font-mono text-cyan-300">
                 ${Math.round(selectedCityCost.perPersonTotal)}
               </span>
-              <span className="text-xs text-amber-400/70">pp</span>
+              <span className="text-xs text-cyan-400/70">pp</span>
             </div>
           )}
 
