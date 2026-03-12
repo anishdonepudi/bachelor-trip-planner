@@ -15,6 +15,7 @@ interface WeekendCardProps {
   rank: number;
   flightCategory: FlightCategory;
   budgetTier: BudgetTier;
+  priorityCity?: string;
 }
 
 export function WeekendCard({
@@ -22,9 +23,15 @@ export function WeekendCard({
   rank,
   flightCategory,
   budgetTier,
+  priorityCity,
 }: WeekendCardProps) {
   const [expanded, setExpanded] = useState(false);
   const { dateRange, score, totalGroupCost, perCityCosts, cityAverages } = weekend;
+
+  // Per-person costs for the selected city
+  const selectedCityCost = priorityCity && priorityCity !== "all"
+    ? perCityCosts.find((c) => c.city === priorityCity)
+    : null;
 
   const categoryLabel =
     FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ??
@@ -61,6 +68,24 @@ export function WeekendCard({
           </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
+          {/* Per-person cost breakdown for selected city */}
+          {selectedCityCost && selectedCityCost.perPersonTotal != null && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <span className="text-xs text-emerald-400/70">pp</span>
+              <span className="text-xs text-zinc-500">
+                ${selectedCityCost.flightCost ?? 0} flight
+              </span>
+              <span className="text-zinc-600">+</span>
+              <span className="text-xs text-zinc-500">
+                ${Math.round(selectedCityCost.stayCost)} stay
+              </span>
+              <span className="text-zinc-600">=</span>
+              <span className="text-sm font-semibold font-mono text-emerald-300">
+                ${Math.round(selectedCityCost.perPersonTotal)}
+              </span>
+            </div>
+          )}
+
           {/* Airbnb count pill */}
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
             <svg className="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

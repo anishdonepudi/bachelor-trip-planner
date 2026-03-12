@@ -241,6 +241,7 @@ export function Dashboard() {
                     rank={i + 1}
                     flightCategory={flightCategory}
                     budgetTier={budgetTier}
+                    priorityCity={priorityCity}
                   />
                 ))}
               </div>
