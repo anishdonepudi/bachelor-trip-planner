@@ -324,23 +324,46 @@ async function applySortByPrice(page: Page): Promise<void> {
   await new Promise((r) => setTimeout(r, 1500));
 
   // Click the "Price" option in the sort dropdown
-  // Sort options are li elements with span children; click the li whose span text is "Price"
+  // Try multiple strategies since Google changes DOM frequently
   const clicked = await page.evaluate(() => {
-    const listItems = document.querySelectorAll("li");
-    for (const li of listItems) {
-      const spans = li.querySelectorAll("span");
-      for (const span of spans) {
-        if (span.textContent?.trim() === "Price" && span.parentElement?.closest("li")) {
-          // Click both span and parent li for reliability
-          span.click();
-          return true;
-        }
+    // Strategy 1: Look for li with span text "Price"
+    const allLis = document.querySelectorAll("li");
+    for (const li of allLis) {
+      const text = li.textContent?.trim();
+      if (text === "Price") {
+        (li as HTMLElement).click();
+        return "li-text";
       }
     }
-    return false;
+    // Strategy 2: Look for any clickable element containing "Price" inside a dropdown/menu
+    const allElements = document.querySelectorAll('[role="option"], [role="menuitem"], [role="menuitemradio"]');
+    for (const el of allElements) {
+      if (el.textContent?.trim() === "Price") {
+        (el as HTMLElement).click();
+        return "role-option";
+      }
+    }
+    // Strategy 3: Look for span with exact text "Price" and click its closest interactive parent
+    const spans = document.querySelectorAll("span");
+    for (const span of spans) {
+      if (span.textContent?.trim() === "Price") {
+        const clickable = span.closest("li, [role='option'], [role='menuitem'], button") as HTMLElement | null;
+        if (clickable) {
+          clickable.click();
+          return "span-parent";
+        }
+        (span as HTMLElement).click();
+        return "span-direct";
+      }
+    }
+    return null;
   });
 
-  if (!clicked) console.warn("      Could not find Price sort option");
+  if (clicked) {
+    console.log(`      Sort by Price applied (via ${clicked})`);
+  } else {
+    console.warn("      Could not find Price sort option");
+  }
   await new Promise((r) => setTimeout(r, 2000));
 }
 
@@ -456,8 +479,13 @@ async function extractPageItems(page: Page): Promise<{ ariaLabel: string }[]> {
     const items = document.querySelectorAll("li.pIav2d");
     const results: { ariaLabel: string }[] = [];
     for (const item of items) {
-      const linkEl = item.querySelector("[aria-label]");
-      const ariaLabel = linkEl?.getAttribute("aria-label") ?? "";
+      // Try the li's own aria-label first
+      let ariaLabel = item.getAttribute("aria-label") ?? "";
+      // If empty, look for the child link/div with flight details
+      if (!ariaLabel) {
+        const linkEl = item.querySelector('[role="link"][aria-label], div[aria-label]');
+        ariaLabel = linkEl?.getAttribute("aria-label") ?? "";
+      }
       if (!ariaLabel) continue;
       results.push({ ariaLabel });
     }
@@ -537,17 +565,49 @@ async function scrapeCategoryPage(
         continue;
       }
 
+      // Remember outbound count so we can detect the page transition
+      const outboundCount = items.length;
       await items[i].click();
-      await new Promise((r) => setTimeout(r, 3000));
 
+      // Wait for Google Flights to transition to the return flights view.
+      // Detect by: URL change, heading text change, or flight list count change.
+      let returnLoaded = false;
       try {
-        await page.waitForSelector("li.pIav2d", { timeout: 10_000 });
+        await page.waitForFunction(
+          (prevCount: number) => {
+            // Check if a "Return" or "returning" heading appeared
+            const headings = document.querySelectorAll("h3, h2, [role='heading']");
+            for (const h of headings) {
+              const text = h.textContent?.toLowerCase() ?? "";
+              if (text.includes("return") || text.includes("choose your return")) return true;
+            }
+            // Or if the flight list changed significantly (different items)
+            const currentItems = document.querySelectorAll("li.pIav2d");
+            if (currentItems.length > 0 && currentItems.length !== prevCount) return true;
+            // Check for aria-labels that differ (return flights have different routes)
+            const firstLabel = currentItems[0]?.getAttribute("aria-label") ?? "";
+            if (firstLabel && !firstLabel.includes("Outbound")) return true;
+            return false;
+          },
+          { timeout: 12_000 },
+          outboundCount
+        );
+        returnLoaded = true;
       } catch {
+        // Fallback: just wait and check if we have any flight items
+        await new Promise((r) => setTimeout(r, 3000));
+        const currentItems = await page.$$("li.pIav2d");
+        returnLoaded = currentItems.length > 0;
+      }
+
+      if (!returnLoaded) {
         console.warn(`      No return flights loaded for outbound #${i + 1}`);
         await page.goBack({ waitUntil: "networkidle2", timeout: 30_000 });
         await new Promise((r) => setTimeout(r, 2000));
         continue;
       }
+
+      await new Promise((r) => setTimeout(r, 1500));
 
       // Parse return flights and find cheapest
       const returnData = await extractPageItems(page);

@@ -21,7 +21,7 @@ import type { BudgetTier, AirbnbListingRow } from "../src/lib/types";
 
 const TOTAL_PEOPLE = 17;
 const NIGHTS = 3;
-const STALE_THRESHOLD_MS = 12 * 60 * 60 * 1000;
+
 const IS_TEST = process.argv.includes("--test");
 
 interface BudgetTierConfig {
@@ -398,21 +398,6 @@ function getSupabase(): SupabaseClient {
   return supabase;
 }
 
-async function isDataFresh(
-  dateRangeId: string,
-  tier: BudgetTier
-): Promise<boolean> {
-  const sb = getSupabase();
-  const { data, error } = await sb
-    .from("airbnb_listings")
-    .select("scraped_at")
-    .eq("date_range_id", dateRangeId)
-    .eq("budget_tier", tier)
-    .order("scraped_at", { ascending: false })
-    .limit(1);
-  if (error || !data || data.length === 0) return false;
-  return Date.now() - new Date(data[0].scraped_at).getTime() < STALE_THRESHOLD_MS;
-}
 
 async function createScrapeJob(): Promise<number> {
   const sb = getSupabase();
@@ -542,12 +527,6 @@ async function runFull(): Promise<void> {
       for (const tier of BUDGET_TIERS) {
         completedTasks++;
         const taskLabel = `${dateRange.id} | ${tier.label}`;
-
-        if (await isDataFresh(dateRange.id, tier.value)) {
-          console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel} - FRESH, skipping`);
-          await updateJobProgress(jobId, completedTasks, totalTasks, `${taskLabel} (skipped)`);
-          continue;
-        }
 
         console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel} - fetching...`);
         await updateJobProgress(jobId, completedTasks, totalTasks, taskLabel);
