@@ -111,8 +111,11 @@ export function Dashboard() {
       {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-zinc-100 flex items-center gap-2">
+          <div className="relative">
+            <div className="absolute -left-10 top-1/2 -translate-y-1/2">
+              <JobsPanel runs={scrapeData?.runs ?? []} />
+            </div>
+            <h1 className="text-xl font-bold text-zinc-100">
               Tulum Bachelor Trip Planner
             </h1>
             <p className="text-xs text-zinc-500 mt-0.5">
@@ -122,7 +125,6 @@ export function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <JobsPanel runs={scrapeData?.runs ?? []} />
             <ScrapeStatus
               lastUpdated={scrapeData?.lastFlightUpdate ?? null}
               isRunning={runningJobs.length > 0}
