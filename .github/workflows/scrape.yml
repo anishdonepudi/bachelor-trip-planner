@@ -86,7 +86,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: scrape-flights
     if: always() && !cancelled()
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Checkout repository
