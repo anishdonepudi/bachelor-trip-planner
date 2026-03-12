@@ -30,6 +30,7 @@ export function Dashboard() {
   const [priorityCity, setPriorityCity] = useState("all");
   const [configChanged, setConfigChanged] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [scrapeTriggered, setScrapeTriggered] = useState(false);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
 
   const { data: weekendData, isLoading: weekendsLoading, mutate: mutateWeekends } = useSWR<WeekendData>(
@@ -38,7 +39,7 @@ export function Dashboard() {
     { revalidateOnFocus: false, dedupingInterval: 1800000 } // 30 min
   );
 
-  const { data: scrapeData } = useSWR<{
+  const { data: scrapeData, mutate: mutateScrape } = useSWR<{
     runs: {
       run_id: number;
       status: string;
@@ -50,11 +51,26 @@ export function Dashboard() {
     lastFlightUpdate: string | null;
   }>("/api/scrape-status", fetcher, {
     revalidateOnFocus: false,
-    refreshInterval: 30000,
+    refreshInterval: scrapeTriggered ? 10000 : 30000,
   });
 
   const allJobs = scrapeData?.runs?.flatMap((r) => r.jobs) ?? [];
   const runningJobs = allJobs.filter((j) => j.status === "running" || j.status === "queued");
+  const isRunning = scrapeTriggered || runningJobs.length > 0;
+
+  // Clear scrapeTriggered once real jobs appear
+  useEffect(() => {
+    if (scrapeTriggered && runningJobs.length > 0) {
+      setScrapeTriggered(false);
+    }
+  }, [scrapeTriggered, runningJobs.length]);
+
+  const handleScrapeTriggered = useCallback(() => {
+    setScrapeTriggered(true);
+    // Poll aggressively to pick up the new workflow
+    setTimeout(() => mutateScrape(), 5000);
+    setTimeout(() => mutateScrape(), 15000);
+  }, [mutateScrape]);
 
   // Track initial lastFlightUpdate and show modal when it changes
   useEffect(() => {
@@ -129,7 +145,8 @@ export function Dashboard() {
           <div className="flex items-center gap-2">
             <ScrapeStatus
               lastUpdated={scrapeData?.lastFlightUpdate ?? null}
-              isRunning={runningJobs.length > 0}
+              isRunning={isRunning}
+              onTriggered={handleScrapeTriggered}
             />
             <ConfigModal cities={cities} onSave={(newCities) => { setCities(newCities); setConfigChanged(true); }} />
           </div>
@@ -137,7 +154,7 @@ export function Dashboard() {
       </header>
 
       {/* Running jobs banner */}
-      {runningJobs.length > 0 && (
+      {isRunning && (
         <div className="bg-sky-950/60 border-b border-sky-800/40">
           <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center gap-3">
             <svg className="w-4 h-4 text-sky-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
@@ -145,8 +162,9 @@ export function Dashboard() {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
             <span className="text-sm text-sky-300">
-              Data refresh in progress — {runningJobs.length} job{runningJobs.length > 1 ? "s" : ""} running.
-              {" "}New prices will appear once all jobs complete.
+              {runningJobs.length > 0
+                ? `Data refresh in progress — ${runningJobs.length} job${runningJobs.length > 1 ? "s" : ""} running. New prices will appear once all jobs complete.`
+                : "Data refresh triggered — waiting for jobs to start..."}
             </span>
           </div>
         </div>

@@ -5,9 +5,10 @@ import { useState, useCallback } from "react";
 interface ScrapeStatusProps {
   lastUpdated: string | null;
   isRunning?: boolean;
+  onTriggered?: () => void;
 }
 
-export function ScrapeStatus({ lastUpdated, isRunning }: ScrapeStatusProps) {
+export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStatusProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -33,6 +34,7 @@ export function ScrapeStatus({ lastUpdated, isRunning }: ScrapeStatusProps) {
       });
       if (res.ok) {
         setMessage("Scrape triggered! Data will update in ~30-45 min.");
+        onTriggered?.();
       } else {
         setMessage("Failed to trigger scrape. Check GitHub config.");
       }
