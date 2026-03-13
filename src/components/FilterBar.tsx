@@ -106,12 +106,42 @@ export function FilterBar({
           onChange={onFlightCategoryChange}
         />
 
-        <SegmentedControl
-          label="Budget"
-          options={BUDGET_TIERS.map((t) => ({ value: t.value, label: t.label }))}
-          value={budgetTier}
-          onChange={onBudgetTierChange}
-        />
+        <div>
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">
+              Budget
+            </div>
+            <div className="relative group">
+              <svg className="w-3 h-3 text-[var(--text-3)] hover:text-[var(--text-2)] transition-colors duration-150 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50">
+                <div className="rounded-md border border-[var(--border-default)] bg-[var(--surface-2)] p-2.5 shadow-lg whitespace-nowrap">
+                  {BUDGET_TIERS.map((t) => (
+                    <div key={t.value} className={`text-[11px] leading-relaxed ${t.value === budgetTier ? "text-[var(--blue)] font-medium" : "text-[var(--text-2)]"}`}>
+                      {t.label}: {t.range}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+            {BUDGET_TIERS.map((t) => (
+              <button
+                key={t.value}
+                onClick={() => onBudgetTierChange(t.value)}
+                className={`px-2.5 py-1.5 rounded text-xs font-medium transition-all duration-150 whitespace-nowrap ${
+                  budgetTier === t.value
+                    ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm"
+                    : "text-[var(--text-2)] hover:text-[var(--text-1)]"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <SelectControl
           label="City"
