@@ -77,6 +77,7 @@ export function calculateWeekendScore(
   for (const city of cities) {
     let bestFlight: Flight | null = null;
     let fallbackCategory: FlightCategory | null = null;
+    const skippedCategories: FlightCategory[] = [];
 
     // Try each category in hierarchy order
     for (const cat of fallbackOrder) {
@@ -89,6 +90,7 @@ export function calculateWeekendScore(
         fallbackCategory = cat !== flightCategory ? cat : null;
         break;
       }
+      skippedCategories.push(cat);
     }
 
     // Collect up to 3 flight options for the effective category (for toggle)
@@ -111,6 +113,7 @@ export function calculateWeekendScore(
       cityTotal: perPersonTotal !== null ? perPersonTotal * city.people : null,
       flight: bestFlight ?? null,
       fallbackCategory,
+      skippedCategories,
       alternateFlights,
     });
 

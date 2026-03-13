@@ -99,6 +99,13 @@ jobs:
         env:
           AIRPORTS: ${{ matrix.airports }}
           GITHUB_RUN_ID: ${{ github.run_id }}
+          # Performance tuning — increase speed by raising concurrency / lowering delays
+          # If CAPTCHAs appear, dial values back toward defaults
+          DATE_RANGE_CONCURRENCY: "2"   # default 2, safe up to 3, aggressive 4-5
+          CATEGORY_STAGGER_MS: "2000"   # default 2000, safe down to 1500, aggressive 800
+          POST_LOAD_DELAY_MS: "1000"    # default 1000, safe down to 800, aggressive 500
+          POST_FILTER_DELAY_MS: "2000"  # default 2000, safe down to 1500, aggressive 800
+          RETURN_POST_DELAY_MS: "500"   # default 500, safe down to 300, aggressive 150
 
   # Step 3: Scrape Airbnb listings (writes to staging)
   scrape-airbnb:

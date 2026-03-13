@@ -59,6 +59,13 @@ const CATEGORIES_TO_SCRAPE: FlightCategory[] = [
 const TOP_N_PER_CATEGORY = 3;
 const MAX_DURATION_MINUTES = 10 * 60; // 10 hours
 
+// Performance tuning — configurable via env vars
+const DATE_RANGE_CONCURRENCY = parseInt(process.env.DATE_RANGE_CONCURRENCY ?? "2", 10);
+const CATEGORY_STAGGER_MS = parseInt(process.env.CATEGORY_STAGGER_MS ?? "2000", 10);
+const POST_LOAD_DELAY_MS = parseInt(process.env.POST_LOAD_DELAY_MS ?? "1000", 10);
+const POST_FILTER_DELAY_MS = parseInt(process.env.POST_FILTER_DELAY_MS ?? "2000", 10);
+const RETURN_POST_DELAY_MS = parseInt(process.env.RETURN_POST_DELAY_MS ?? "500", 10);
+
 // Built dynamically from Supabase config at startup
 let AIRPORT_TO_CITIES: Record<string, string[]> = {};
 
@@ -420,7 +427,7 @@ async function applyCarryOnFilter(page: Page): Promise<boolean> {
     return false;
   }
   await bagsBtn.click();
-  await new Promise((r) => setTimeout(r, 1500));
+  await new Promise((r) => setTimeout(r, 1000));
 
   const clicked = await page.evaluate(() => {
     const btn = document.querySelector('button[aria-label="Add carry-on bag"]');
@@ -553,7 +560,7 @@ async function scrapeSingleCategory(
       }
       return results;
     }
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, POST_LOAD_DELAY_MS));
 
     // Step 2: Optionally apply carry-on filter
     let outbound: { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null = null;
@@ -562,7 +569,7 @@ async function scrapeSingleCategory(
       const preFilterCount = captured.length;
       const filterApplied = await applyCarryOnFilter(page);
       if (filterApplied) {
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, POST_FILTER_DELAY_MS));
         outbound = await waitForApiResponse(captured, preFilterCount, 10_000);
         console.log(`      [${category}] Carry-on filter applied`);
       }
@@ -629,7 +636,9 @@ async function scrapeSingleCategory(
       });
 
       // Small delay between POSTs
-      await new Promise((r) => setTimeout(r, 1000 + Math.random() * 1000));
+      if (i < topCount - 1) {
+        await new Promise((r) => setTimeout(r, RETURN_POST_DELAY_MS + Math.random() * RETURN_POST_DELAY_MS));
+      }
     }
   } finally {
     await page.close();
@@ -660,11 +669,11 @@ async function scrapeAirportDate(
     { category: "onestop_carryon",    stopType: "onestop", isCarryon: true },
   ];
 
-  // Stagger launches: start each category 3-5s apart to avoid burst requests
+  // Stagger launches to avoid burst requests
   const promises: Promise<ScrapeResult[]>[] = [];
   for (let i = 0; i < categoryDefs.length; i++) {
     const def = categoryDefs[i];
-    const delay = i * (3000 + Math.random() * 2000); // 3-5s stagger
+    const delay = i * (CATEGORY_STAGGER_MS + Math.random() * 1000);
     promises.push(
       new Promise<ScrapeResult[]>((resolve) => setTimeout(resolve, delay)).then(() =>
         scrapeSingleCategory(
@@ -707,6 +716,93 @@ function apiFlightToLeg(f: ApiParsedFlight): FlightLeg {
 // Main orchestration
 // ---------------------------------------------------------------------------
 
+/**
+ * Process a single airport + date range task: scrape all categories, write to DB.
+ */
+async function processTask(
+  browser: Browser,
+  airport: string,
+  dateRange: { id: string; format: string; departDate: string; returnDate: string },
+  targetCities: Set<string>,
+  taskIndex: number,
+  totalTasks: number,
+  jobId: number,
+  stats: { totalResults: number; totalErrors: number; startTime: number }
+): Promise<void> {
+  const taskLabel = `${airport} | ${dateRange.id}`;
+  const elapsed = ((Date.now() - stats.startTime) / 1000).toFixed(0);
+  console.log(`  [${taskIndex}/${totalTasks}] ${taskLabel} (${elapsed}s elapsed)`);
+  await updateJobProgress(jobId, taskIndex, totalTasks, taskLabel);
+
+  const baseUrl = buildFlightsUrl(airport, dateRange.departDate, dateRange.returnDate);
+
+  let scrapeResults: ScrapeResult[] = [];
+
+  try {
+    scrapeResults = await scrapeAirportDate(
+      browser, baseUrl, airport,
+      dateRange.departDate, dateRange.returnDate
+    );
+    stats.totalResults += scrapeResults.length;
+    console.log(`    Total results: ${scrapeResults.length}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    stats.totalErrors++;
+    console.error(`    ERROR: ${msg}`);
+  }
+
+  // Write results for each target city (non-blocking: fire all inserts together)
+  const now = new Date().toISOString();
+  const runId = process.env.GITHUB_RUN_ID ?? null;
+
+  const dbPromises: Promise<void>[] = [];
+  for (const city of targetCities) {
+    if (!AIRPORT_TO_CITIES[airport]?.includes(city)) continue;
+    if (scrapeResults.length === 0) continue;
+
+    const optionRows = scrapeResults.map((r) => ({
+      date_range_id: dateRange.id,
+      origin_city: city,
+      category: r.category,
+      airport_used: airport,
+      price: r.price,
+      airline: r.airline,
+      outbound_details: apiFlightToLeg(r.outbound),
+      return_details: apiFlightToLeg(r.return_),
+      google_flights_url: r.googleFlightsUrl,
+      is_best: false,
+      scraped_at: now,
+      run_id: runId,
+    }));
+
+    dbPromises.push(
+      (async () => {
+        // Delete old staging options for this airport + date range + city + run
+        const delQuery = supabase
+          .from("flight_options_staging")
+          .delete()
+          .eq("date_range_id", dateRange.id)
+          .eq("origin_city", city)
+          .eq("airport_used", airport);
+        if (runId) delQuery.eq("run_id", runId);
+        await delQuery;
+
+        // Insert in batches of 50
+        for (let i = 0; i < optionRows.length; i += 50) {
+          const batch = optionRows.slice(i, i + 50);
+          const { error } = await supabase.from("flight_options_staging").insert(batch);
+          if (error) {
+            console.error(`    DB insert error (${city}): ${error.message}`);
+          }
+        }
+
+        console.log(`    -> ${city}: ${optionRows.length} rows saved`);
+      })()
+    );
+  }
+  await Promise.all(dbPromises);
+}
+
 async function main(): Promise<void> {
   const airportsEnv = process.env.AIRPORTS;
   if (!airportsEnv) {
@@ -733,6 +829,8 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const startTime = Date.now();
+
   console.log("=== Google Flights Scraper (Click-Free API) ===");
   console.log(`Started at ${new Date().toISOString()}`);
   console.log(`Airports: ${inputAirports.join(", ")}`);
@@ -740,15 +838,17 @@ async function main(): Promise<void> {
 
   const dateRanges = generateDateRanges();
   const totalTasks = inputAirports.length * dateRanges.length;
-  let completedTasks = 0;
 
   console.log(`Date ranges: ${dateRanges.length}`);
   console.log(`Categories: ${CATEGORIES_TO_SCRAPE.join(", ")}`);
   console.log(`Top N per category: ${TOP_N_PER_CATEGORY}`);
   console.log(`Max duration: ${MAX_DURATION_MINUTES} min`);
+  console.log(`Concurrency: ${DATE_RANGE_CONCURRENCY} date ranges in parallel`);
+  console.log(`Category stagger: ${CATEGORY_STAGGER_MS}ms`);
   console.log(`Total tasks: ${totalTasks}\n`);
 
   const jobId = await createScrapeJob(inputAirports);
+  const stats = { totalResults: 0, totalErrors: 0, startTime };
 
   let browser: Browser | null = null;
 
@@ -764,81 +864,48 @@ async function main(): Promise<void> {
       ],
     });
 
+    // Build flat task list: all (airport, dateRange) combinations
+    const tasks: { airport: string; dateRange: typeof dateRanges[0] }[] = [];
     for (const dateRange of dateRanges) {
-      console.log(`\n--- ${dateRange.id} (${dateRange.format}) ---`);
-
       for (const airport of inputAirports) {
-        completedTasks++;
-        const taskLabel = `${airport} | ${dateRange.id}`;
-        console.log(`  [${completedTasks}/${totalTasks}] ${taskLabel}`);
-        await updateJobProgress(jobId, completedTasks, totalTasks, taskLabel);
-
-        const baseUrl = buildFlightsUrl(airport, dateRange.departDate, dateRange.returnDate);
-
-        let scrapeResults: ScrapeResult[] = [];
-
-        try {
-          scrapeResults = await scrapeAirportDate(
-            browser!, baseUrl, airport,
-            dateRange.departDate, dateRange.returnDate
-          );
-          console.log(`    Total results: ${scrapeResults.length}`);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error(`    ERROR: ${msg}`);
-        }
-
-        // Write results for each target city
-        const now = new Date().toISOString();
-        const runId = process.env.GITHUB_RUN_ID ?? null;
-
-        for (const city of targetCities) {
-          if (!AIRPORT_TO_CITIES[airport]?.includes(city)) continue;
-          if (scrapeResults.length === 0) continue;
-
-          const optionRows = scrapeResults.map((r) => ({
-            date_range_id: dateRange.id,
-            origin_city: city,
-            category: r.category,
-            airport_used: airport,
-            price: r.price,
-            airline: r.airline,
-            outbound_details: apiFlightToLeg(r.outbound),
-            return_details: apiFlightToLeg(r.return_),
-            google_flights_url: r.googleFlightsUrl,
-            is_best: false,
-            scraped_at: now,
-            run_id: runId,
-          }));
-
-          // Delete old staging options for this airport + date range + city + run
-          const delQuery = supabase
-            .from("flight_options_staging")
-            .delete()
-            .eq("date_range_id", dateRange.id)
-            .eq("origin_city", city)
-            .eq("airport_used", airport);
-          if (runId) delQuery.eq("run_id", runId);
-          await delQuery;
-
-          // Insert in batches of 50
-          for (let i = 0; i < optionRows.length; i += 50) {
-            const batch = optionRows.slice(i, i + 50);
-            const { error } = await supabase.from("flight_options_staging").insert(batch);
-            if (error) {
-              console.error(`    DB insert error (${city}): ${error.message}`);
-            }
-          }
-
-          console.log(`    -> ${city}: ${optionRows.length} rows saved`);
-        }
-
-        if (inputAirports.length > 1) await randomDelay();
+        tasks.push({ airport, dateRange });
       }
     }
 
+    // Process tasks with controlled concurrency
+    let taskIndex = 0;
+    const runNext = async (): Promise<void> => {
+      while (true) {
+        const idx = taskIndex++;
+        if (idx >= tasks.length) return;
+        const task = tasks[idx];
+        await processTask(
+          browser!, task.airport, task.dateRange,
+          targetCities, idx + 1, totalTasks, jobId, stats
+        );
+      }
+    };
+
+    // Launch DATE_RANGE_CONCURRENCY workers
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < Math.min(DATE_RANGE_CONCURRENCY, tasks.length); i++) {
+      workers.push(runNext());
+    }
+    await Promise.all(workers);
+
     await completeJob(jobId);
-    console.log(`\nCompleted at ${new Date().toISOString()}`);
+
+    // Summary report
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    const avgPerTask = (parseFloat(elapsed) / totalTasks).toFixed(1);
+    console.log(`\n=== Summary ===`);
+    console.log(`Completed at ${new Date().toISOString()}`);
+    console.log(`Total time: ${elapsed}s`);
+    console.log(`Tasks: ${totalTasks} (${avgPerTask}s avg)`);
+    console.log(`Results: ${stats.totalResults} flight options saved`);
+    if (stats.totalErrors > 0) {
+      console.log(`Errors: ${stats.totalErrors}`);
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Fatal error: ${msg}`);

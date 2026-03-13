@@ -86,17 +86,27 @@ export function ComboSummary({
   const mobileFilteredCombos = comboResults.filter((r) => r.flightCategory === mobileFlightCat);
 
   const popularWeekends = useMemo(() => {
-    const counts = new Map<string, { dateRange: DateRange; count: number }>();
+    const RANK_POINTS = [3, 2, 1]; // #1 = 3pts, #2 = 2pts, #3 = 1pt
+    const data = new Map<string, { dateRange: DateRange; points: number; totalScore: number; appearances: number }>();
     for (const combo of comboResults) {
-      for (const ws of combo.top3) {
+      for (let i = 0; i < combo.top3.length; i++) {
+        const ws = combo.top3[i];
         const id = ws.dateRange.id;
-        const existing = counts.get(id);
-        if (existing) existing.count++;
-        else counts.set(id, { dateRange: ws.dateRange, count: 1 });
+        const existing = data.get(id);
+        if (existing) {
+          existing.points += RANK_POINTS[i];
+          existing.totalScore += ws.score;
+          existing.appearances++;
+        } else {
+          data.set(id, { dateRange: ws.dateRange, points: RANK_POINTS[i], totalScore: ws.score, appearances: 1 });
+        }
       }
     }
-    return Array.from(counts.values()).sort((a, b) => b.count - a.count);
+    return Array.from(data.values())
+      .sort((a, b) => b.points - a.points || (b.totalScore / b.appearances) - (a.totalScore / a.appearances));
   }, [comboResults]);
+
+  const maxPoints = popularWeekends.length > 0 ? popularWeekends[0].points : 1;
 
   const totalCombos = FLIGHT_CATEGORIES.length * BUDGET_TIERS.length;
 
@@ -128,7 +138,7 @@ export function ComboSummary({
         <div className="rounded-md border border-[var(--blue-border)] bg-[var(--blue-soft)] overflow-hidden">
           <div className="px-3 py-2 bg-[var(--surface-1)] border-b border-[var(--blue-border)] flex items-center justify-between">
             <span className="text-[10px] font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider">
-              Frequency across {totalCombos} combos
+              Weighted rank across {totalCombos} combos
             </span>
             <button onClick={() => setShowPopular(false)} className="text-[var(--text-3)] hover:text-[var(--text-2)] transition-colors duration-150">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,19 +146,37 @@ export function ComboSummary({
               </svg>
             </button>
           </div>
+          <div className="px-3 py-1.5 border-b border-[var(--border-default)] flex items-center gap-3 text-[10px] text-[var(--text-3)]">
+            <span>Scoring: 1st = 3pts, 2nd = 2pts, 3rd = 1pt</span>
+          </div>
           <div className="divide-y divide-[var(--border-default)]">
-            {popularWeekends.map(({ dateRange, count }) => {
+            {popularWeekends.map(({ dateRange, points, totalScore, appearances }, i) => {
               const departDay = new Date(dateRange.departDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" });
               const returnDay = new Date(dateRange.returnDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" });
+              const avgScore = Math.round(totalScore / appearances);
+              const barWidth = Math.round((points / maxPoints) * 100);
               return (
-                <div key={dateRange.id} className="flex items-center gap-3 px-3 py-2">
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm text-[var(--text-1)]">{formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}</span>
-                    <span className="text-[11px] text-[var(--text-3)] ml-2">{departDay} - {returnDay}</span>
+                <div key={dateRange.id} className="px-3 py-2 space-y-1">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-mono font-semibold text-[var(--text-3)] w-5 text-right shrink-0">
+                      {getRankIcon(i + 1)}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm text-[var(--text-1)]">{formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}</span>
+                      <span className="text-[11px] text-[var(--text-3)] ml-2">{departDay} - {returnDay}</span>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className="text-sm font-bold font-mono tabular-nums text-[var(--blue)]">{points}</span>
+                      <span className="text-[10px] text-[var(--text-3)]"> pts</span>
+                    </div>
                   </div>
-                  <div className="shrink-0 flex items-center gap-1">
-                    <span className="text-sm font-bold font-mono tabular-nums text-[var(--blue)]">{count}</span>
-                    <span className="text-[10px] text-[var(--text-3)]">/{totalCombos}</span>
+                  <div className="flex items-center gap-2 ml-8">
+                    <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+                      <div className="h-full rounded-full bg-[var(--blue)] transition-all duration-300" style={{ width: `${barWidth}%` }} />
+                    </div>
+                    <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0">
+                      avg {avgScore} &middot; in {appearances}/{totalCombos}
+                    </span>
                   </div>
                 </div>
               );

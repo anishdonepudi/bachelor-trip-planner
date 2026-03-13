@@ -144,6 +144,8 @@ export interface CostBreakdown {
   flight: Flight | null;
   /** If the flight came from a different category via fallback */
   fallbackCategory: FlightCategory | null;
+  /** Categories that were checked during fallback but had no data */
+  skippedCategories: FlightCategory[];
   /** Up to 3 flight options for the effective category (for toggle) */
   alternateFlights: FlightOptionRow[];
 }

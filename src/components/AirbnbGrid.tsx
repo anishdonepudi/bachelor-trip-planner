@@ -110,6 +110,12 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                   : "border-[var(--border-default)] bg-[var(--surface-1)] hover:border-[var(--border-hover)]"
               }`}
             >
+              {/* Rank badge */}
+              <div className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold font-mono ${
+                i === 0 ? "bg-[var(--gold)] text-white" : "bg-[var(--surface-0)] text-[var(--text-1)] border border-[var(--border-default)]"
+              }`}>
+                {i + 1}
+              </div>
               {isSelected && <SelectedTooltip listing={listing} avgRating={avgRating} />}
               {listing.image_url && (
                 <div className="aspect-[16/10] overflow-hidden bg-[var(--surface-2)]">
@@ -174,6 +180,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                 {rest.map((listing, i) => (
                   <a key={listing.id ?? i} href={listing.airbnb_url ?? "#"} target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-[var(--surface-1)] transition-colors duration-150">
+                    <span className="text-[11px] font-mono font-semibold text-[var(--text-3)] w-5 text-right shrink-0">{i + 7}</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-[var(--text-1)] truncate">{listing.listing_name ?? "Villa in Tulum"}</div>
                       <div className="flex items-center gap-2 text-[11px] text-[var(--text-2)] mt-0.5">
@@ -202,6 +209,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-[var(--surface-1)] text-[10px] text-[var(--text-3)] uppercase tracking-wider font-heading">
+                      <th className="text-right px-3 py-2 font-semibold w-8">#</th>
                       <th className="text-left px-3 py-2 font-semibold">Name</th>
                       <th className="text-right px-3 py-2 font-semibold">Rating</th>
                       <th className="text-right px-3 py-2 font-semibold">Reviews</th>
@@ -213,6 +221,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                   <tbody className="divide-y divide-[var(--border-default)]">
                     {rest.map((listing, i) => (
                       <tr key={listing.id ?? i} className="hover:bg-[var(--surface-1)] transition-colors duration-100">
+                        <td className="text-right px-3 py-2 font-mono tabular-nums text-[var(--text-3)] text-[11px] font-semibold">{i + 7}</td>
                         <td className="px-3 py-2">
                           <a href={listing.airbnb_url ?? "#"} target="_blank" rel="noopener noreferrer"
                             className="text-[var(--text-1)] hover:text-[var(--blue)] transition-colors duration-150 line-clamp-1">

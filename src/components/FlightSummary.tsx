@@ -101,20 +101,26 @@ function CityFlightRow({ cost, selectedCategory }: { cost: CostBreakdown; select
       {cost.fallbackCategory && (
         <div className="mx-3 mb-1 px-3 py-2 rounded-md bg-[var(--orange-soft)] border border-[var(--orange-border)]">
           <p className="text-[11px] text-[var(--orange)] leading-relaxed">
-            No <span className="font-semibold">{getCategoryLabel(selectedCategory)}</span> found.
-            Showing <span className="font-semibold">{getCategoryLabel(cost.fallbackCategory)}</span> instead.
+            No{" "}
+            {cost.skippedCategories.map((cat, i) => (
+              <span key={cat}>
+                {i > 0 && " or "}
+                <span className="font-semibold">{getCategoryLabel(cat)}</span>
+              </span>
+            ))}
+            {" "}found. Showing <span className="font-semibold">{getCategoryLabel(cost.fallbackCategory)}</span> instead.
           </p>
           <div className="flex items-center gap-1 mt-1 text-[10px] text-[var(--text-3)]">
             {CATEGORY_HIERARCHY.map((cat, i) => {
               const label = getCategoryLabel(cat);
-              const isSelected = cat === selectedCategory;
+              const isSkipped = cost.skippedCategories.includes(cat);
               const isFallback = cat === cost.fallbackCategory;
               return (
                 <span key={cat} className="flex items-center gap-1">
                   {i > 0 && <span>&rarr;</span>}
                   <span className={
                     isFallback ? "text-[var(--orange)] font-semibold"
-                      : isSelected ? "line-through"
+                      : isSkipped ? "line-through text-[var(--red)]"
                         : ""
                   }>{label}</span>
                 </span>

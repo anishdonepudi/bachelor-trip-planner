@@ -3,6 +3,17 @@
 import { FlightOptionRow } from "@/lib/types";
 import { DESTINATION_AIRPORT } from "@/lib/airports";
 
+function to12h(time: string): string {
+  const match = time.match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return time;
+  let h = parseInt(match[1], 10);
+  const m = match[2];
+  const ampm = h >= 12 ? "PM" : "AM";
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return `${h}:${m} ${ampm}`;
+}
+
 export function FlightDetails({ flight }: { flight: FlightOptionRow }) {
   const out = flight.outbound_details;
   const ret = flight.return_details;
@@ -34,13 +45,13 @@ export function FlightDetails({ flight }: { flight: FlightOptionRow }) {
           ) : (
             <>
               <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
-              <span className="text-[var(--orange)]">{out.stops} stop{out.layoverAirport && ` ${out.layoverAirport}`}</span>
+              <span className="text-[var(--orange)]">{out.stops} stop{out.layoverAirport && ` ${out.layoverAirport}`}{out.layoverDuration && ` (${out.layoverDuration})`}</span>
             </>
           )}
           {out.departTime && out.arriveTime && (
             <>
               <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
-              <span className="font-mono tabular-nums">{out.departTime}-{out.arriveTime}</span>
+              <span className="font-mono tabular-nums">{to12h(out.departTime)}-{to12h(out.arriveTime)}</span>
             </>
           )}
         </div>
@@ -68,13 +79,13 @@ export function FlightDetails({ flight }: { flight: FlightOptionRow }) {
           ) : (
             <>
               <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
-              <span className="text-[var(--orange)]">{ret.stops} stop{ret.layoverAirport && ` ${ret.layoverAirport}`}</span>
+              <span className="text-[var(--orange)]">{ret.stops} stop{ret.layoverAirport && ` ${ret.layoverAirport}`}{ret.layoverDuration && ` (${ret.layoverDuration})`}</span>
             </>
           )}
           {ret.departTime && ret.arriveTime && (
             <>
               <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
-              <span className="font-mono tabular-nums">{ret.departTime}-{ret.arriveTime}</span>
+              <span className="font-mono tabular-nums">{to12h(ret.departTime)}-{to12h(ret.arriveTime)}</span>
             </>
           )}
         </div>
