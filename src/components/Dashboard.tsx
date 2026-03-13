@@ -29,6 +29,9 @@ export function Dashboard() {
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
 
   const [priorityCity, setPriorityCity] = useState("all");
+  const [excludedDates, setExcludedDates] = useState<string[]>([]);
+  const [destinationAirport, setDestinationAirport] = useState("CUN");
+  const [destinationCity, setDestinationCity] = useState("Tulum, Quintana Roo, Mexico");
   const [configChanged, setConfigChanged] = useState(false);
   const [showComboView, setShowComboView] = useState(true);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -102,9 +105,36 @@ export function Dashboard() {
     if (configData?.cities && Array.isArray(configData.cities)) {
       setCities(configData.cities);
     }
+    if (configData?.excluded_dates && Array.isArray(configData.excluded_dates)) {
+      setExcludedDates(configData.excluded_dates);
+    }
+    if (configData?.destination_airport) {
+      setDestinationAirport(configData.destination_airport);
+    }
+    if (configData?.destination_city) {
+      setDestinationCity(configData.destination_city);
+    }
   }, [configData]);
 
-  const dateRanges = useMemo(() => generateDateRanges(), []);
+  const allDateRanges = useMemo(() => generateDateRanges(), []);
+  const dateRanges = useMemo(() => {
+    if (excludedDates.length === 0) return allDateRanges;
+    const excludedSet = new Set(excludedDates);
+    return allDateRanges.filter((dr) => {
+      // Check if any excluded date falls within this date range
+      const start = new Date(dr.departDate + "T00:00:00");
+      const end = new Date(dr.returnDate + "T00:00:00");
+      const current = new Date(start);
+      while (current <= end) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, "0");
+        const d = String(current.getDate()).padStart(2, "0");
+        if (excludedSet.has(`${y}-${m}-${d}`)) return false;
+        current.setDate(current.getDate() + 1);
+      }
+      return true;
+    });
+  }, [allDateRanges, excludedDates]);
 
   const weekendScores = useMemo(() => {
     if (!weekendData) return [];
@@ -136,12 +166,11 @@ export function Dashboard() {
               <JobsPanel runs={scrapeData?.runs ?? []} />
             </div>
             <h1 className="text-xl font-bold text-zinc-100">
-              Tulum Bachelor Trip Planner
+              TripSync
             </h1>
             <p className="text-xs text-zinc-500 mt-0.5">
-              {cities.length} cities &middot;{" "}
-              {cities.reduce((s, c) => s + c.people, 0)} people &middot; Summer
-              2026
+              {cities.filter(c => c.city).length} cities &middot;{" "}
+              {cities.reduce((s, c) => s + c.people, 0)} people
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -150,7 +179,20 @@ export function Dashboard() {
               isRunning={isRunning}
               onTriggered={handleScrapeTriggered}
             />
-            <ConfigModal cities={cities} onSave={(newCities) => { setCities(newCities); setConfigChanged(true); }} />
+            <ConfigModal
+              cities={cities}
+              excludedDates={excludedDates}
+              destinationAirport={destinationAirport}
+              destinationCity={destinationCity}
+              onSave={(newCities, newExcluded, newDestination, newDestCity) => {
+                const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDestination !== destinationAirport || newDestCity !== destinationCity;
+                setCities(newCities);
+                setExcludedDates(newExcluded);
+                setDestinationAirport(newDestination);
+                setDestinationCity(newDestCity);
+                if (citiesChanged) setConfigChanged(true);
+              }}
+            />
           </div>
         </div>
       </header>

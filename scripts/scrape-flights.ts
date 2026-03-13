@@ -47,7 +47,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 
 const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-const DESTINATION_AIRPORT = "CUN";
+let DESTINATION_AIRPORT = "CUN";
 
 const CATEGORIES_TO_SCRAPE: FlightCategory[] = [
   "nonstop_carryon",
@@ -65,7 +65,7 @@ let AIRPORT_TO_CITIES: Record<string, string[]> = {};
 async function loadAirportToCities(): Promise<void> {
   const { data, error } = await supabase
     .from("config")
-    .select("cities")
+    .select("cities, destination_airport")
     .limit(1)
     .single();
 
@@ -85,7 +85,12 @@ async function loadAirportToCities(): Promise<void> {
   }
 
   AIRPORT_TO_CITIES = map;
-  console.log(`Loaded airport map: ${Object.keys(map).length} airports, ${cities.length} cities`);
+
+  if (data.destination_airport) {
+    DESTINATION_AIRPORT = data.destination_airport;
+  }
+
+  console.log(`Loaded config: ${Object.keys(map).length} airports, ${cities.length} cities, destination: ${DESTINATION_AIRPORT}`);
 }
 
 const USER_AGENTS = [

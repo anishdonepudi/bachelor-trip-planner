@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tulum Bachelor Trip Planner",
-  description: "Find the cheapest weekend for the whole group to travel to Tulum",
+  title: "TripSync",
+  description: "Plan the perfect group trip — compare flights, stays, and costs across cities and weekends",
 };
 
 export default function RootLayout({

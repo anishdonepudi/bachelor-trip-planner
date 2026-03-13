@@ -19,8 +19,9 @@ import type { BudgetTier, AirbnbListingRow } from "../src/lib/types";
 // Config
 // ---------------------------------------------------------------------------
 
-const TOTAL_PEOPLE = 17;
+let TOTAL_PEOPLE = 17;
 const NIGHTS = 3;
+let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 
 const IS_TEST = process.argv.includes("--test");
 
@@ -59,6 +60,14 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+/** Convert "Tulum, Quintana Roo, Mexico" → "Tulum--Quintana-Roo--Mexico" for URL path */
+function cityToUrlPath(city: string): string {
+  return city
+    .split(",")
+    .map((part) => part.trim().replace(/\s+/g, "-"))
+    .join("--");
+}
+
 /** Build an Airbnb search URL matching Airbnb's real browser format */
 export function buildAirbnbSearchUrl(
   checkin: string,
@@ -72,8 +81,7 @@ export function buildAirbnbSearchUrl(
     checkout,
     adults: String(Math.min(TOTAL_PEOPLE, 16)), // Airbnb caps search at 16 guests
     currency: "USD",
-    place_id: "ChIJPxw3l3IvUI8RKCAPIt8bL-k", // Tulum
-    query: "Tulum, Quintana Roo, Mexico",
+    query: DESTINATION_CITY,
     search_mode: "regular_search",
     price_filter_input_type: "2", // total stay price (not nightly)
     price_filter_num_nights: String(NIGHTS),
@@ -85,7 +93,8 @@ export function buildAirbnbSearchUrl(
   params.append("amenities[]", "7"); // Pool
   params.append("refinement_paths[]", "/homes");
   if (cursor) params.set("cursor", cursor);
-  return `https://www.airbnb.com/s/Tulum--Quintana-Roo--Mexico/homes?${params.toString()}`;
+  const urlPath = cityToUrlPath(DESTINATION_CITY);
+  return `https://www.airbnb.com/s/${urlPath}/homes?${params.toString()}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -399,6 +408,22 @@ function getSupabase(): SupabaseClient {
 }
 
 
+async function loadConfig(): Promise<void> {
+  try {
+    const sb = getSupabase();
+    const { data } = await sb.from("config").select("*").limit(1).single();
+    if (data?.destination_city) {
+      DESTINATION_CITY = data.destination_city;
+    }
+    if (data?.total_people) {
+      TOTAL_PEOPLE = data.total_people;
+    }
+    console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}`);
+  } catch (err) {
+    console.warn("Could not load config, using defaults:", err instanceof Error ? err.message : err);
+  }
+}
+
 async function createScrapeJob(): Promise<number> {
   const sb = getSupabase();
   const { data, error } = await sb
@@ -451,7 +476,7 @@ async function runTest(): Promise<void> {
 
   console.log(`Search parameters:`);
   console.log(`  Dates: ${testRange.departDate} → ${testRange.returnDate}`);
-  console.log(`  Location: Tulum, Mexico`);
+  console.log(`  Location: ${DESTINATION_CITY}`);
   console.log(`  Guests: ${TOTAL_PEOPLE}`);
   console.log(`  Filters: Entire home, Pool, ${Math.min(TOTAL_PEOPLE, 16)}+ guests\n`);
 
@@ -510,6 +535,8 @@ async function runTest(): Promise<void> {
 async function runFull(): Promise<void> {
   console.log("=== Airbnb Scraper (HTML Parser) ===");
   console.log(`Started at ${new Date().toISOString()}`);
+
+  await loadConfig();
 
   const dateRanges = generateDateRanges();
   const jobId = await createScrapeJob();
