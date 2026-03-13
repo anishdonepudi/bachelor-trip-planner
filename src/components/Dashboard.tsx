@@ -134,10 +134,12 @@ export function Dashboard() {
   const handleDataRefresh = useCallback(() => {
     setShowUpdateModal(false);
     setConfigChanged(false);
+    setScrapeTriggered(false);
     initialLastUpdated.current = scrapeData?.lastFlightUpdate ?? null;
     modalCooldownUntil.current = Date.now() + 60_000; // ignore changes for 60s after dismissing
     mutateWeekends();
-  }, [scrapeData?.lastFlightUpdate, mutateWeekends]);
+    mutateScrape();
+  }, [scrapeData?.lastFlightUpdate, mutateWeekends, mutateScrape]);
 
   const { data: configData } = useSWR("/api/config", fetcher, { revalidateOnFocus: false });
 

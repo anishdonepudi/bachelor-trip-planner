@@ -18,6 +18,11 @@ export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStat
     return () => clearInterval(id);
   }, []);
 
+  // Clear message when data updates (scrape completed and new data loaded)
+  useEffect(() => {
+    if (lastUpdated) setMessage(null);
+  }, [lastUpdated]);
+
   const getTimeAgo = (dateStr: string | null) => {
     if (!dateStr) return "Never";
     const diff = Date.now() - new Date(dateStr).getTime();
