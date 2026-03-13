@@ -64,6 +64,13 @@ export type FlightCategory =
 
 export type BudgetTier = "budget" | "mid" | "premium";
 
+export type ScoringAlgorithm =
+  | "zscore"
+  | "lowest_total"
+  | "lowest_per_person"
+  | "fairness"
+  | "best_value";
+
 export interface Flight {
   id?: number;
   date_range_id: string;

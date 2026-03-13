@@ -4,6 +4,7 @@ import {
   AirbnbListingRow,
   FlightCategory,
   BudgetTier,
+  ScoringAlgorithm,
   CostBreakdown,
   DateRange,
   WeekendScore,
@@ -129,7 +130,8 @@ export function scoreAllWeekends(
   flightCategory: FlightCategory,
   budgetTier: BudgetTier,
   cities: CityConfig[],
-  priorityCity: string = "all"
+  priorityCity: string = "all",
+  scoringAlgorithm: ScoringAlgorithm = "zscore"
 ): WeekendScore[] {
   // Filter out flights with 2+ stops on either leg (stale data from older scraper runs)
   const maxStops = (f: { outbound_details?: { stops?: number } | null; return_details?: { stops?: number } | null }) =>
@@ -196,17 +198,11 @@ export function scoreAllWeekends(
     });
   }
 
-  // --- Z-score composite scoring ---
-  // For each city, compute mean & stddev of per-person cost across all weekends.
-  // Then for each weekend, compute how many stddevs each city is below its mean.
-  // Average the z-scores across cities, then normalize to 0-100.
-  // When priorityCity is set, only that city's z-score is used for ranking.
-
+  // --- Compute city stats (used by zscore and fairness) ---
   const cityNames = priorityCity !== "all"
     ? [priorityCity]
     : cities.map((c) => c.city);
 
-  // Collect per-person costs per city across all weekends
   const cityPerPersonCosts: Record<string, number[]> = {};
   for (const city of cityNames) {
     cityPerPersonCosts[city] = [];
@@ -219,7 +215,6 @@ export function scoreAllWeekends(
     }
   }
 
-  // Compute mean & stddev per city
   const cityStats: Record<string, { mean: number; std: number }> = {};
   for (const city of cityNames) {
     const vals = cityPerPersonCosts[city];
@@ -229,42 +224,86 @@ export function scoreAllWeekends(
     }
     const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
     const variance = vals.reduce((sum, v) => sum + (v - mean) ** 2, 0) / vals.length;
-    const std = Math.sqrt(variance) || 1; // avoid division by zero
+    const std = Math.sqrt(variance) || 1;
     cityStats[city] = { mean, std };
   }
 
-  // For each weekend, compute average z-score across cities
-  // Negative z = cheaper than average (good), so we negate to make higher = better
+  // --- Apply scoring algorithm ---
   for (const ws of weekendScores) {
     if (ws.totalGroupCost === Infinity || ws.perCityCosts.length === 0) {
       ws.score = 0;
       continue;
     }
 
-    let zSum = 0;
-    let zCount = 0;
-    for (const cost of ws.perCityCosts) {
-      if (cost.perPersonTotal !== null && cityStats[cost.city]) {
-        const { mean, std } = cityStats[cost.city];
-        const z = (cost.perPersonTotal - mean) / std;
-        zSum += -z; // negate: lower cost = higher score
-        zCount++;
+    switch (scoringAlgorithm) {
+      case "zscore": {
+        let zSum = 0;
+        let zCount = 0;
+        for (const cost of ws.perCityCosts) {
+          if (cost.perPersonTotal !== null && cityStats[cost.city]) {
+            const { mean, std } = cityStats[cost.city];
+            const z = (cost.perPersonTotal - mean) / std;
+            zSum += -z;
+            zCount++;
+          }
+        }
+        ws.score = zCount > 0 ? zSum / zCount : 0;
+        break;
+      }
+
+      case "lowest_total": {
+        // Invert so lower cost = higher score
+        ws.score = -ws.totalGroupCost;
+        break;
+      }
+
+      case "lowest_per_person": {
+        const costs = ws.perCityCosts
+          .filter((c) => c.perPersonTotal !== null)
+          .map((c) => c.perPersonTotal!);
+        if (costs.length === 0) { ws.score = 0; break; }
+        const avg = costs.reduce((a, b) => a + b, 0) / costs.length;
+        ws.score = -avg; // invert
+        break;
+      }
+
+      case "fairness": {
+        const costs = ws.perCityCosts
+          .filter((c) => c.perPersonTotal !== null)
+          .map((c) => c.perPersonTotal!);
+        if (costs.length <= 1) { ws.score = 0; break; }
+        const mean = costs.reduce((a, b) => a + b, 0) / costs.length;
+        const variance = costs.reduce((sum, v) => sum + (v - mean) ** 2, 0) / costs.length;
+        ws.score = -variance; // invert: lower variance = higher score
+        break;
+      }
+
+      case "best_value": {
+        // Combine cost ranking with airbnb quality
+        const topAirbnb = ws.airbnbListings
+          .filter((a) => a.budget_tier === budgetTier && (a.rating ?? 0) > 0)
+          .sort((a, b) => {
+            const scoreA = bayesianScore(a.rating ?? 0, a.review_count ?? 0, 4.5);
+            const scoreB = bayesianScore(b.rating ?? 0, b.review_count ?? 0, 4.5);
+            return scoreB - scoreA;
+          })[0];
+        const qualityScore = topAirbnb
+          ? bayesianScore(topAirbnb.rating ?? 0, topAirbnb.review_count ?? 0, 4.5)
+          : 0;
+        // Normalize: quality 0-5 mapped to 0-1, cost inverted and combined
+        const costFactor = ws.totalGroupCost > 0 ? 1 / ws.totalGroupCost : 0;
+        ws.score = costFactor * 1e6 * (qualityScore / 5);
+        break;
       }
     }
-
-    ws.score = zCount > 0 ? zSum / zCount : 0;
   }
 
-  // Normalize z-scores to 1-100
-  const rawScores = weekendScores
-    .map((w) => w.score)
-    .filter((s) => s !== 0 || weekendScores.find((w) => w.score === s)?.totalGroupCost !== Infinity);
-
+  // Normalize all scores to 1-100
   const validScores = weekendScores.filter((w) => w.totalGroupCost !== Infinity);
   if (validScores.length > 0) {
-    const minZ = Math.min(...validScores.map((w) => w.score));
-    const maxZ = Math.max(...validScores.map((w) => w.score));
-    const range = maxZ - minZ;
+    const minS = Math.min(...validScores.map((w) => w.score));
+    const maxS = Math.max(...validScores.map((w) => w.score));
+    const range = maxS - minS;
 
     for (const ws of weekendScores) {
       if (ws.totalGroupCost === Infinity) {
@@ -272,12 +311,12 @@ export function scoreAllWeekends(
       } else if (range === 0) {
         ws.score = 100;
       } else {
-        ws.score = Math.round(1 + ((ws.score - minZ) / range) * 99);
+        ws.score = Math.round(1 + ((ws.score - minS) / range) * 99);
       }
     }
   }
 
-  // Attach city averages to each weekend
+  // Attach city averages
   for (const ws of weekendScores) {
     ws.cityAverages = cityStats;
   }

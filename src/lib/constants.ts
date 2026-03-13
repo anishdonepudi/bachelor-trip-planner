@@ -1,4 +1,4 @@
-import { FlightCategory, BudgetTier } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm } from "./types";
 
 export const FLIGHT_CATEGORIES: {
   value: FlightCategory;
@@ -67,3 +67,40 @@ export const BUDGET_TIERS: {
 
 export const NIGHTS = 3;
 export const TOTAL_PEOPLE = 17;
+
+export const SCORING_ALGORITHMS: {
+  value: ScoringAlgorithm;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: "zscore",
+    label: "Z-Score",
+    description:
+      "Measures how cheap each weekend is relative to the average across all weekends. A high score means the weekend is unusually cheap for most cities. Best for finding hidden deals.",
+  },
+  {
+    value: "lowest_total",
+    label: "Lowest Group Cost",
+    description:
+      "Ranks by total cost for the entire group (all flights + stay). Accounts for group size per city. Best when the goal is to minimize what the group spends overall.",
+  },
+  {
+    value: "lowest_per_person",
+    label: "Lowest Per-Person",
+    description:
+      "Ranks by average per-person cost across all cities, treating each city equally regardless of group size. Best when you want the cheapest individual experience.",
+  },
+  {
+    value: "fairness",
+    label: "Fairness",
+    description:
+      "Ranks by how similar per-person costs are across cities. Low variance means no one city gets a bad deal. Best when equity matters more than overall cost.",
+  },
+  {
+    value: "best_value",
+    label: "Best Value",
+    description:
+      "Balances cost with Airbnb quality (rating and reviews). A slightly pricier weekend with a top-rated stay can outrank a cheaper one with poor reviews.",
+  },
+];

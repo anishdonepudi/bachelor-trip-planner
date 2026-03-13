@@ -8,6 +8,7 @@ import {
   WeekendScore,
   FlightCategory,
   BudgetTier,
+  ScoringAlgorithm,
 } from "@/lib/types";
 import { FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
 import { scoreAllWeekends } from "@/lib/scoring";
@@ -19,6 +20,7 @@ interface ComboSummaryProps {
   dateRanges: DateRange[];
   cities: CityConfig[];
   priorityCity: string;
+  scoringAlgorithm: ScoringAlgorithm;
   activeFlightCategory: FlightCategory;
   activeBudgetTier: BudgetTier;
   onSelectCombo: (flightCategory: FlightCategory, budgetTier: BudgetTier) => void;
@@ -29,6 +31,7 @@ export function ComboSummary({
   dateRanges,
   cities,
   priorityCity,
+  scoringAlgorithm,
   activeFlightCategory,
   activeBudgetTier,
   onSelectCombo,
@@ -53,7 +56,8 @@ export function ComboSummary({
           fc.value,
           bt.value,
           cities,
-          priorityCity
+          priorityCity,
+          scoringAlgorithm
         );
         results.push({
           flightCategory: fc.value,
@@ -67,7 +71,7 @@ export function ComboSummary({
     }
 
     return results;
-  }, [weekendData, dateRanges, cities, priorityCity]);
+  }, [weekendData, dateRanges, cities, priorityCity, scoringAlgorithm]);
 
   return (
     <div className="space-y-6">

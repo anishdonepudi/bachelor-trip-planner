@@ -5,12 +5,14 @@ import useSWR from "swr";
 import {
   FlightCategory,
   BudgetTier,
+  ScoringAlgorithm,
   CityConfig,
   WeekendData,
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
 import { DEFAULT_CITIES } from "@/config/default-config";
+import { SCORING_ALGORITHMS } from "@/lib/constants";
 import { FilterBar } from "./FilterBar";
 import { WeekendCard } from "./WeekendCard";
 import { ScrapeStatus } from "./ScrapeStatus";
@@ -29,6 +31,7 @@ export function Dashboard() {
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
 
   const [priorityCity, setPriorityCity] = useState("all");
+  const [scoringAlgorithm, setScoringAlgorithm] = useState<ScoringAlgorithm>("zscore");
   const [excludedDates, setExcludedDates] = useState<string[]>([]);
   const [destinationAirport, setDestinationAirport] = useState("CUN");
   const [destinationCity, setDestinationCity] = useState("Tulum, Quintana Roo, Mexico");
@@ -165,9 +168,10 @@ export function Dashboard() {
       flightCategory,
       budgetTier,
       cities,
-      priorityCity
+      priorityCity,
+      scoringAlgorithm
     );
-  }, [weekendData, dateRanges, flightCategory, budgetTier, cities, priorityCity]);
+  }, [weekendData, dateRanges, flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm]);
 
 
   const hasData =
@@ -307,10 +311,12 @@ export function Dashboard() {
               flightCategory={flightCategory}
               budgetTier={budgetTier}
               priorityCity={priorityCity}
+              scoringAlgorithm={scoringAlgorithm}
               cities={cities}
               onFlightCategoryChange={setFlightCategory}
               onBudgetTierChange={setBudgetTier}
               onPriorityCityChange={setPriorityCity}
+              onScoringAlgorithmChange={setScoringAlgorithm}
             />
 
             {/* Weekend Cards */}
@@ -337,6 +343,7 @@ export function Dashboard() {
                 dateRanges={dateRanges}
                 cities={cities}
                 priorityCity={priorityCity}
+                scoringAlgorithm={scoringAlgorithm}
                 activeFlightCategory={flightCategory}
                 activeBudgetTier={budgetTier}
                 onSelectCombo={(fc, bt) => {
@@ -348,7 +355,7 @@ export function Dashboard() {
             ) : (
               <div className="space-y-4">
                 <div className="text-sm text-zinc-500">
-                  {weekendScores.length} weekends ranked by {priorityCity !== "all" ? `cheapest for ${priorityCity}` : "composite score (per-city z-score)"} &middot; max 10hr one-way flights
+                  {weekendScores.length} weekends ranked by {SCORING_ALGORITHMS.find(a => a.value === scoringAlgorithm)?.label ?? scoringAlgorithm}{priorityCity !== "all" ? ` for ${priorityCity}` : ""} &middot; max 10hr one-way flights
                 </div>
                 {weekendScores.map((weekend, i) => (
                   <WeekendCard
