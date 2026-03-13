@@ -348,8 +348,9 @@ function parseEmbeddedResults(json: any): ScrapedListing[] {
             // skip
           }
         }
+        const guestCount = Math.min(TOTAL_PEOPLE, 16);
         const airbnbUrl = listingId
-          ? `https://www.airbnb.com/rooms/${listingId}`
+          ? `https://www.airbnb.com/rooms/${listingId}?check_in=${checkin}&check_out=${checkout}&guests=${guestCount}&adults=${guestCount}`
           : "";
 
         // Superhost from badges
