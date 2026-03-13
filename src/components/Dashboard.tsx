@@ -59,9 +59,28 @@ export function Dashboard() {
     refreshInterval: scrapeTriggered ? 10000 : 30000,
   });
 
+  // Expected workflow job count: setup(1) + min(unique_airports, 19) flight jobs + airbnb(1) + finalize(1)
+  const expectedJobCount = useMemo(() => {
+    const uniqueAirports = new Set<string>();
+    for (const c of cities) {
+      for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) {
+        uniqueAirports.add(apt);
+      }
+    }
+    const flightJobs = Math.min(uniqueAirports.size, 19);
+    return 1 + flightJobs + 1 + 1; // setup + flights + airbnb + finalize
+  }, [cities]);
+
   const allJobs = scrapeData?.runs?.flatMap((r) => r.jobs) ?? [];
   const runningJobs = allJobs.filter((j) => j.status === "running" || j.status === "queued");
   const isRunning = scrapeTriggered || runningJobs.length > 0;
+
+  // Find active run and compute progress percentage
+  const activeRun = scrapeData?.runs?.find((r) =>
+    r.jobs.some((j) => j.status === "running" || j.status === "queued")
+  );
+  const completedJobCount = activeRun?.jobs.filter((j) => j.status === "completed" || j.status === "skipped").length ?? 0;
+  const refreshProgress = expectedJobCount > 0 ? Math.round((completedJobCount / expectedJobCount) * 100) : 0;
 
   // Clear scrapeTriggered once real jobs appear
   useEffect(() => {
@@ -200,16 +219,29 @@ export function Dashboard() {
       {/* Running jobs banner */}
       {isRunning && (
         <div className="bg-sky-950/60 border-b border-sky-800/40">
-          <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center gap-3">
-            <svg className="w-4 h-4 text-sky-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="text-sm text-sky-300">
-              {runningJobs.length > 0
-                ? `Data refresh in progress — ${runningJobs.length} job${runningJobs.length > 1 ? "s" : ""} running. New prices will appear once all jobs complete.`
-                : "Data refresh triggered — waiting for jobs to start..."}
-            </span>
+          <div className="max-w-5xl mx-auto px-4 py-2.5 space-y-2">
+            <div className="flex items-center gap-3">
+              <svg className="w-4 h-4 text-sky-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+              <span className="text-sm text-sky-300 flex-1">
+                {runningJobs.length > 0
+                  ? "Data refresh in progress — new prices will appear once all jobs complete."
+                  : "Data refresh triggered — waiting for jobs to start..."}
+              </span>
+              {activeRun && (
+                <span className="text-sm font-medium text-sky-300 shrink-0">{refreshProgress}%</span>
+              )}
+            </div>
+            {activeRun && (
+              <div className="h-1 rounded-full bg-sky-900/50 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-sky-400 transition-all duration-500"
+                  style={{ width: `${refreshProgress}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
