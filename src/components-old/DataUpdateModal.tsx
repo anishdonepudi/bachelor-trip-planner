@@ -16,16 +16,17 @@ interface DataUpdateModalProps {
 export function DataUpdateModal({ open, onRefresh }: DataUpdateModalProps) {
   return (
     <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent className="bg-[var(--surface-1)] border-[var(--border-hover)] text-[var(--text-1)] sm:max-w-sm" showCloseButton={false}>
+      <DialogContent className="sm:max-w-md" showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle className="font-heading text-base">New Data Available</DialogTitle>
-          <DialogDescription className="text-[var(--text-2)] text-sm">
-            Prices have been updated. Refresh to see the latest results.
+          <DialogTitle className="font-heading">New Data Available</DialogTitle>
+          <DialogDescription>
+            Flight and Airbnb prices have been updated with the latest data.
+            Refresh to see the new results.
           </DialogDescription>
         </DialogHeader>
         <button
           onClick={onRefresh}
-          className="w-full mt-1 h-9 rounded-md bg-[var(--blue)] text-white font-medium text-sm hover:brightness-110 transition-all duration-150"
+          className="w-full mt-2 px-4 py-2.5 rounded-xl bg-[var(--color-indigo)] text-white font-medium hover:bg-[oklch(0.6_0.2_265)] shadow-[var(--glow-indigo)] transition-colors"
         >
           Refresh Data
         </button>

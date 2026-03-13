@@ -10,36 +10,72 @@ export function FlightDetails({ flight }: { flight: FlightOptionRow }) {
   const dest = DESTINATION_AIRPORT;
 
   return (
-    <div className="text-xs text-zinc-500 space-y-0.5">
+    <div className="space-y-0.5">
       {out && (
-        <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
-          <span className="text-zinc-400">{apt} → {dest}</span>
-          <span>·</span>
-          <span className="text-zinc-400">{flight.airline ?? "Unknown"}</span>
-          {out.duration && <><span>·</span><span>{out.duration}</span></>}
+        <div className="flex items-center gap-1 text-[11px] text-[var(--text-2)]">
+          <span className="font-mono text-[var(--text-1)] font-medium">{apt}</span>
+          <svg className="w-3 h-3 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+          </svg>
+          <span className="font-mono text-[var(--text-1)] font-medium">{dest}</span>
+          <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+          <span>{flight.airline ?? "Unknown"}</span>
+          {out.duration && (
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span>{out.duration}</span>
+            </>
+          )}
           {out.stops === 0 ? (
-            <><span>·</span><span>Nonstop</span></>
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span className="text-[var(--teal)]">Direct</span>
+            </>
           ) : (
-            <><span>·</span><span>{out.stops} stop{out.layoverAirport && ` (${out.layoverAirport})`}</span></>
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span className="text-[var(--orange)]">{out.stops} stop{out.layoverAirport && ` ${out.layoverAirport}`}</span>
+            </>
           )}
           {out.departTime && out.arriveTime && (
-            <><span>·</span><span>{out.departTime}–{out.arriveTime}</span></>
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span className="font-mono tabular-nums">{out.departTime}-{out.arriveTime}</span>
+            </>
           )}
         </div>
       )}
       {ret && ret.departTime && (
-        <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
-          <span className="text-zinc-400">{dest} → {apt}</span>
-          <span>·</span>
-          <span className="text-zinc-400">{flight.airline ?? "Unknown"}</span>
-          {ret.duration && <><span>·</span><span>{ret.duration}</span></>}
+        <div className="flex items-center gap-1 text-[11px] text-[var(--text-2)]">
+          <span className="font-mono text-[var(--text-1)] font-medium">{dest}</span>
+          <svg className="w-3 h-3 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+          </svg>
+          <span className="font-mono text-[var(--text-1)] font-medium">{apt}</span>
+          <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+          <span>{flight.airline ?? "Unknown"}</span>
+          {ret.duration && (
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span>{ret.duration}</span>
+            </>
+          )}
           {ret.stops === 0 ? (
-            <><span>·</span><span>Nonstop</span></>
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span className="text-[var(--teal)]">Direct</span>
+            </>
           ) : (
-            <><span>·</span><span>{ret.stops} stop{ret.layoverAirport && ` (${ret.layoverAirport})`}</span></>
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span className="text-[var(--orange)]">{ret.stops} stop{ret.layoverAirport && ` ${ret.layoverAirport}`}</span>
+            </>
           )}
           {ret.departTime && ret.arriveTime && (
-            <><span>·</span><span>{ret.departTime}–{ret.arriveTime}</span></>
+            <>
+              <span className="mx-0.5 text-[var(--text-3)]">&middot;</span>
+              <span className="font-mono tabular-nums">{ret.departTime}-{ret.arriveTime}</span>
+            </>
           )}
         </div>
       )}

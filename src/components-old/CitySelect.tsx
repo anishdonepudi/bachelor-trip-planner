@@ -17,16 +17,25 @@ export function CitySelect({ value, onChange, excludeCities = [] }: CitySelectPr
   const ref = useRef<HTMLDivElement>(null);
 
   const filtered = ALL_CITIES.filter(
-    (c) => c.toLowerCase().includes(query.toLowerCase()) && !excludeCities.includes(c)
+    (c) =>
+      c.toLowerCase().includes(query.toLowerCase()) &&
+      !excludeCities.includes(c)
   );
 
-  useEffect(() => { setQuery(value); }, [value]);
+  // Sync query when value changes externally
+  useEffect(() => {
+    setQuery(value);
+  }, [value]);
 
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setIsOpen(false);
-        if (!ALL_CITIES.includes(query)) setQuery(value);
+        // Reset query to current value if nothing was selected
+        if (!ALL_CITIES.includes(query)) {
+          setQuery(value);
+        }
       }
     };
     document.addEventListener("mousedown", handler);
@@ -46,14 +55,18 @@ export function CitySelect({ value, onChange, excludeCities = [] }: CitySelectPr
       <input
         type="text"
         value={query}
-        onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setIsOpen(true);
+        }}
         onFocus={() => setIsOpen(true)}
         placeholder="Search city..."
-        className="w-full bg-[var(--surface-2)] border border-[var(--border-default)] rounded-md px-2.5 py-1.5 text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)] focus:outline-none focus:border-[var(--border-active)] transition-colors duration-150"
+        className="w-full bg-[var(--color-surface-elevated)] border border-[var(--border-hover)] rounded-xl px-2 py-1 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[oklch(0.55_0.2_265_/_50%)]"
       />
 
+      {/* Dropdown */}
       {isOpen && filtered.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-48 overflow-y-auto rounded-md bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-xl scrollbar-thin">
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 max-h-48 overflow-y-auto rounded-xl bg-[var(--color-surface-base)] border border-[var(--border-hover)] shadow-xl">
           {filtered.map((city) => {
             const apt = CITY_AIRPORTS[city];
             const allAirports = [...apt.primary, ...apt.nearby];
@@ -61,10 +74,12 @@ export function CitySelect({ value, onChange, excludeCities = [] }: CitySelectPr
               <button
                 key={city}
                 onClick={() => selectCity(city)}
-                className="w-full text-left px-3 py-2 hover:bg-[var(--surface-3)] transition-colors duration-100 flex items-center justify-between gap-2"
+                className="w-full text-left px-3 py-2 hover:bg-[var(--color-surface-elevated)] transition-colors flex items-center justify-between gap-2"
               >
-                <span className="text-sm text-[var(--text-1)]">{city}</span>
-                <span className="text-[10px] text-[var(--text-3)] font-mono">{allAirports.join(", ")}</span>
+                <span className="text-sm text-[var(--color-text-primary)]">{city}</span>
+                <span className="text-[11px] text-[var(--color-text-secondary)] font-mono">
+                  {allAirports.join(", ")}
+                </span>
               </button>
             );
           })}
@@ -72,20 +87,21 @@ export function CitySelect({ value, onChange, excludeCities = [] }: CitySelectPr
       )}
 
       {isOpen && filtered.length === 0 && query.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-md bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-xl px-3 py-2">
-          <span className="text-xs text-[var(--text-3)]">No matching cities</span>
+        <div className="absolute top-full left-0 right-0 mt-1 z-50 rounded-xl bg-[var(--color-surface-base)] border border-[var(--border-hover)] shadow-xl px-3 py-2">
+          <span className="text-xs text-[var(--color-text-secondary)]">No matching cities</span>
         </div>
       )}
 
+      {/* Airport tags below input */}
       {airports && value && !isOpen && (
         <div className="flex flex-wrap gap-1 mt-1">
           {airports.primary.map((a) => (
-            <span key={a} className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] font-mono font-medium">
+            <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-[oklch(0.55_0.2_265_/_15%)] text-[var(--color-indigo)] border border-[oklch(0.55_0.2_265_/_20%)] font-mono">
               {a}
             </span>
           ))}
           {airports.nearby.map((a) => (
-            <span key={a} className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-3)] border border-[var(--border-default)] font-mono">
+            <span key={a} className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-elevated)]/50 text-[var(--color-text-secondary)] border border-[var(--border)] font-mono">
               {a}
             </span>
           ))}

@@ -13,6 +13,7 @@ export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStat
   const [message, setMessage] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
+  // Re-render every 30s to keep "time ago" fresh
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(id);
@@ -41,45 +42,49 @@ export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStat
       if (res.ok) {
         const data = await res.json();
         if (data.already_running) {
-          setMessage("Already running");
+          setMessage("Scrape already in progress.");
         } else {
-          setMessage("Triggered");
+          setMessage("Scrape triggered! Data will update in ~30-45 min.");
         }
         onTriggered?.();
       } else {
-        setMessage("Failed");
+        setMessage("Failed to trigger scrape. Check GitHub config.");
       }
     } catch {
-      setMessage("Error");
+      setMessage("Error triggering scrape.");
     } finally {
       setRefreshing(false);
     }
   }, []);
 
   return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="hidden sm:inline text-[11px] text-[var(--text-3)] font-mono tabular-nums">
-        {getTimeAgo(lastUpdated)}
+    <div className="flex items-center gap-1.5 sm:gap-3 text-sm">
+      <span className="hidden sm:inline text-[var(--color-text-secondary)]">
+        Last updated: {getTimeAgo(lastUpdated)}
       </span>
       <button
         onClick={triggerRefresh}
         disabled={refreshing || isRunning}
-        className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)] text-[var(--text-1)] hover:bg-[var(--surface-3)] hover:border-[var(--border-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150 text-xs font-medium"
+        className="inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 rounded-xl bg-[var(--color-surface-elevated)] border border-[var(--border-hover)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-medium"
         title={`Last updated: ${getTimeAgo(lastUpdated)}`}
       >
         <svg
           className={`w-3.5 h-3.5 ${refreshing || isRunning ? "animate-spin" : ""}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
         >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+          />
         </svg>
-        <span className="hidden sm:inline">
-          {isRunning ? "Running..." : refreshing ? "Starting..." : "Refresh"}
-        </span>
+        <span className="hidden sm:inline">{isRunning ? "Refreshing..." : refreshing ? "Triggering..." : "Refresh Data"}</span>
       </button>
       {message && (
-        <span className="hidden sm:inline text-[11px] text-[var(--gold)]">{message}</span>
+        <span className="hidden sm:inline text-xs text-[var(--color-amber)]">{message}</span>
       )}
     </div>
   );

@@ -27,11 +27,10 @@ import { MobileNav } from "./MobileNav";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 export function Dashboard() {
-  const [flightCategory, setFlightCategory] =
-    useState<FlightCategory>("nonstop_carryon");
+  // ── State ──
+  const [flightCategory, setFlightCategory] = useState<FlightCategory>("nonstop_carryon");
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
-
   const [priorityCity, setPriorityCity] = useState("all");
   const [scoringAlgorithm, setScoringAlgorithm] = useState<ScoringAlgorithm>("zscore");
   const [excludedDates, setExcludedDates] = useState<string[]>([]);
@@ -47,73 +46,50 @@ export function Dashboard() {
   const [showMobileJobs, setShowMobileJobs] = useState(false);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
 
+  // ── Data fetching ──
   const { data: weekendData, isLoading: weekendsLoading, mutate: mutateWeekends } = useSWR<WeekendData>(
-    "/api/weekends",
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 1800000 } // 30 min
+    "/api/weekends", fetcher, { revalidateOnFocus: false, dedupingInterval: 1800000 }
   );
 
   const { data: scrapeData, mutate: mutateScrape } = useSWR<{
     runs: {
-      run_id: number;
-      status: string;
-      created_at: string;
-      updated_at: string;
-      url: string;
+      run_id: number; status: string; created_at: string; updated_at: string; url: string;
       jobs: { id: number; name: string; status: string; started_at: string | null; completed_at: string | null }[];
     }[];
     lastFlightUpdate: string | null;
-  }>("/api/scrape-status", fetcher, {
-    revalidateOnFocus: false,
-    refreshInterval: scrapeTriggered ? 10000 : 30000,
-  });
+  }>("/api/scrape-status", fetcher, { revalidateOnFocus: false, refreshInterval: scrapeTriggered ? 10000 : 30000 });
 
-  // Expected workflow job count: setup(1) + min(unique_airports, 19) flight jobs + airbnb(1) + finalize(1)
   const expectedJobCount = useMemo(() => {
     const uniqueAirports = new Set<string>();
     for (const c of cities) {
-      for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) {
-        uniqueAirports.add(apt);
-      }
+      for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) uniqueAirports.add(apt);
     }
-    const flightJobs = Math.min(uniqueAirports.size, 19);
-    return 1 + flightJobs + 1 + 1; // setup + flights + airbnb + finalize
+    return 1 + Math.min(uniqueAirports.size, 19) + 1 + 1;
   }, [cities]);
 
   const allJobs = scrapeData?.runs?.flatMap((r) => r.jobs) ?? [];
   const runningJobs = allJobs.filter((j) => j.status === "running" || j.status === "queued");
   const isRunning = scrapeTriggered || runningJobs.length > 0;
 
-  // Find active run and compute progress percentage
-  const activeRun = scrapeData?.runs?.find((r) =>
-    r.jobs.some((j) => j.status === "running" || j.status === "queued")
-  );
+  const activeRun = scrapeData?.runs?.find((r) => r.jobs.some((j) => j.status === "running" || j.status === "queued"));
   const completedJobCount = activeRun?.jobs.filter((j) => j.status === "completed" || j.status === "skipped").length ?? 0;
   const refreshProgress = expectedJobCount > 0 ? Math.round((completedJobCount / expectedJobCount) * 100) : 0;
 
-  // Clear scrapeTriggered once real jobs appear
   useEffect(() => {
-    if (scrapeTriggered && runningJobs.length > 0) {
-      setScrapeTriggered(false);
-    }
+    if (scrapeTriggered && runningJobs.length > 0) setScrapeTriggered(false);
   }, [scrapeTriggered, runningJobs.length]);
 
   const handleScrapeTriggered = useCallback(() => {
     setScrapeTriggered(true);
-    // Poll aggressively to pick up the new workflow
     setTimeout(() => mutateScrape(), 5000);
     setTimeout(() => mutateScrape(), 15000);
   }, [mutateScrape]);
 
-  // Track initial lastFlightUpdate and show modal when it changes
   useEffect(() => {
     if (!scrapeData?.lastFlightUpdate) return;
-
     if (initialLastUpdated.current === undefined) {
-      // First load — store the baseline
       initialLastUpdated.current = scrapeData.lastFlightUpdate;
     } else if (scrapeData.lastFlightUpdate !== initialLastUpdated.current) {
-      // Data has been updated since page load
       setShowUpdateModal(true);
     }
   }, [scrapeData?.lastFlightUpdate]);
@@ -125,31 +101,21 @@ export function Dashboard() {
     mutateWeekends();
   }, [scrapeData?.lastFlightUpdate, mutateWeekends]);
 
-  const { data: configData } = useSWR("/api/config", fetcher, {
-    revalidateOnFocus: false,
-  });
+  const { data: configData } = useSWR("/api/config", fetcher, { revalidateOnFocus: false });
 
   useEffect(() => {
-    if (configData?.cities && Array.isArray(configData.cities)) {
-      setCities(configData.cities);
-    }
-    if (configData?.excluded_dates && Array.isArray(configData.excluded_dates)) {
-      setExcludedDates(configData.excluded_dates);
-    }
-    if (configData?.destination_airport) {
-      setDestinationAirport(configData.destination_airport);
-    }
-    if (configData?.destination_city) {
-      setDestinationCity(configData.destination_city);
-    }
+    if (configData?.cities && Array.isArray(configData.cities)) setCities(configData.cities);
+    if (configData?.excluded_dates && Array.isArray(configData.excluded_dates)) setExcludedDates(configData.excluded_dates);
+    if (configData?.destination_airport) setDestinationAirport(configData.destination_airport);
+    if (configData?.destination_city) setDestinationCity(configData.destination_city);
   }, [configData]);
 
+  // ── Derived data ──
   const allDateRanges = useMemo(() => generateDateRanges(), []);
   const dateRanges = useMemo(() => {
     if (excludedDates.length === 0) return allDateRanges;
     const excludedSet = new Set(excludedDates);
     return allDateRanges.filter((dr) => {
-      // Check if any excluded date falls within this date range
       const start = new Date(dr.departDate + "T00:00:00");
       const end = new Date(dr.returnDate + "T00:00:00");
       const current = new Date(start);
@@ -167,25 +133,13 @@ export function Dashboard() {
   const weekendScores = useMemo(() => {
     if (!weekendData) return [];
     return scoreAllWeekends(
-      dateRanges,
-      weekendData.flights ?? [],
-      weekendData.flightOptions ?? [],
-      weekendData.airbnbListings ?? [],
-      flightCategory,
-      budgetTier,
-      cities,
-      priorityCity,
-      scoringAlgorithm
+      dateRanges, weekendData.flights ?? [], weekendData.flightOptions ?? [],
+      weekendData.airbnbListings ?? [], flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm
     );
   }, [weekendData, dateRanges, flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm]);
 
+  const hasData = weekendData && ((weekendData.flights?.length ?? 0) > 0 || (weekendData.airbnbListings?.length ?? 0) > 0);
 
-  const hasData =
-    weekendData &&
-    ((weekendData.flights?.length ?? 0) > 0 ||
-      (weekendData.airbnbListings?.length ?? 0) > 0);
-
-  // Count active filters (non-default selections)
   const activeFilterCount = [
     flightCategory !== "nonstop_carryon",
     budgetTier !== "budget",
@@ -195,37 +149,43 @@ export function Dashboard() {
 
   const handleMobileTab = (tab: "weekends" | "filters" | "settings" | "jobs") => {
     setMobileTab(tab);
-    if (tab === "filters") {
-      setShowFilterSheet(true);
-    } else if (tab === "settings") {
-      setShowMobileConfig(true);
-    } else if (tab === "jobs") {
-      setShowMobileJobs(true);
-    }
-    // Always reset to weekends tab after opening a panel
-    if (tab !== "weekends") {
-      setTimeout(() => setMobileTab("weekends"), 100);
-    }
+    if (tab === "filters") setShowFilterSheet(true);
+    else if (tab === "settings") setShowMobileConfig(true);
+    else if (tab === "jobs") setShowMobileJobs(true);
+    if (tab !== "weekends") setTimeout(() => setMobileTab("weekends"), 100);
   };
 
   const flightCatLabel = FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
   const budgetLabel = BUDGET_TIERS.find((t) => t.value === budgetTier)?.label ?? budgetTier;
 
+  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string) => {
+    const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDest !== destinationAirport || newDestCity !== destinationCity;
+    setCities(newCities);
+    setExcludedDates(newExcluded);
+    setDestinationAirport(newDest);
+    setDestinationCity(newDestCity);
+    if (citiesChanged) setConfigChanged(true);
+  }, [cities, destinationAirport, destinationCity]);
+
+  // ── Render ──
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      {/* Header */}
-      <header className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between gap-2">
-          <div>
-            <h1 className="text-lg sm:text-xl font-bold text-zinc-100">
+    <div className="min-h-screen bg-[var(--surface-0)] text-[var(--text-1)]">
+
+      {/* ── Top bar ── */}
+      <header className="glass border-b border-[var(--border-default)] sticky top-0 z-50">
+        <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
+          {/* Left: brand */}
+          <div className="flex items-center gap-3">
+            <h1 className="text-sm font-heading font-bold tracking-tight text-[var(--text-1)]">
               TripSync
             </h1>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              {cities.filter(c => c.city).length} cities &middot;{" "}
-              {cities.reduce((s, c) => s + c.people, 0)} people
-            </p>
+            <span className="text-[11px] text-[var(--text-3)] font-mono tabular-nums hidden sm:inline">
+              {cities.filter(c => c.city).length} cities &middot; {cities.reduce((s, c) => s + c.people, 0)} people
+            </span>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2">
+
+          {/* Right: actions */}
+          <div className="flex items-center gap-1.5">
             <div className="hidden md:block">
               <JobsPanel runs={scrapeData?.runs ?? []} />
             </div>
@@ -240,67 +200,50 @@ export function Dashboard() {
                 excludedDates={excludedDates}
                 destinationAirport={destinationAirport}
                 destinationCity={destinationCity}
-                onSave={(newCities, newExcluded, newDestination, newDestCity) => {
-                  const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDestination !== destinationAirport || newDestCity !== destinationCity;
-                  setCities(newCities);
-                  setExcludedDates(newExcluded);
-                  setDestinationAirport(newDestination);
-                  setDestinationCity(newDestCity);
-                  if (citiesChanged) setConfigChanged(true);
-                }}
+                onSave={handleConfigSave}
               />
             </div>
           </div>
         </div>
       </header>
 
-      {/* Running jobs banner */}
+      {/* ── Progress banner ── */}
       {isRunning && (
-        <div className="bg-sky-950/60 border-b border-sky-800/40">
-          <div className="max-w-5xl mx-auto px-4 py-2.5 space-y-2">
-            <div className="flex items-center gap-3">
-              <svg className="w-4 h-4 text-sky-400 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+        <div className="border-b border-[var(--blue-border)] bg-[var(--blue-soft)]">
+          <div className="max-w-5xl mx-auto px-4 py-2 space-y-1.5">
+            <div className="flex items-center gap-2.5">
+              <svg className="w-3.5 h-3.5 text-[var(--blue)] animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <span className="text-sm text-sky-300 flex-1">
-                {runningJobs.length > 0
-                  ? "Data refresh in progress — new prices will appear once all jobs complete."
-                  : "Data refresh triggered — waiting for jobs to start..."}
+              <span className="text-xs text-[var(--blue)] flex-1">
+                {runningJobs.length > 0 ? "Refreshing prices..." : "Starting refresh..."}
               </span>
               {activeRun && (
-                <span className="text-sm font-medium text-sky-300 shrink-0">{refreshProgress}%</span>
+                <span className="text-xs font-mono font-semibold text-[var(--blue)] tabular-nums">{refreshProgress}%</span>
               )}
             </div>
             {activeRun && (
-              <div className="h-1 rounded-full bg-sky-900/50 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-sky-400 transition-all duration-500"
-                  style={{ width: `${refreshProgress}%` }}
-                />
+              <div className="h-[2px] rounded-full bg-[var(--surface-2)] overflow-hidden">
+                <div className="h-full rounded-full bg-[var(--blue)] transition-all duration-500" style={{ width: `${refreshProgress}%` }} />
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Config changed banner */}
+      {/* ── Config changed banner ── */}
       {configChanged && (
-        <div className="bg-amber-950/60 border-b border-amber-800/40">
-          <div className="max-w-5xl mx-auto px-4 py-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm text-amber-300">
-                Configuration updated — data refresh is in progress with the new configuration. Data shown below is based on the previous configuration.
+        <div className="border-b border-[var(--gold-border)] bg-[var(--gold-soft)]">
+          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
+              <span className="text-xs text-[var(--gold)]">
+                Config updated. Refresh in progress. Showing previous data.
               </span>
             </div>
-            <button
-              onClick={() => setConfigChanged(false)}
-              className="text-amber-400/60 hover:text-amber-300 transition-colors shrink-0 ml-3"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button onClick={() => setConfigChanged(false)} className="text-[var(--gold)] opacity-60 hover:opacity-100 transition-opacity duration-150">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
@@ -308,27 +251,21 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Mobile quick filter chips */}
+      {/* ── Mobile filter chips ── */}
       {hasData && !weekendsLoading && (
-        <div className="md:hidden border-b border-zinc-800/50 bg-zinc-950/90">
-          <div className="flex overflow-x-auto gap-2 px-4 py-2.5 whitespace-nowrap scrollbar-thin">
-            <button
-              onClick={() => setShowFilterSheet(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0"
-            >
+        <div className="md:hidden border-b border-[var(--border-default)] bg-[var(--surface-0)]">
+          <div className="flex overflow-x-auto gap-1.5 px-4 py-2 whitespace-nowrap scrollbar-thin">
+            <button onClick={() => setShowFilterSheet(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] shrink-0">
               {flightCatLabel}
             </button>
-            <button
-              onClick={() => setShowFilterSheet(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0"
-            >
+            <button onClick={() => setShowFilterSheet(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[var(--gold-soft)] text-[var(--gold)] border border-[var(--gold-border)] shrink-0">
               {budgetLabel}
             </button>
             {priorityCity !== "all" && (
-              <button
-                onClick={() => setShowFilterSheet(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0"
-              >
+              <button onClick={() => setShowFilterSheet(true)}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[var(--teal-soft)] text-[var(--teal)] border border-[var(--teal-border)] shrink-0">
                 {priorityCity}
               </button>
             )}
@@ -336,70 +273,73 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Main content */}
-      <main className="max-w-5xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-6">
+      {/* ── Main content ── */}
+      <main className="max-w-5xl mx-auto px-4 pt-5 pb-20 md:pb-8 space-y-5">
         {weekendsLoading ? (
           <LoadingSkeleton />
         ) : (
           <>
-            {/* View toggle */}
+            {/* View toggle + desktop filters */}
             {hasData && (
-              <div className="flex items-center gap-1 p-1 rounded-lg bg-zinc-900 border border-zinc-800 w-fit">
-                <button
-                  onClick={() => setShowComboView(true)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    showComboView
-                      ? "bg-zinc-700 text-zinc-100"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  Overview
-                </button>
-                <button
-                  onClick={() => setShowComboView(false)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    !showComboView
-                      ? "bg-zinc-700 text-zinc-100"
-                      : "text-zinc-400 hover:text-zinc-200"
-                  }`}
-                >
-                  Ranked List
-                </button>
+              <div className="space-y-4">
+                {/* View toggle */}
+                <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] w-fit">
+                  <button
+                    onClick={() => setShowComboView(true)}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
+                      showComboView
+                        ? "bg-[var(--blue)] text-white shadow-sm"
+                        : "text-[var(--text-2)] hover:text-[var(--text-1)]"
+                    }`}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    onClick={() => setShowComboView(false)}
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
+                      !showComboView
+                        ? "bg-[var(--blue)] text-white shadow-sm"
+                        : "text-[var(--text-2)] hover:text-[var(--text-1)]"
+                    }`}
+                  >
+                    Ranked List
+                  </button>
+                </div>
+
+                {/* Desktop filters */}
+                <div className="hidden md:block">
+                  <FilterBar
+                    flightCategory={flightCategory}
+                    budgetTier={budgetTier}
+                    priorityCity={priorityCity}
+                    scoringAlgorithm={scoringAlgorithm}
+                    cities={cities}
+                    onFlightCategoryChange={setFlightCategory}
+                    onBudgetTierChange={setBudgetTier}
+                    onPriorityCityChange={setPriorityCity}
+                    onScoringAlgorithmChange={setScoringAlgorithm}
+                  />
+                </div>
               </div>
             )}
 
-            {/* Filters — desktop only */}
-            <div className="hidden md:block">
-              <FilterBar
-                flightCategory={flightCategory}
-                budgetTier={budgetTier}
-                priorityCity={priorityCity}
-                scoringAlgorithm={scoringAlgorithm}
-                cities={cities}
-                onFlightCategoryChange={setFlightCategory}
-                onBudgetTierChange={setBudgetTier}
-                onPriorityCityChange={setPriorityCity}
-                onScoringAlgorithmChange={setScoringAlgorithm}
-              />
-            </div>
-
-            {/* Weekend Cards */}
+            {/* Content area */}
             {!hasData ? (
-              <div className="text-center py-16">
-                <div className="text-4xl mb-4">&#9992;</div>
-                <h2 className="text-xl font-semibold text-zinc-300 mb-2">
+              <div className="text-center py-20">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-[var(--surface-1)] border border-[var(--border-default)] flex items-center justify-center">
+                  <svg className="w-6 h-6 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </div>
+                <h2 className="text-base font-heading font-semibold text-[var(--text-1)] mb-1">
                   No Data Yet
                 </h2>
-                <p className="text-zinc-500 max-w-md mx-auto mb-6">
-                  Flight and Airbnb data hasn&apos;t been scraped yet. Click
-                  &quot;Refresh Data&quot; to trigger the first scrape, or wait
-                  for the scheduled GitHub Actions run.
+                <p className="text-sm text-[var(--text-2)] max-w-sm mx-auto mb-4">
+                  Click &quot;Refresh&quot; to trigger the first data scrape, or wait for the scheduled run.
                 </p>
-                <div className="space-y-3">
-                  <p className="text-sm text-zinc-600">
-                    Available weekends: {dateRanges.length} date ranges
-                  </p>
-                </div>
+                <p className="text-xs text-[var(--text-3)] font-mono tabular-nums">
+                  {dateRanges.length} available weekends
+                </p>
               </div>
             ) : showComboView ? (
               <ComboSummary
@@ -417,39 +357,34 @@ export function Dashboard() {
                 }}
               />
             ) : (
-              <div className="space-y-4">
-                <div className="text-sm text-zinc-500">
-                  {weekendScores.length} weekends ranked by {SCORING_ALGORITHMS.find(a => a.value === scoringAlgorithm)?.label ?? scoringAlgorithm}{priorityCity !== "all" ? ` for ${priorityCity}` : ""} &middot; max 10hr one-way flights
+              <div className="space-y-2">
+                <div className="text-xs text-[var(--text-2)] font-mono">
+                  {weekendScores.length} weekends &middot; {SCORING_ALGORITHMS.find(a => a.value === scoringAlgorithm)?.label ?? scoringAlgorithm}
+                  {priorityCity !== "all" ? ` &middot; ${priorityCity}` : ""}
                 </div>
-                {weekendScores.map((weekend, i) => (
-                  <WeekendCard
-                    key={weekend.dateRange.id}
-                    weekend={weekend}
-                    rank={i + 1}
-                    flightCategory={flightCategory}
-                    budgetTier={budgetTier}
-                    priorityCity={priorityCity}
-                  />
-                ))}
+                <div className="space-y-1.5">
+                  {weekendScores.map((weekend, i) => (
+                    <WeekendCard
+                      key={weekend.dateRange.id}
+                      weekend={weekend}
+                      rank={i + 1}
+                      flightCategory={flightCategory}
+                      budgetTier={budgetTier}
+                      priorityCity={priorityCity}
+                    />
+                  ))}
+                </div>
               </div>
             )}
           </>
         )}
       </main>
 
-      <DataUpdateModal
-        open={showUpdateModal}
-        onRefresh={handleDataRefresh}
-      />
+      {/* ── Modals & overlays ── */}
+      <DataUpdateModal open={showUpdateModal} onRefresh={handleDataRefresh} />
 
-      {/* Mobile bottom nav */}
-      <MobileNav
-        activeTab={mobileTab}
-        onTabChange={handleMobileTab}
-        activeFilterCount={activeFilterCount}
-      />
+      <MobileNav activeTab={mobileTab} onTabChange={handleMobileTab} activeFilterCount={activeFilterCount} />
 
-      {/* Mobile filter sheet */}
       <FilterSheet
         open={showFilterSheet}
         onClose={() => setShowFilterSheet(false)}
@@ -464,32 +399,28 @@ export function Dashboard() {
         onScoringAlgorithmChange={setScoringAlgorithm}
       />
 
-      {/* Mobile config — full-screen modal */}
+      {/* Mobile config */}
       {showMobileConfig && (
         <div className="fixed inset-0 z-[100] md:hidden">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowMobileConfig(false)} />
-          <div className="absolute inset-0 bg-zinc-950 overflow-y-auto scrollbar-thin">
-            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-800">
-              <h2 className="text-base font-semibold text-zinc-100">Settings</h2>
-              <button onClick={() => setShowMobileConfig(false)} className="p-2 -mr-2 text-zinc-400 hover:text-zinc-200 min-w-[44px] min-h-[44px] flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMobileConfig(false)} />
+          <div className="absolute inset-0 bg-[var(--surface-0)] overflow-y-auto scrollbar-thin">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 h-12 glass border-b border-[var(--border-default)]">
+              <h2 className="text-sm font-heading font-semibold text-[var(--text-1)]">Settings</h2>
+              <button onClick={() => setShowMobileConfig(false)}
+                className="p-2 -mr-2 text-[var(--text-3)] hover:text-[var(--text-1)] min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="p-4 pb-24">
+            <div className="p-4 pb-20">
               <ConfigModal
                 cities={cities}
                 excludedDates={excludedDates}
                 destinationAirport={destinationAirport}
                 destinationCity={destinationCity}
-                onSave={(newCities, newExcluded, newDestination, newDestCity) => {
-                  const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDestination !== destinationAirport || newDestCity !== destinationCity;
-                  setCities(newCities);
-                  setExcludedDates(newExcluded);
-                  setDestinationAirport(newDestination);
-                  setDestinationCity(newDestCity);
-                  if (citiesChanged) setConfigChanged(true);
+                onSave={(newCities, newExcluded, newDest, newDestCity) => {
+                  handleConfigSave(newCities, newExcluded, newDest, newDestCity);
                   setShowMobileConfig(false);
                 }}
               />
@@ -498,20 +429,21 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Mobile jobs panel — full-screen */}
+      {/* Mobile jobs */}
       {showMobileJobs && (
         <div className="fixed inset-0 z-[100] md:hidden">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowMobileJobs(false)} />
-          <div className="absolute inset-0 bg-zinc-950 overflow-y-auto scrollbar-thin">
-            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-800">
-              <h2 className="text-base font-semibold text-zinc-100">Data Refresh Runs</h2>
-              <button onClick={() => setShowMobileJobs(false)} className="p-2 -mr-2 text-zinc-400 hover:text-zinc-200 min-w-[44px] min-h-[44px] flex items-center justify-center">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMobileJobs(false)} />
+          <div className="absolute inset-0 bg-[var(--surface-0)] overflow-y-auto scrollbar-thin">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 h-12 glass border-b border-[var(--border-default)]">
+              <h2 className="text-sm font-heading font-semibold text-[var(--text-1)]">Job History</h2>
+              <button onClick={() => setShowMobileJobs(false)}
+                className="p-2 -mr-2 text-[var(--text-3)] hover:text-[var(--text-1)] min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="p-4 pb-24">
+            <div className="p-4 pb-20">
               <JobsPanel runs={scrapeData?.runs ?? []} />
             </div>
           </div>

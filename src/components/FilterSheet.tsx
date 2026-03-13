@@ -35,21 +35,16 @@ export function FilterSheet({
   const startY = useRef<number | null>(null);
   const currentY = useRef<number | null>(null);
 
-  // Prevent body scroll when open
   useEffect(() => {
     if (open) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
     }
-    return () => {
-      document.body.style.overflow = "";
-    };
+    return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startY.current = e.touches[0].clientY;
-  };
+  const handleTouchStart = (e: React.TouchEvent) => { startY.current = e.touches[0].clientY; };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (startY.current === null) return;
@@ -62,14 +57,9 @@ export function FilterSheet({
 
   const handleTouchEnd = () => {
     if (startY.current !== null && currentY.current !== null) {
-      const diff = currentY.current - startY.current;
-      if (diff > 100) {
-        onClose();
-      }
+      if (currentY.current - startY.current > 100) onClose();
     }
-    if (sheetRef.current) {
-      sheetRef.current.style.transform = "";
-    }
+    if (sheetRef.current) sheetRef.current.style.transform = "";
     startY.current = null;
     currentY.current = null;
   };
@@ -85,52 +75,44 @@ export function FilterSheet({
 
   return (
     <div className="fixed inset-0 z-[100] md:hidden">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={onClose}
-      />
-
-      {/* Sheet */}
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose} />
       <div
         ref={sheetRef}
-        className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-zinc-950 border-t border-zinc-800 shadow-2xl max-h-[85vh] flex flex-col animate-in slide-in-from-bottom duration-300"
+        className="absolute bottom-0 left-0 right-0 rounded-t-xl bg-[var(--surface-0)] border-t border-[var(--border-default)] shadow-2xl max-h-[85vh] flex flex-col animate-slide-up"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Drag handle */}
-        <div className="flex justify-center pt-3 pb-2 shrink-0">
-          <div className="w-10 h-1 rounded-full bg-zinc-700" />
+        {/* Handle */}
+        <div className="flex justify-center pt-2.5 pb-1 shrink-0">
+          <div className="w-8 h-1 rounded-full bg-[var(--surface-3)]" />
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 pb-3 border-b border-zinc-800 shrink-0">
-          <h2 className="text-base font-semibold text-zinc-100">Filters</h2>
-          <button
-            onClick={handleReset}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
+        <div className="flex items-center justify-between px-4 pb-2.5 border-b border-[var(--border-default)] shrink-0">
+          <h2 className="text-sm font-heading font-semibold text-[var(--text-1)]">Filters</h2>
+          <button onClick={handleReset}
+            className="text-[11px] text-[var(--text-3)] hover:text-[var(--text-2)] transition-colors duration-150">
             Reset
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
           {/* Flight Category */}
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+            <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">
               Flight Type
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
               {FLIGHT_CATEGORIES.map((cat) => (
                 <button
                   key={cat.value}
                   onClick={() => onFlightCategoryChange(cat.value)}
-                  className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                  className={`px-3 py-2.5 rounded-md text-xs font-medium transition-all duration-150 ${
                     flightCategory === cat.value
-                      ? "bg-sky-500/20 text-sky-300 border border-sky-500/40"
-                      : "bg-zinc-800/50 text-zinc-400 border border-zinc-700/50"
+                      ? "bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]"
+                      : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)]"
                   }`}
                 >
                   {cat.label}
@@ -139,74 +121,70 @@ export function FilterSheet({
             </div>
           </div>
 
-          {/* Budget Tier */}
+          {/* Budget */}
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-              Airbnb Budget
-            </h3>
-            <div className="flex flex-col gap-2">
+            <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">
+              Budget
+            </div>
+            <div className="space-y-1.5">
               {BUDGET_TIERS.map((tier) => (
                 <button
                   key={tier.value}
                   onClick={() => onBudgetTierChange(tier.value)}
-                  className={`px-3 py-2.5 rounded-lg text-sm font-medium text-left transition-all ${
+                  className={`w-full px-3 py-2.5 rounded-md text-xs font-medium text-left transition-all duration-150 ${
                     budgetTier === tier.value
-                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                      : "bg-zinc-800/50 text-zinc-400 border border-zinc-700/50"
+                      ? "bg-[var(--gold-soft)] text-[var(--gold)] border border-[var(--gold-border)]"
+                      : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)]"
                   }`}
                 >
                   <span className="font-semibold">{tier.label}</span>
-                  <span className="ml-2 text-xs opacity-70">{tier.range}</span>
+                  <span className="ml-2 text-[11px] opacity-70">{tier.range}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Priority City */}
+          {/* City */}
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+            <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">
               Rank By City
-            </h3>
+            </div>
             <select
               value={priorityCity}
               onChange={(e) => onPriorityCityChange(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg text-sm font-medium bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 focus:outline-none focus:border-emerald-500/40 transition-all appearance-none"
+              className="w-full h-10 px-3 rounded-md text-sm bg-[var(--surface-1)] text-[var(--text-1)] border border-[var(--border-default)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none"
             >
               <option value="all">All Cities</option>
               {cities.map((c) => (
-                <option key={c.city} value={c.city}>
-                  {c.city} ({c.people})
-                </option>
+                <option key={c.city} value={c.city}>{c.city} ({c.people})</option>
               ))}
             </select>
           </div>
 
-          {/* Scoring Method */}
+          {/* Scoring */}
           <div>
-            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
-              Scoring Method
-            </h3>
+            <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">
+              Scoring
+            </div>
             <select
               value={scoringAlgorithm}
               onChange={(e) => onScoringAlgorithmChange(e.target.value as ScoringAlgorithm)}
-              className="w-full px-3 py-2.5 rounded-lg text-sm font-medium bg-zinc-800/50 text-zinc-300 border border-zinc-700/50 focus:outline-none focus:border-violet-500/40 transition-all appearance-none"
+              className="w-full h-10 px-3 rounded-md text-sm bg-[var(--surface-1)] text-[var(--text-1)] border border-[var(--border-default)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none"
             >
               {SCORING_ALGORITHMS.map((algo) => (
-                <option key={algo.value} value={algo.value}>
-                  {algo.label}
-                </option>
+                <option key={algo.value} value={algo.value}>{algo.label}</option>
               ))}
             </select>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="shrink-0 px-5 py-4 border-t border-zinc-800 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-4 py-3 border-t border-[var(--border-default)] pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
           <button
             onClick={onClose}
-            className="w-full py-3 rounded-xl text-sm font-semibold bg-sky-600 text-white hover:bg-sky-500 transition-colors"
+            className="w-full h-10 rounded-md text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 transition-all duration-150"
           >
-            Apply Filters
+            Apply
           </button>
         </div>
       </div>
