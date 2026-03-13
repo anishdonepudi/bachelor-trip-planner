@@ -8,9 +8,12 @@ import {
   ScoringAlgorithm,
   CityConfig,
   WeekendData,
+  RankChangeMap,
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
+import { savePreviousWeekendData, loadPreviousWeekendData, getPreviousDataTimestamp, clearPreviousWeekendData } from "@/lib/rank-history";
+import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
 import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
 import { FilterBar } from "./FilterBar";
@@ -44,7 +47,16 @@ export function Dashboard() {
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [showMobileConfig, setShowMobileConfig] = useState(false);
   const [showMobileJobs, setShowMobileJobs] = useState(false);
+  const [showRankChanges, setShowRankChanges] = useState(true);
+  const [rankChangeVersion, setRankChangeVersion] = useState(0);
+  const [timeTick, setTimeTick] = useState(0);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
+
+  // Tick every 60s to keep time-ago labels fresh
+  useEffect(() => {
+    const id = setInterval(() => setTimeTick((t) => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── Data fetching ──
   const { data: weekendData, isLoading: weekendsLoading, mutate: mutateWeekends } = useSWR<WeekendData>(
@@ -122,17 +134,32 @@ export function Dashboard() {
   const modalCooldownUntil = useRef<number>(0);
 
   useEffect(() => {
+    console.log("[rank-history] useEffect check:", {
+      lastFlightUpdate: scrapeData?.lastFlightUpdate,
+      initialLastUpdated: initialLastUpdated.current,
+      cooldownActive: Date.now() < modalCooldownUntil.current,
+      hasWeekendData: !!weekendData,
+    });
     if (!scrapeData?.lastFlightUpdate) return;
     if (Date.now() < modalCooldownUntil.current) return;
     if (initialLastUpdated.current === undefined) {
       initialLastUpdated.current = scrapeData.lastFlightUpdate;
     } else if (scrapeData.lastFlightUpdate !== initialLastUpdated.current) {
+      // Save current data for rank comparison before showing refresh modal
+      if (weekendData) {
+        console.log("[rank-history] saving data before modal");
+        savePreviousWeekendData(weekendData);
+        setRankChangeVersion((v) => v + 1);
+      } else {
+        console.log("[rank-history] weekendData is null, skipping save");
+      }
       setShowUpdateModal(true);
     }
-  }, [scrapeData?.lastFlightUpdate]);
+  }, [scrapeData?.lastFlightUpdate, weekendData]);
 
   const handleDataRefresh = useCallback(() => {
     setShowUpdateModal(false);
+    setShowRankChanges(true);
     setConfigChanged(false);
     setScrapeTriggered(false);
     initialLastUpdated.current = scrapeData?.lastFlightUpdate ?? null;
@@ -177,6 +204,48 @@ export function Dashboard() {
       weekendData.airbnbListings ?? [], flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm
     );
   }, [weekendData, dateRanges, flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm]);
+
+  // Rank changes: load previous data and compute deltas
+  const previousWeekendData = useMemo(() => {
+    if (!showRankChanges) return null;
+    void rankChangeVersion; // trigger re-read when data is saved
+    return loadPreviousWeekendData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showRankChanges, rankChangeVersion]);
+
+  const previousDataTimestamp = useMemo(() => {
+    if (!previousWeekendData) return null;
+    return getPreviousDataTimestamp();
+  }, [previousWeekendData]);
+
+  const rankChangeMap: RankChangeMap = useMemo(() => {
+    if (!previousWeekendData || !weekendScores.length) return {};
+    return computeRankChanges(
+      previousWeekendData, weekendScores, dateRanges,
+      flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm
+    );
+  }, [previousWeekendData, weekendScores, dateRanges, flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm]);
+
+  const hasRankChanges = useMemo(() => {
+    const values = Object.values(rankChangeMap);
+    return values.length > 0 && values.some((v) => v !== 0);
+  }, [rankChangeMap]);
+
+  const rankChangeTimeAgo = useMemo(() => {
+    if (!previousDataTimestamp) return null;
+    const diff = Date.now() - new Date(previousDataTimestamp).getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor(diff / (1000 * 60));
+    if (hours >= 24) return `${Math.floor(hours / 24)}d ago`;
+    if (hours >= 1) return `${hours}h ago`;
+    return `${minutes}m ago`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previousDataTimestamp, timeTick]);
+
+  const handleDismissRankChanges = useCallback(() => {
+    setShowRankChanges(false);
+    clearPreviousWeekendData();
+  }, []);
 
   const hasData = weekendData && ((weekendData.flights?.length ?? 0) > 0 || (weekendData.airbnbListings?.length ?? 0) > 0);
 
@@ -291,6 +360,22 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* ── Rank changes banner ── */}
+      {hasRankChanges && showRankChanges && (
+        <div className="border-b border-[var(--teal-border)] bg-[var(--teal-soft)]">
+          <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--teal)]">
+                Showing rank changes from previous refresh{rankChangeTimeAgo ? ` (${rankChangeTimeAgo})` : ""}
+              </span>
+            </div>
+            <button onClick={handleDismissRankChanges} className="text-[var(--teal)] opacity-60 hover:opacity-100 transition-opacity duration-150 text-xs font-medium">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Mobile filter chips ── */}
       {hasData && !weekendsLoading && (
         <div className="md:hidden border-b border-[var(--border-default)] bg-[var(--surface-0)]">
@@ -390,6 +475,7 @@ export function Dashboard() {
                 scoringAlgorithm={scoringAlgorithm}
                 activeFlightCategory={flightCategory}
                 activeBudgetTier={budgetTier}
+                previousWeekendData={previousWeekendData}
                 onSelectCombo={(fc, bt) => {
                   setFlightCategory(fc);
                   setBudgetTier(bt);
@@ -411,6 +497,7 @@ export function Dashboard() {
                       flightCategory={flightCategory}
                       budgetTier={budgetTier}
                       priorityCity={priorityCity}
+                      rankChange={hasRankChanges ? rankChangeMap[weekend.dateRange.id] : undefined}
                     />
                   ))}
                 </div>
