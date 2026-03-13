@@ -57,7 +57,15 @@ export function Dashboard() {
       jobs: { id: number; name: string; status: string; started_at: string | null; completed_at: string | null }[];
     }[];
     lastFlightUpdate: string | null;
-  }>("/api/scrape-status", fetcher, { revalidateOnFocus: false, refreshInterval: scrapeTriggered ? 10000 : 30000 });
+    scraperProgress: { completed: number; total: number; jobs: number } | null;
+  }>("/api/scrape-status", fetcher, {
+    revalidateOnFocus: false,
+    refreshInterval: (latestData) => {
+      if (scrapeTriggered) return 1000;
+      const jobs = latestData?.runs?.flatMap((r) => r.jobs) ?? [];
+      return jobs.some((j) => j.status === "running" || j.status === "queued") ? 1000 : 30000;
+    },
+  });
 
   const expectedJobCount = useMemo(() => {
     const uniqueAirports = new Set<string>();
@@ -73,7 +81,24 @@ export function Dashboard() {
 
   const activeRun = scrapeData?.runs?.find((r) => r.jobs.some((j) => j.status === "running" || j.status === "queued"));
   const completedJobCount = activeRun?.jobs.filter((j) => j.status === "completed" || j.status === "skipped").length ?? 0;
-  const refreshProgress = expectedJobCount > 0 ? Math.round((completedJobCount / expectedJobCount) * 100) : 0;
+
+  // Granular progress: use per-task progress from scrape_jobs when available
+  const refreshProgress = useMemo(() => {
+    if (!activeRun || expectedJobCount === 0) return 0;
+    const sp = scrapeData?.scraperProgress;
+    if (sp && sp.total > 0) {
+      // Weighted: completed GitHub jobs as 100% + running jobs' internal progress
+      const runningJobCount = activeRun.jobs.filter((j) => j.status === "running").length;
+      const queuedJobCount = activeRun.jobs.filter((j) => j.status === "queued").length;
+      const doneWeight = completedJobCount * 1;
+      const runningWeight = runningJobCount > 0 ? (sp.completed / sp.total) * runningJobCount : 0;
+      const totalWeight = completedJobCount + runningJobCount + queuedJobCount;
+      if (totalWeight === 0) return 0;
+      return Math.round(((doneWeight + runningWeight) / totalWeight) * 100);
+    }
+    // Fallback: job-level only
+    return Math.round((completedJobCount / expectedJobCount) * 100);
+  }, [activeRun, completedJobCount, expectedJobCount, scrapeData?.scraperProgress]);
 
   useEffect(() => {
     if (scrapeTriggered && runningJobs.length > 0) setScrapeTriggered(false);

@@ -67,6 +67,34 @@ async function main() {
   console.log(`Run ID: ${RUN_ID ?? "local"}`);
   console.log(`Started at ${new Date().toISOString()}\n`);
 
+  // =============================================
+  // CAPTCHA GATE: Block promotion if any scraper hit CAPTCHAs
+  // =============================================
+
+  if (RUN_ID) {
+    const { data: jobs } = await supabase
+      .from("scrape_jobs")
+      .select("id, job_type, progress")
+      .eq("github_run_id", RUN_ID);
+
+    let totalCaptchas = 0;
+    if (jobs) {
+      for (const job of jobs) {
+        const p = job.progress as { captcha_count?: number } | null;
+        totalCaptchas += p?.captcha_count ?? 0;
+      }
+    }
+
+    if (totalCaptchas > 0) {
+      console.error(`\n CAPTCHA GATE FAILED: ${totalCaptchas} CAPTCHA(s) detected across ${jobs?.length ?? 0} scrape jobs.`);
+      console.error("Production data will NOT be updated to prevent incomplete data.");
+      console.error("Staging data is preserved for inspection.\n");
+      process.exit(1);
+    }
+
+    console.log(`CAPTCHA gate passed: 0 CAPTCHAs across ${jobs?.length ?? 0} scrape jobs\n`);
+  }
+
   const dateRanges = generateDateRanges();
   const dateRangeMap = new Map(dateRanges.map((dr) => [dr.id, dr]));
 

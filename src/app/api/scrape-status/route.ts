@@ -92,6 +92,35 @@ export async function GET() {
 
     const lastFlightUpdate = latestFlightResult.data?.[0]?.scraped_at ?? null;
 
+    // Fetch per-scraper progress from scrape_jobs for the active GitHub run
+    let scraperProgress: { completed: number; total: number; jobs: number } | null = null;
+    if (githubData?.allJobs) {
+      const activeRun = githubData.allJobs.find(({ jobs }) =>
+        jobs.some((j) => j.status === "in_progress" || j.status === "queued")
+      );
+      if (activeRun) {
+        const { data: progressRows } = await supabase
+          .from("scrape_jobs")
+          .select("progress")
+          .eq("github_run_id", String(activeRun.run.id));
+
+        if (progressRows && progressRows.length > 0) {
+          let totalCompleted = 0;
+          let totalTasks = 0;
+          for (const row of progressRows) {
+            const p = row.progress as { completed?: number; total?: number } | null;
+            if (p && p.total && p.total > 0) {
+              totalCompleted += p.completed ?? 0;
+              totalTasks += p.total;
+            }
+          }
+          if (totalTasks > 0) {
+            scraperProgress = { completed: totalCompleted, total: totalTasks, jobs: progressRows.length };
+          }
+        }
+      }
+    }
+
     if (!githubData) {
       // Fallback to Supabase scrape_jobs if GitHub not configured
       const { data, error } = await supabase
@@ -133,7 +162,7 @@ export async function GET() {
       })),
     }));
 
-    return NextResponse.json({ runs, lastFlightUpdate });
+    return NextResponse.json({ runs, lastFlightUpdate, scraperProgress });
   } catch (error) {
     console.error("Error fetching scrape status:", error);
     return NextResponse.json(

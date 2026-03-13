@@ -166,13 +166,14 @@ async function updateJobProgress(
     .eq("id", jobId);
 }
 
-async function completeJob(jobId: number, errorMsg?: string): Promise<void> {
+async function completeJob(jobId: number, captchaCount: number, errorMsg?: string): Promise<void> {
   await supabase
     .from("scrape_jobs")
     .update({
       status: errorMsg ? "failed" : "completed",
       completed_at: new Date().toISOString(),
       error_message: errorMsg ?? null,
+      progress: { captcha_count: captchaCount },
     })
     .eq("id", jobId);
 }
@@ -512,6 +513,11 @@ interface ScrapeResult {
   googleFlightsUrl: string;
 }
 
+interface CategoryResult {
+  results: ScrapeResult[];
+  captchaHit: boolean;
+}
+
 /**
  * Scrape a single category on its own page using click-free POST approach.
  * Each category gets its own browser context + page for isolation.
@@ -532,7 +538,7 @@ async function scrapeSingleCategory(
   departDate: string,
   returnDate: string,
   logTag: string
-): Promise<ScrapeResult[]> {
+): Promise<CategoryResult> {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   await page.setViewport({ width: 1920, height: 1080 });
@@ -556,10 +562,11 @@ async function scrapeSingleCategory(
       const captcha = await page.$('iframe[src*="recaptcha"], #captcha-form, .g-recaptcha');
       if (captcha) {
         console.warn(`      ${logTag} [${category}] CAPTCHA detected, skipping`);
+        return { results, captchaHit: true };
       } else {
         console.warn(`      ${logTag} [${category}] No flight results found, skipping`);
       }
-      return results;
+      return { results, captchaHit: false };
     }
     await new Promise((r) => setTimeout(r, POST_LOAD_DELAY_MS));
 
@@ -582,12 +589,12 @@ async function scrapeSingleCategory(
 
     if (!outbound) {
       console.warn(`      ${logTag} [${category}] No outbound API data, skipping`);
-      return results;
+      return { results, captchaHit: false };
     }
 
     if (!state.apiUrl) {
       console.warn(`      ${logTag} [${category}] No API URL captured, skipping`);
-      return results;
+      return { results, captchaHit: false };
     }
 
     const googleFlightsUrl = page.url();
@@ -596,7 +603,7 @@ async function scrapeSingleCategory(
 
     console.log(`      ${logTag} [${category}] ${outboundList.length} outbound, fetching returns for top ${topCount}`);
 
-    if (topCount === 0) return results;
+    if (topCount === 0) return { results, captchaHit: false };
 
     // Step 3: POST for return flights (no clicking)
     for (let i = 0; i < topCount; i++) {
@@ -646,7 +653,7 @@ async function scrapeSingleCategory(
     await context.close();
   }
 
-  return results;
+  return { results, captchaHit: false };
 }
 
 /**
@@ -663,7 +670,7 @@ async function scrapeAirportDate(
   departDate: string,
   returnDate: string,
   logTag: string
-): Promise<ScrapeResult[]> {
+): Promise<{ results: ScrapeResult[]; captchaCount: number }> {
   const categoryDefs: { category: FlightCategory; stopType: "nonstop" | "onestop"; isCarryon: boolean }[] = [
     { category: "nonstop_no_carryon", stopType: "nonstop", isCarryon: false },
     { category: "onestop_no_carryon", stopType: "onestop", isCarryon: false },
@@ -672,12 +679,12 @@ async function scrapeAirportDate(
   ];
 
   // Stagger launches to avoid burst requests
-  const promises: Promise<ScrapeResult[]>[] = [];
+  const promises: Promise<CategoryResult>[] = [];
   for (let i = 0; i < categoryDefs.length; i++) {
     const def = categoryDefs[i];
     const delay = i * (CATEGORY_STAGGER_MS + Math.random() * 1000);
     promises.push(
-      new Promise<ScrapeResult[]>((resolve) => setTimeout(resolve, delay)).then(() =>
+      new Promise<CategoryResult>((resolve) => setTimeout(resolve, delay)).then(() =>
         scrapeSingleCategory(
           browser, baseUrl, def.category, def.stopType, def.isCarryon,
           airport, departDate, returnDate, logTag
@@ -687,7 +694,10 @@ async function scrapeAirportDate(
   }
 
   const allResults = await Promise.all(promises);
-  return allResults.flat();
+  return {
+    results: allResults.flatMap((r) => r.results),
+    captchaCount: allResults.filter((r) => r.captchaHit).length,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -729,7 +739,7 @@ async function processTask(
   taskIndex: number,
   totalTasks: number,
   jobId: number,
-  stats: { totalResults: number; totalErrors: number; startTime: number }
+  stats: { totalResults: number; totalErrors: number; totalCaptchas: number; startTime: number }
 ): Promise<void> {
   const taskLabel = `${airport} | ${dateRange.id}`;
   const elapsed = ((Date.now() - stats.startTime) / 1000).toFixed(0);
@@ -742,12 +752,17 @@ async function processTask(
 
   try {
     const logTag = `[${dateRange.id}]`;
-    scrapeResults = await scrapeAirportDate(
+    const { results, captchaCount } = await scrapeAirportDate(
       browser, baseUrl, airport,
       dateRange.departDate, dateRange.returnDate, logTag
     );
-    stats.totalResults += scrapeResults.length;
-    console.log(`    Total results: ${scrapeResults.length}`);
+    scrapeResults = results;
+    stats.totalResults += results.length;
+    stats.totalCaptchas += captchaCount;
+    if (captchaCount > 0) {
+      console.warn(`    CAPTCHA hit ${captchaCount} time(s)`);
+    }
+    console.log(`    Total results: ${results.length}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     stats.totalErrors++;
@@ -851,7 +866,7 @@ async function main(): Promise<void> {
   console.log(`Total tasks: ${totalTasks}\n`);
 
   const jobId = await createScrapeJob(inputAirports);
-  const stats = { totalResults: 0, totalErrors: 0, startTime };
+  const stats = { totalResults: 0, totalErrors: 0, totalCaptchas: 0, startTime };
 
   let browser: Browser | null = null;
 
@@ -896,7 +911,7 @@ async function main(): Promise<void> {
     }
     await Promise.all(workers);
 
-    await completeJob(jobId);
+    await completeJob(jobId, stats.totalCaptchas);
 
     // Summary report
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -906,13 +921,14 @@ async function main(): Promise<void> {
     console.log(`Total time: ${elapsed}s`);
     console.log(`Tasks: ${totalTasks} (${avgPerTask}s avg)`);
     console.log(`Results: ${stats.totalResults} flight options saved`);
+    console.log(`CAPTCHAs: ${stats.totalCaptchas}`);
     if (stats.totalErrors > 0) {
       console.log(`Errors: ${stats.totalErrors}`);
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Fatal error: ${msg}`);
-    await completeJob(jobId, msg);
+    await completeJob(jobId, stats.totalCaptchas, msg);
     process.exit(1);
   } finally {
     if (browser) await browser.close();
