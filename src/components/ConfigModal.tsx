@@ -218,7 +218,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto mt-4 min-h-0">
+        <div className="flex-1 overflow-y-auto mt-4 min-h-0 pr-3 scrollbar-thin">
           {activeTab === "group" ? (
             <div className="space-y-3">
               {/* Destination */}
