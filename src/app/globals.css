@@ -146,3 +146,14 @@
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgb(82 82 91 / 0.7);
 }
+
+/* Shimmer animation for loading skeletons */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgb(63 63 70 / 0.3) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}

@@ -226,7 +226,7 @@ export function JobsPanel({ runs }: JobsPanelProps) {
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-zinc-950 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden"
+            className="bg-zinc-950 border border-zinc-700 shadow-2xl w-full h-full sm:max-w-2xl sm:max-h-[80vh] sm:h-auto rounded-none sm:rounded-xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}

@@ -199,61 +199,101 @@ export function AirbnbGrid({
           </button>
 
           {showAll && (
-            <div className="mt-3 border border-zinc-800 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-zinc-900/80 text-zinc-400 text-xs uppercase tracking-wider">
-                    <th className="text-left px-3 py-2">Name</th>
-                    <th className="text-right px-3 py-2">Rating</th>
-                    <th className="text-right px-3 py-2">Reviews</th>
-                    <th className="text-right px-3 py-2">Beds</th>
-                    <th className="text-right px-3 py-2">$/person/night</th>
-                    <th className="text-right px-3 py-2">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rest.map((listing, i) => (
-                    <tr
-                      key={listing.id ?? i}
-                      className="border-t border-zinc-800/50 hover:bg-zinc-900/50 transition-colors"
-                    >
-                      <td className="px-3 py-2">
-                        <a
-                          href={listing.airbnb_url ?? "#"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-zinc-200 hover:text-sky-400 transition-colors line-clamp-1"
-                        >
-                          {listing.listing_name ?? "Villa in Tulum"}
-                          {listing.superhost && (
-                            <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30">
-                              Superhost
-                            </span>
-                          )}
-                        </a>
-                      </td>
-                      <td className="text-right px-3 py-2 text-zinc-300 font-mono">
-                        {listing.rating ?? "-"}
-                      </td>
-                      <td className="text-right px-3 py-2 text-zinc-400 font-mono">
-                        {listing.review_count ?? "-"}
-                      </td>
-                      <td className="text-right px-3 py-2 text-zinc-400 font-mono">
-                        {listing.bedrooms && listing.bedrooms > 0
-                          ? listing.bedrooms
-                          : "-"}
-                      </td>
-                      <td className="text-right px-3 py-2 text-zinc-100 font-mono font-semibold">
+            <>
+              {/* Mobile: compact cards */}
+              <div className="mt-3 space-y-2 sm:hidden">
+                {rest.map((listing, i) => (
+                  <a
+                    key={listing.id ?? i}
+                    href={listing.airbnb_url ?? "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 p-3 rounded-lg border border-zinc-800 bg-zinc-900/30 hover:bg-zinc-900/60 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-zinc-200 truncate">
+                        {listing.listing_name ?? "Villa in Tulum"}
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 mt-0.5">
+                        {listing.rating != null && (
+                          <span className="flex items-center gap-0.5">
+                            <svg className="w-3 h-3 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                              <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                            {listing.rating}
+                          </span>
+                        )}
+                        {listing.review_count != null && <span>({listing.review_count})</span>}
+                        {listing.bedrooms != null && listing.bedrooms > 0 && <span>{listing.bedrooms}bd</span>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-sm font-bold font-mono text-zinc-100">
                         ${listing.price_per_person_per_night?.toFixed(0) ?? "?"}
-                      </td>
-                      <td className="text-right px-3 py-2 text-zinc-400 font-mono">
-                        ${listing.total_stay_cost?.toFixed(0) ?? "?"}
-                      </td>
+                      </div>
+                      <div className="text-[10px] text-zinc-500">/pp/night</div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+
+              {/* Desktop: table */}
+              <div className="mt-3 border border-zinc-800 rounded-xl overflow-hidden hidden sm:block">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-zinc-900/80 text-zinc-400 text-xs uppercase tracking-wider">
+                      <th className="text-left px-3 py-2">Name</th>
+                      <th className="text-right px-3 py-2">Rating</th>
+                      <th className="text-right px-3 py-2">Reviews</th>
+                      <th className="text-right px-3 py-2">Beds</th>
+                      <th className="text-right px-3 py-2">$/person/night</th>
+                      <th className="text-right px-3 py-2">Total</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {rest.map((listing, i) => (
+                      <tr
+                        key={listing.id ?? i}
+                        className="border-t border-zinc-800/50 hover:bg-zinc-900/50 transition-colors"
+                      >
+                        <td className="px-3 py-2">
+                          <a
+                            href={listing.airbnb_url ?? "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-zinc-200 hover:text-sky-400 transition-colors line-clamp-1"
+                          >
+                            {listing.listing_name ?? "Villa in Tulum"}
+                            {listing.superhost && (
+                              <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                Superhost
+                              </span>
+                            )}
+                          </a>
+                        </td>
+                        <td className="text-right px-3 py-2 text-zinc-300 font-mono">
+                          {listing.rating ?? "-"}
+                        </td>
+                        <td className="text-right px-3 py-2 text-zinc-400 font-mono">
+                          {listing.review_count ?? "-"}
+                        </td>
+                        <td className="text-right px-3 py-2 text-zinc-400 font-mono">
+                          {listing.bedrooms && listing.bedrooms > 0
+                            ? listing.bedrooms
+                            : "-"}
+                        </td>
+                        <td className="text-right px-3 py-2 text-zinc-100 font-mono font-semibold">
+                          ${listing.price_per_person_per_night?.toFixed(0) ?? "?"}
+                        </td>
+                        <td className="text-right px-3 py-2 text-zinc-400 font-mono">
+                          ${listing.total_stay_cost?.toFixed(0) ?? "?"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

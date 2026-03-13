@@ -134,7 +134,8 @@ export function FlightAllOptions({
 
       {expanded && (
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
+          <p className="text-xs text-zinc-500 mb-2 sm:hidden">Scroll to see all options &rarr;</p>
+          <table className="min-w-[600px] w-full text-sm">
             <thead>
               <tr className="text-xs text-zinc-500 uppercase">
                 <th className="text-left py-2 px-2">City</th>

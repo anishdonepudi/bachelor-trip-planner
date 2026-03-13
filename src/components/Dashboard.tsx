@@ -12,8 +12,9 @@ import {
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
 import { DEFAULT_CITIES } from "@/config/default-config";
-import { SCORING_ALGORITHMS } from "@/lib/constants";
+import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
 import { FilterBar } from "./FilterBar";
+import { FilterSheet } from "./FilterSheet";
 import { WeekendCard } from "./WeekendCard";
 import { ScrapeStatus } from "./ScrapeStatus";
 import { ConfigModal } from "./ConfigModal";
@@ -21,6 +22,7 @@ import { LoadingSkeleton } from "./LoadingSkeleton";
 import { DataUpdateModal } from "./DataUpdateModal";
 import { JobsPanel } from "./JobsPanel";
 import { ComboSummary } from "./ComboSummary";
+import { MobileNav } from "./MobileNav";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -39,6 +41,10 @@ export function Dashboard() {
   const [showComboView, setShowComboView] = useState(true);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [scrapeTriggered, setScrapeTriggered] = useState(false);
+  const [mobileTab, setMobileTab] = useState<"weekends" | "filters" | "settings" | "jobs">("weekends");
+  const [showFilterSheet, setShowFilterSheet] = useState(false);
+  const [showMobileConfig, setShowMobileConfig] = useState(false);
+  const [showMobileJobs, setShowMobileJobs] = useState(false);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
 
   const { data: weekendData, isLoading: weekendsLoading, mutate: mutateWeekends } = useSWR<WeekendData>(
@@ -179,16 +185,39 @@ export function Dashboard() {
     ((weekendData.flights?.length ?? 0) > 0 ||
       (weekendData.airbnbListings?.length ?? 0) > 0);
 
+  // Count active filters (non-default selections)
+  const activeFilterCount = [
+    flightCategory !== "nonstop_carryon",
+    budgetTier !== "budget",
+    priorityCity !== "all",
+    scoringAlgorithm !== "zscore",
+  ].filter(Boolean).length;
+
+  const handleMobileTab = (tab: "weekends" | "filters" | "settings" | "jobs") => {
+    setMobileTab(tab);
+    if (tab === "filters") {
+      setShowFilterSheet(true);
+    } else if (tab === "settings") {
+      setShowMobileConfig(true);
+    } else if (tab === "jobs") {
+      setShowMobileJobs(true);
+    }
+    // Always reset to weekends tab after opening a panel
+    if (tab !== "weekends") {
+      setTimeout(() => setMobileTab("weekends"), 100);
+    }
+  };
+
+  const flightCatLabel = FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
+  const budgetLabel = BUDGET_TIERS.find((t) => t.value === budgetTier)?.label ?? budgetTier;
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Header */}
       <header className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div className="relative">
-            <div className="absolute -left-10 top-1/2 -translate-y-1/2">
-              <JobsPanel runs={scrapeData?.runs ?? []} />
-            </div>
-            <h1 className="text-xl font-bold text-zinc-100">
+        <div className="max-w-5xl mx-auto px-4 py-3 sm:py-4 flex items-center justify-between gap-2">
+          <div>
+            <h1 className="text-lg sm:text-xl font-bold text-zinc-100">
               TripSync
             </h1>
             <p className="text-xs text-zinc-500 mt-0.5">
@@ -196,26 +225,31 @@ export function Dashboard() {
               {cities.reduce((s, c) => s + c.people, 0)} people
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            <div className="hidden md:block">
+              <JobsPanel runs={scrapeData?.runs ?? []} />
+            </div>
             <ScrapeStatus
               lastUpdated={scrapeData?.lastFlightUpdate ?? null}
               isRunning={isRunning}
               onTriggered={handleScrapeTriggered}
             />
-            <ConfigModal
-              cities={cities}
-              excludedDates={excludedDates}
-              destinationAirport={destinationAirport}
-              destinationCity={destinationCity}
-              onSave={(newCities, newExcluded, newDestination, newDestCity) => {
-                const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDestination !== destinationAirport || newDestCity !== destinationCity;
-                setCities(newCities);
-                setExcludedDates(newExcluded);
-                setDestinationAirport(newDestination);
-                setDestinationCity(newDestCity);
-                if (citiesChanged) setConfigChanged(true);
-              }}
-            />
+            <div className="hidden md:block">
+              <ConfigModal
+                cities={cities}
+                excludedDates={excludedDates}
+                destinationAirport={destinationAirport}
+                destinationCity={destinationCity}
+                onSave={(newCities, newExcluded, newDestination, newDestCity) => {
+                  const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDestination !== destinationAirport || newDestCity !== destinationCity;
+                  setCities(newCities);
+                  setExcludedDates(newExcluded);
+                  setDestinationAirport(newDestination);
+                  setDestinationCity(newDestCity);
+                  if (citiesChanged) setConfigChanged(true);
+                }}
+              />
+            </div>
           </div>
         </div>
       </header>
@@ -274,8 +308,36 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* Mobile quick filter chips */}
+      {hasData && !weekendsLoading && (
+        <div className="md:hidden border-b border-zinc-800/50 bg-zinc-950/90">
+          <div className="flex overflow-x-auto gap-2 px-4 py-2.5 whitespace-nowrap scrollbar-thin">
+            <button
+              onClick={() => setShowFilterSheet(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-sky-500/15 text-sky-300 border border-sky-500/30 shrink-0"
+            >
+              {flightCatLabel}
+            </button>
+            <button
+              onClick={() => setShowFilterSheet(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 shrink-0"
+            >
+              {budgetLabel}
+            </button>
+            {priorityCity !== "all" && (
+              <button
+                onClick={() => setShowFilterSheet(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0"
+              >
+                {priorityCity}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-5xl mx-auto px-4 py-6 pb-24 md:pb-6 space-y-6">
         {weekendsLoading ? (
           <LoadingSkeleton />
         ) : (
@@ -306,18 +368,20 @@ export function Dashboard() {
               </div>
             )}
 
-            {/* Filters */}
-            <FilterBar
-              flightCategory={flightCategory}
-              budgetTier={budgetTier}
-              priorityCity={priorityCity}
-              scoringAlgorithm={scoringAlgorithm}
-              cities={cities}
-              onFlightCategoryChange={setFlightCategory}
-              onBudgetTierChange={setBudgetTier}
-              onPriorityCityChange={setPriorityCity}
-              onScoringAlgorithmChange={setScoringAlgorithm}
-            />
+            {/* Filters — desktop only */}
+            <div className="hidden md:block">
+              <FilterBar
+                flightCategory={flightCategory}
+                budgetTier={budgetTier}
+                priorityCity={priorityCity}
+                scoringAlgorithm={scoringAlgorithm}
+                cities={cities}
+                onFlightCategoryChange={setFlightCategory}
+                onBudgetTierChange={setBudgetTier}
+                onPriorityCityChange={setPriorityCity}
+                onScoringAlgorithmChange={setScoringAlgorithm}
+              />
+            </div>
 
             {/* Weekend Cards */}
             {!hasData ? (
@@ -377,6 +441,82 @@ export function Dashboard() {
         open={showUpdateModal}
         onRefresh={handleDataRefresh}
       />
+
+      {/* Mobile bottom nav */}
+      <MobileNav
+        activeTab={mobileTab}
+        onTabChange={handleMobileTab}
+        activeFilterCount={activeFilterCount}
+      />
+
+      {/* Mobile filter sheet */}
+      <FilterSheet
+        open={showFilterSheet}
+        onClose={() => setShowFilterSheet(false)}
+        flightCategory={flightCategory}
+        budgetTier={budgetTier}
+        priorityCity={priorityCity}
+        scoringAlgorithm={scoringAlgorithm}
+        cities={cities}
+        onFlightCategoryChange={setFlightCategory}
+        onBudgetTierChange={setBudgetTier}
+        onPriorityCityChange={setPriorityCity}
+        onScoringAlgorithmChange={setScoringAlgorithm}
+      />
+
+      {/* Mobile config — full-screen modal */}
+      {showMobileConfig && (
+        <div className="fixed inset-0 z-[100] md:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowMobileConfig(false)} />
+          <div className="absolute inset-0 bg-zinc-950 overflow-y-auto scrollbar-thin">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-800">
+              <h2 className="text-base font-semibold text-zinc-100">Settings</h2>
+              <button onClick={() => setShowMobileConfig(false)} className="p-2 -mr-2 text-zinc-400 hover:text-zinc-200 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 pb-24">
+              <ConfigModal
+                cities={cities}
+                excludedDates={excludedDates}
+                destinationAirport={destinationAirport}
+                destinationCity={destinationCity}
+                onSave={(newCities, newExcluded, newDestination, newDestCity) => {
+                  const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDestination !== destinationAirport || newDestCity !== destinationCity;
+                  setCities(newCities);
+                  setExcludedDates(newExcluded);
+                  setDestinationAirport(newDestination);
+                  setDestinationCity(newDestCity);
+                  if (citiesChanged) setConfigChanged(true);
+                  setShowMobileConfig(false);
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile jobs panel — full-screen */}
+      {showMobileJobs && (
+        <div className="fixed inset-0 z-[100] md:hidden">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowMobileJobs(false)} />
+          <div className="absolute inset-0 bg-zinc-950 overflow-y-auto scrollbar-thin">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 bg-zinc-950/95 backdrop-blur-sm border-b border-zinc-800">
+              <h2 className="text-base font-semibold text-zinc-100">Data Refresh Runs</h2>
+              <button onClick={() => setShowMobileJobs(false)} className="p-2 -mr-2 text-zinc-400 hover:text-zinc-200 min-w-[44px] min-h-[44px] flex items-center justify-center">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4 pb-24">
+              <JobsPanel runs={scrapeData?.runs ?? []} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

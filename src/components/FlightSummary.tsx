@@ -35,7 +35,7 @@ function CityFlightRow({ cost, selectedCategory }: { cost: CostBreakdown; select
     <div className="rounded-lg bg-zinc-800/30 hover:bg-zinc-800/50 transition-colors group">
       <div className="flex items-start gap-3 py-2.5 px-3">
         {/* Left: city label */}
-        <div className="shrink-0 w-28 pt-0.5">
+        <div className="shrink-0 w-20 sm:w-28 pt-0.5">
           <div className="text-sm font-medium text-zinc-300 truncate">{cost.city}</div>
           {cost.people > 1 && (
             <div className="text-[11px] text-zinc-500">{cost.people} ppl</div>
@@ -59,7 +59,7 @@ function CityFlightRow({ cost, selectedCategory }: { cost: CostBreakdown; select
             </span>
           )}
 
-          <div className="text-right min-w-[4.5rem]">
+          <div className="text-right min-w-[3.5rem] sm:min-w-[4.5rem]">
             {cost.flightCost !== null ? (
               cost.flight?.google_flights_url ? (
                 <a
@@ -149,11 +149,11 @@ function CityFlightRow({ cost, selectedCategory }: { cost: CostBreakdown; select
               key={i}
               className="flex items-start gap-3 py-1.5 px-2 rounded bg-zinc-800/40"
             >
-              <div className="shrink-0 w-28" />
+              <div className="hidden sm:block sm:w-28 shrink-0" />
               <div className="min-w-0 flex-1">
                 <FlightDetails flight={alt} />
               </div>
-              <div className="shrink-0 min-w-[4.5rem] text-right">
+              <div className="shrink-0 min-w-[3.5rem] sm:min-w-[4.5rem] text-right">
                 {alt.google_flights_url ? (
                   <a
                     href={alt.google_flights_url}

@@ -158,7 +158,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         Configure
       </DialogTrigger>
       <DialogContent
-        className="bg-zinc-950 border-zinc-800 text-zinc-100 max-w-lg max-h-[85vh] overflow-hidden flex flex-col"
+        className="bg-zinc-950 border-zinc-800 text-zinc-100 max-w-lg h-[100dvh] sm:max-h-[85vh] sm:h-auto rounded-none sm:rounded-xl overflow-hidden flex flex-col"
         initialFocus={false}
         showCloseButton={false}
       >

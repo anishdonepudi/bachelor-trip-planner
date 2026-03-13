@@ -42,6 +42,7 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
       className="relative flex items-center gap-3"
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
+      onClick={() => setShowTooltip((prev) => !prev)}
     >
       <span className="text-sm font-mono text-zinc-500">#{rank}</span>
       <div
@@ -50,10 +51,10 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
         {tier.label}
       </div>
 
-      {/* Hover tooltip */}
+      {/* Hover/tap tooltip */}
       {showTooltip && perCityCosts.length > 0 && (
         <div
-          className="absolute top-full left-0 mt-2 z-50 w-[22rem] rounded-lg bg-zinc-900 border border-zinc-700 shadow-xl p-3 text-xs"
+          className="absolute top-full left-0 mt-2 z-50 w-[calc(100vw-2rem)] sm:w-[22rem] rounded-lg bg-zinc-900 border border-zinc-700 shadow-xl p-3 text-xs"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="text-zinc-400 font-semibold uppercase tracking-wider mb-1">

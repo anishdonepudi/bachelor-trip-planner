@@ -58,14 +58,15 @@ export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStat
   }, []);
 
   return (
-    <div className="flex items-center gap-3 text-sm">
-      <span className="text-zinc-500">
+    <div className="flex items-center gap-1.5 sm:gap-3 text-sm">
+      <span className="hidden sm:inline text-zinc-500">
         Last updated: {getTimeAgo(lastUpdated)}
       </span>
       <button
         onClick={triggerRefresh}
         disabled={refreshing || isRunning}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-medium"
+        className="inline-flex items-center gap-1.5 px-2 py-1.5 sm:px-3 rounded-lg bg-zinc-800 border border-zinc-700 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-xs font-medium"
+        title={`Last updated: ${getTimeAgo(lastUpdated)}`}
       >
         <svg
           className={`w-3.5 h-3.5 ${refreshing || isRunning ? "animate-spin" : ""}`}
@@ -80,10 +81,10 @@ export function ScrapeStatus({ lastUpdated, isRunning, onTriggered }: ScrapeStat
             d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
           />
         </svg>
-        {isRunning ? "Refreshing..." : refreshing ? "Triggering..." : "Refresh Data"}
+        <span className="hidden sm:inline">{isRunning ? "Refreshing..." : refreshing ? "Triggering..." : "Refresh Data"}</span>
       </button>
       {message && (
-        <span className="text-xs text-amber-400">{message}</span>
+        <span className="hidden sm:inline text-xs text-amber-400">{message}</span>
       )}
     </div>
   );

@@ -82,8 +82,68 @@ export function ComboSummary({
         )}
       </div>
 
-      {/* 2x2 grid of flight categories */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Mobile: horizontal carousel */}
+      <div className="flex overflow-x-auto snap-x snap-mandatory gap-4 sm:hidden pb-2 -mx-4 px-4 scrollbar-thin">
+        {FLIGHT_CATEGORIES.map((fc) => {
+          const combos = comboResults.filter(
+            (r) => r.flightCategory === fc.value
+          );
+          return (
+            <div key={fc.value} className={`min-w-[85vw] snap-center rounded-xl border bg-zinc-950/50 overflow-hidden shrink-0 ${
+              fc.value === activeFlightCategory ? "border-sky-500/40" : "border-zinc-800"
+            }`}>
+              <div className="px-4 py-3 bg-zinc-900/50 border-b border-zinc-800">
+                <h3 className="text-sm font-semibold text-zinc-200">
+                  {fc.label}
+                </h3>
+                <p className="text-xs text-zinc-500">{fc.description}</p>
+              </div>
+              <div className="divide-y divide-zinc-800/50">
+                {combos.map((combo) => (
+                  <button
+                    key={combo.budgetTier}
+                    className={`w-full px-4 py-3 text-left hover:bg-zinc-900/40 transition-colors cursor-pointer ${
+                      combo.flightCategory === activeFlightCategory && combo.budgetTier === activeBudgetTier
+                        ? "bg-sky-950/30"
+                        : ""
+                    }`}
+                    onClick={() => onSelectCombo(combo.flightCategory, combo.budgetTier)}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-medium text-zinc-300">
+                        {combo.budgetLabel}
+                      </span>
+                      <span className="text-xs text-zinc-600">
+                        {combo.budgetRange}
+                      </span>
+                      <svg className="w-3 h-3 text-zinc-600 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                    {combo.top3.length === 0 ? (
+                      <p className="text-xs text-zinc-600 italic">No data</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {combo.top3.map((ws, i) => (
+                          <WeekendPill
+                            key={ws.dateRange.id}
+                            weekend={ws}
+                            rank={i + 1}
+                            priorityCity={priorityCity}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop: 2x2 grid */}
+      <div className="hidden sm:grid grid-cols-2 gap-4">
         {FLIGHT_CATEGORIES.map((fc) => {
           const combos = comboResults.filter(
             (r) => r.flightCategory === fc.value
@@ -180,18 +240,24 @@ function WeekendPill({
       </div>
       {selectedCityCost && selectedCityCost.perPersonTotal != null && (
         <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 shrink-0">
-          <span className="text-[10px] text-zinc-500">
-            ${selectedCityCost.flightCost ?? 0}
-          </span>
-          <span className="text-zinc-600 text-[10px]">+</span>
-          <span className="text-[10px] text-zinc-500">
-            ${Math.round(selectedCityCost.stayCost)}
-          </span>
-          <span className="text-zinc-600 text-[10px]">=</span>
-          <span className="text-xs font-semibold font-mono text-cyan-300">
+          {/* Mobile: total only */}
+          <span className="sm:hidden text-xs font-semibold font-mono text-cyan-300">
             ${Math.round(selectedCityCost.perPersonTotal)}
           </span>
-          <span className="text-[10px] text-cyan-400/70">pp</span>
+          <span className="sm:hidden text-[10px] text-cyan-400/70">pp</span>
+          {/* Desktop: detailed breakdown */}
+          <span className="hidden sm:inline text-[10px] text-zinc-500">
+            ${selectedCityCost.flightCost ?? 0}
+          </span>
+          <span className="hidden sm:inline text-zinc-600 text-[10px]">+</span>
+          <span className="hidden sm:inline text-[10px] text-zinc-500">
+            ${Math.round(selectedCityCost.stayCost)}
+          </span>
+          <span className="hidden sm:inline text-zinc-600 text-[10px]">=</span>
+          <span className="hidden sm:inline text-xs font-semibold font-mono text-cyan-300">
+            ${Math.round(selectedCityCost.perPersonTotal)}
+          </span>
+          <span className="hidden sm:inline text-[10px] text-cyan-400/70">pp</span>
         </div>
       )}
     </div>

@@ -31,7 +31,7 @@ export function FilterBar({
   const activeAlgo = SCORING_ALGORITHMS.find((a) => a.value === scoringAlgorithm);
 
   return (
-    <div className="p-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl space-y-4">
+    <div className="p-4 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 rounded-xl space-y-4 sticky top-[65px] z-40">
       <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Filters</h2>
       <div className="flex flex-col sm:flex-row gap-6">
       {/* Flight Category */}
