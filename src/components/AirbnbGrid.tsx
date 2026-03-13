@@ -14,6 +14,31 @@ interface AirbnbGridProps {
 
 const BAYESIAN_M = 5;
 
+function AmenityPills({ amenities }: { amenities: string[] }) {
+  const [showAll, setShowAll] = useState(false);
+  if (amenities.length === 0) return null;
+  const visible = showAll ? amenities : amenities.slice(0, 4);
+  const hasMore = amenities.length > 4;
+
+  return (
+    <div className="flex flex-wrap gap-1 mb-2">
+      {visible.map((a) => (
+        <span key={a} className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-3)] border border-[var(--border-default)]">
+          {a}
+        </span>
+      ))}
+      {hasMore && (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowAll(!showAll); }}
+          className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--blue)] hover:text-[var(--text-1)] border border-[var(--border-default)] transition-colors duration-150"
+        >
+          {showAll ? "Show less" : `+${amenities.length - 4}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function rankListings(tierListings: AirbnbListingRow[]) {
   const rated = tierListings.filter((l) => (l.rating ?? 0) > 0);
   const avgRating = rated.length > 0
@@ -147,7 +172,11 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                   )}
                   {listing.review_count != null && <span>({listing.review_count})</span>}
                   {listing.bedrooms != null && listing.bedrooms > 0 && <span>{listing.bedrooms} bed</span>}
+                  {listing.bathrooms != null && listing.bathrooms > 0 && <span>{listing.bathrooms} bath</span>}
                 </div>
+                {listing.amenities && listing.amenities.length > 0 && (
+                  <AmenityPills amenities={listing.amenities} />
+                )}
                 <div className="flex items-baseline gap-1">
                   <span className="text-base font-bold text-[var(--gold)] font-mono tabular-nums">
                     ${listing.price_per_person_per_night?.toFixed(0) ?? "?"}
@@ -194,6 +223,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                         )}
                         {listing.review_count != null && <span>({listing.review_count})</span>}
                         {listing.bedrooms != null && listing.bedrooms > 0 && <span>{listing.bedrooms} bed</span>}
+                        {listing.bathrooms != null && listing.bathrooms > 0 && <span>{listing.bathrooms} bath</span>}
                       </div>
                     </div>
                     <div className="text-right shrink-0">
@@ -214,6 +244,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                       <th className="text-right px-3 py-2 font-semibold">Rating</th>
                       <th className="text-right px-3 py-2 font-semibold">Reviews</th>
                       <th className="text-right px-3 py-2 font-semibold">Beds</th>
+                      <th className="text-right px-3 py-2 font-semibold">Baths</th>
                       <th className="text-right px-3 py-2 font-semibold">$/pp/night</th>
                       <th className="text-right px-3 py-2 font-semibold">Total</th>
                     </tr>
@@ -236,6 +267,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                         <td className="text-right px-3 py-2 font-mono tabular-nums text-[var(--text-1)]">{listing.rating ?? "-"}</td>
                         <td className="text-right px-3 py-2 font-mono tabular-nums text-[var(--text-2)]">{listing.review_count ?? "-"}</td>
                         <td className="text-right px-3 py-2 font-mono tabular-nums text-[var(--text-2)]">{listing.bedrooms && listing.bedrooms > 0 ? listing.bedrooms : "-"}</td>
+                        <td className="text-right px-3 py-2 font-mono tabular-nums text-[var(--text-2)]">{listing.bathrooms && listing.bathrooms > 0 ? listing.bathrooms : "-"}</td>
                         <td className="text-right px-3 py-2 font-mono tabular-nums font-semibold text-[var(--text-1)]">${listing.price_per_person_per_night?.toFixed(0) ?? "?"}</td>
                         <td className="text-right px-3 py-2 font-mono tabular-nums text-[var(--text-2)]">${listing.total_stay_cost?.toFixed(0) ?? "?"}</td>
                       </tr>

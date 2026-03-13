@@ -530,7 +530,8 @@ async function scrapeSingleCategory(
   isCarryon: boolean,
   originAirport: string,
   departDate: string,
-  returnDate: string
+  returnDate: string,
+  logTag: string
 ): Promise<ScrapeResult[]> {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
@@ -554,9 +555,9 @@ async function scrapeSingleCategory(
     } catch {
       const captcha = await page.$('iframe[src*="recaptcha"], #captcha-form, .g-recaptcha');
       if (captcha) {
-        console.warn(`      [${category}] CAPTCHA detected, skipping`);
+        console.warn(`      ${logTag} [${category}] CAPTCHA detected, skipping`);
       } else {
-        console.warn(`      [${category}] No flight results found, skipping`);
+        console.warn(`      ${logTag} [${category}] No flight results found, skipping`);
       }
       return results;
     }
@@ -571,7 +572,7 @@ async function scrapeSingleCategory(
       if (filterApplied) {
         await new Promise((r) => setTimeout(r, POST_FILTER_DELAY_MS));
         outbound = await waitForApiResponse(captured, preFilterCount, 10_000);
-        console.log(`      [${category}] Carry-on filter applied`);
+        console.log(`      ${logTag} [${category}] Carry-on filter applied`);
       }
     }
 
@@ -580,12 +581,12 @@ async function scrapeSingleCategory(
     }
 
     if (!outbound) {
-      console.warn(`      [${category}] No outbound API data, skipping`);
+      console.warn(`      ${logTag} [${category}] No outbound API data, skipping`);
       return results;
     }
 
     if (!state.apiUrl) {
-      console.warn(`      [${category}] No API URL captured, skipping`);
+      console.warn(`      ${logTag} [${category}] No API URL captured, skipping`);
       return results;
     }
 
@@ -593,7 +594,7 @@ async function scrapeSingleCategory(
     const outboundList = stopType === "nonstop" ? outbound.nonstop : outbound.onestop;
     const topCount = Math.min(TOP_N_PER_CATEGORY, outboundList.length);
 
-    console.log(`      [${category}] ${outboundList.length} outbound, fetching returns for top ${topCount}`);
+    console.log(`      ${logTag} [${category}] ${outboundList.length} outbound, fetching returns for top ${topCount}`);
 
     if (topCount === 0) return results;
 
@@ -618,11 +619,11 @@ async function scrapeSingleCategory(
 
       // Validate: skip if no valid return
       if (!bestReturn) {
-        console.log(`      [${category}] #${i + 1}: no return, skipping`);
+        console.log(`      ${logTag} [${category}] #${i + 1}: no return, skipping`);
         continue;
       }
       if (stopType === "nonstop" && bestReturn.stops > 0) {
-        console.log(`      [${category}] #${i + 1}: return has ${bestReturn.stops} stops, skipping`);
+        console.log(`      ${logTag} [${category}] #${i + 1}: return has ${bestReturn.stops} stops, skipping`);
         continue;
       }
 
@@ -660,7 +661,8 @@ async function scrapeAirportDate(
   baseUrl: string,
   airport: string,
   departDate: string,
-  returnDate: string
+  returnDate: string,
+  logTag: string
 ): Promise<ScrapeResult[]> {
   const categoryDefs: { category: FlightCategory; stopType: "nonstop" | "onestop"; isCarryon: boolean }[] = [
     { category: "nonstop_no_carryon", stopType: "nonstop", isCarryon: false },
@@ -678,7 +680,7 @@ async function scrapeAirportDate(
       new Promise<ScrapeResult[]>((resolve) => setTimeout(resolve, delay)).then(() =>
         scrapeSingleCategory(
           browser, baseUrl, def.category, def.stopType, def.isCarryon,
-          airport, departDate, returnDate
+          airport, departDate, returnDate, logTag
         )
       )
     );
@@ -739,9 +741,10 @@ async function processTask(
   let scrapeResults: ScrapeResult[] = [];
 
   try {
+    const logTag = `[${dateRange.id}]`;
     scrapeResults = await scrapeAirportDate(
       browser, baseUrl, airport,
-      dateRange.departDate, dateRange.returnDate
+      dateRange.departDate, dateRange.returnDate, logTag
     );
     stats.totalResults += scrapeResults.length;
     console.log(`    Total results: ${scrapeResults.length}`);

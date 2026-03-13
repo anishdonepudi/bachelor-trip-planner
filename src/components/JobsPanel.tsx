@@ -159,8 +159,8 @@ export function JobsPanel({ runs }: JobsPanelProps) {
         onClick={() => setOpen(true)}
         className={`inline-flex items-center justify-center w-7 h-7 rounded-md border transition-all duration-150 ${
           hasRunning
-            ? "bg-[var(--blue-soft)] border-[var(--blue-border)] text-[var(--blue)]"
-            : "bg-transparent border-transparent text-[var(--text-3)] hover:text-[var(--text-2)] hover:bg-[var(--surface-2)]"
+            ? "bg-transparent border-transparent text-transparent hover:bg-[var(--blue-soft)] hover:border-[var(--blue-border)] hover:text-[var(--blue)]"
+            : "bg-[var(--surface-1)] border-[var(--border-default)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-2)] hover:border-[var(--border-hover)]"
         }`}
         title="Job History"
       >
