@@ -85,19 +85,28 @@ export function Dashboard() {
   // Granular progress: use per-task progress from scrape_jobs when available
   const refreshProgress = useMemo(() => {
     if (!activeRun || expectedJobCount === 0) return 0;
+    const runningJobCount = activeRun.jobs.filter((j) => j.status === "running").length;
+    const queuedJobCount = activeRun.jobs.filter((j) => j.status === "queued").length;
     const sp = scrapeData?.scraperProgress;
-    if (sp && sp.total > 0) {
-      // Weighted: completed GitHub jobs as 100% + running jobs' internal progress
-      const runningJobCount = activeRun.jobs.filter((j) => j.status === "running").length;
-      const queuedJobCount = activeRun.jobs.filter((j) => j.status === "queued").length;
-      const doneWeight = completedJobCount * 1;
-      const runningWeight = runningJobCount > 0 ? (sp.completed / sp.total) * runningJobCount : 0;
-      const totalWeight = completedJobCount + runningJobCount + queuedJobCount;
-      if (totalWeight === 0) return 0;
-      return Math.round(((doneWeight + runningWeight) / totalWeight) * 100);
+
+    let progress: number;
+    if (sp && sp.total > 0 && runningJobCount > 0) {
+      // Weighted: completed jobs as 100% + running jobs' internal progress
+      // Use expectedJobCount as denominator so unstarted jobs (finalize, etc.) are accounted for
+      const internalRatio = sp.completed / sp.total;
+      const doneWeight = completedJobCount;
+      const runningWeight = internalRatio * runningJobCount;
+      progress = Math.round(((doneWeight + runningWeight) / expectedJobCount) * 100);
+    } else {
+      // Fallback: job-level only
+      progress = Math.round((completedJobCount / expectedJobCount) * 100);
     }
-    // Fallback: job-level only
-    return Math.round((completedJobCount / expectedJobCount) * 100);
+
+    // Never show 100% while jobs are still running or queued
+    if ((runningJobCount > 0 || queuedJobCount > 0) && progress >= 100) {
+      progress = 99;
+    }
+    return progress;
   }, [activeRun, completedJobCount, expectedJobCount, scrapeData?.scraperProgress]);
 
   useEffect(() => {
@@ -110,8 +119,11 @@ export function Dashboard() {
     setTimeout(() => mutateScrape(), 15000);
   }, [mutateScrape]);
 
+  const modalCooldownUntil = useRef<number>(0);
+
   useEffect(() => {
     if (!scrapeData?.lastFlightUpdate) return;
+    if (Date.now() < modalCooldownUntil.current) return;
     if (initialLastUpdated.current === undefined) {
       initialLastUpdated.current = scrapeData.lastFlightUpdate;
     } else if (scrapeData.lastFlightUpdate !== initialLastUpdated.current) {
@@ -123,6 +135,7 @@ export function Dashboard() {
     setShowUpdateModal(false);
     setConfigChanged(false);
     initialLastUpdated.current = scrapeData?.lastFlightUpdate ?? null;
+    modalCooldownUntil.current = Date.now() + 60_000; // ignore changes for 60s after dismissing
     mutateWeekends();
   }, [scrapeData?.lastFlightUpdate, mutateWeekends]);
 
