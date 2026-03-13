@@ -160,7 +160,7 @@ export function JobsPanel({ runs }: JobsPanelProps) {
         className={`inline-flex items-center justify-center w-7 h-7 rounded-md border transition-all duration-150 ${
           hasRunning
             ? "bg-transparent border-transparent text-transparent hover:bg-[var(--blue-soft)] hover:border-[var(--blue-border)] hover:text-[var(--blue)]"
-            : "bg-[var(--surface-1)] border-[var(--border-default)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-2)] hover:border-[var(--border-hover)]"
+            : "bg-transparent border-transparent text-transparent hover:bg-[var(--surface-1)] hover:border-[var(--border-default)] hover:text-[var(--text-2)]"
         }`}
         title="Job History"
       >
