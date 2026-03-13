@@ -159,7 +159,7 @@ async function fetchAirbnbPage(
 
   try {
     const json = JSON.parse(deferredMatch[1]);
-    const listings = parseEmbeddedResults(json);
+    const listings = parseEmbeddedResults(json, checkin, checkout);
     const nextCursor = extractNextCursor(json);
     return { listings, nextCursor };
   } catch (err) {
@@ -221,7 +221,7 @@ async function fetchAirbnbListings(
  * Parse the niobeClientData embedded in the page.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function parseEmbeddedResults(json: any): ScrapedListing[] {
+function parseEmbeddedResults(json: any, checkin: string, checkout: string): ScrapedListing[] {
   const results: ScrapedListing[] = [];
 
   try {
