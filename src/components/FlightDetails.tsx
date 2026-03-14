@@ -23,7 +23,7 @@ export function FlightDetails({ flight }: { flight: FlightOptionRow }) {
   return (
     <div className="space-y-0.5">
       {out && (
-        <div className="flex items-center gap-1 text-[11px] text-[var(--text-2)]">
+        <div className="flex items-center gap-1 text-xs md:text-[11px] text-[var(--text-2)]">
           <span className="font-mono text-[var(--text-1)] font-medium">{apt}</span>
           <svg className="w-3 h-3 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
@@ -57,7 +57,7 @@ export function FlightDetails({ flight }: { flight: FlightOptionRow }) {
         </div>
       )}
       {ret && ret.departTime && (
-        <div className="flex items-center gap-1 text-[11px] text-[var(--text-2)]">
+        <div className="flex items-center gap-1 text-xs md:text-[11px] text-[var(--text-2)]">
           <span className="font-mono text-[var(--text-1)] font-medium">{dest}</span>
           <svg className="w-3 h-3 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />

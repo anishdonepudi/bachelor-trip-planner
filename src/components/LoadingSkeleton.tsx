@@ -37,19 +37,14 @@ export function LoadingSkeleton() {
           className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-0)]"
           style={{ animationDelay: `${i * 50}ms` }}
         >
-          {/* Mobile */}
-          <div className="sm:hidden p-4 space-y-2.5">
-            <div className="flex items-center gap-3">
-              <ShimmerBlock className="h-4 w-8 rounded" />
-              <ShimmerBlock className="h-3 w-10 rounded" />
-              <div className="flex-1" />
-              <ShimmerBlock className="h-5 w-14 rounded" />
+          {/* Mobile — matches compact horizontal card layout */}
+          <div className="sm:hidden flex items-center gap-2.5 px-3 py-2.5 min-h-[72px]">
+            <ShimmerBlock className="h-8 w-8 rounded-md" />
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <ShimmerBlock className="h-4 w-36 rounded" />
+              <ShimmerBlock className="h-3 w-28 rounded" />
             </div>
-            <ShimmerBlock className="h-4 w-40 rounded" />
-            <div className="flex gap-2">
-              <ShimmerBlock className="h-5 w-16 rounded" />
-              <ShimmerBlock className="h-5 w-20 rounded" />
-            </div>
+            <ShimmerBlock className="h-5 w-14 rounded" />
           </div>
 
           {/* Desktop */}

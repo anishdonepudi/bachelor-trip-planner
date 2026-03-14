@@ -56,7 +56,7 @@ export function MobileNav({ activeTab, onTabChange, activeFilterCount = 0 }: Mob
             <button
               key={tab.id}
               onClick={() => onTabChange(tab.id)}
-              className={`relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full min-w-[44px] transition-colors duration-150 ${
+              className={`relative flex flex-col items-center justify-center gap-0.5 flex-1 h-full min-w-[44px] transition-all duration-150 active:scale-95 ${
                 isActive ? "text-[var(--blue)]" : "text-[var(--text-3)]"
               }`}
             >

@@ -206,7 +206,7 @@ export function ComboSummary({
               </svg>
             </button>
           </div>
-          <div className="px-3 py-1.5 border-b border-[var(--border-default)] flex items-center gap-3 text-[10px] text-[var(--text-3)]">
+          <div className="px-3 py-1.5 border-b border-[var(--border-default)] flex items-center gap-3 text-xs md:text-[10px] text-[var(--text-3)]">
             <span>Scoring: 1st = 3pts, 2nd = 2pts, 3rd = 1pt</span>
           </div>
           <div className="divide-y divide-[var(--border-default)]">
@@ -259,7 +259,7 @@ export function ComboSummary({
                     <div className="flex-1 h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
                       <div className="h-full rounded-full bg-[var(--blue)] transition-all duration-300" style={{ width: `${barWidth}%` }} />
                     </div>
-                    <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0">
+                    <span className="text-xs md:text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0">
                       avg {avgScore} &middot; in {appearances}/{totalCombos}
                     </span>
                   </div>
