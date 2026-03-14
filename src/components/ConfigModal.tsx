@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange, TripDuration } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
+import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
 import {
   Dialog,
@@ -147,15 +148,6 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     return dates;
   }, [monthRange]);
 
-  // Prune excluded dates that fall outside the current month range
-  const seasonDateSet = useMemo(() => new Set(seasonDates.map(d => d.date)), [seasonDates]);
-  useEffect(() => {
-    setExcludedDates(prev => {
-      const filtered = prev.filter(d => seasonDateSet.has(d));
-      return filtered.length === prev.length ? prev : filtered;
-    });
-  }, [seasonDateSet]);
-
   const monthGroups = useMemo(() => {
     const groups: { month: string; dates: typeof seasonDates }[] = [];
     for (const d of seasonDates) {
@@ -165,6 +157,56 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     }
     return groups;
   }, [seasonDates]);
+
+  // Compute which dates fall within potential trips
+  const potentialTrips = useMemo(() => generateDateRanges(monthRange, tripDuration), [monthRange, tripDuration]);
+  const tripDateSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const trip of potentialTrips) {
+      const current = new Date(trip.departDate + "T00:00:00");
+      const end = new Date(trip.returnDate + "T00:00:00");
+      while (current <= end) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, "0");
+        const d = String(current.getDate()).padStart(2, "0");
+        set.add(`${y}-${m}-${d}`);
+        current.setDate(current.getDate() + 1);
+      }
+    }
+    return set;
+  }, [potentialTrips]);
+
+  // Map each date to its trip(s) for visual grouping — track start/end/middle
+  const tripPositionMap = useMemo(() => {
+    const map = new Map<string, { isStart: boolean; isEnd: boolean }>();
+    for (const trip of potentialTrips) {
+      const current = new Date(trip.departDate + "T00:00:00");
+      const end = new Date(trip.returnDate + "T00:00:00");
+      while (current <= end) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, "0");
+        const d = String(current.getDate()).padStart(2, "0");
+        const key = `${y}-${m}-${d}`;
+        const existing = map.get(key);
+        const isStart = current.getTime() === new Date(trip.departDate + "T00:00:00").getTime();
+        const isEnd = current.getTime() === end.getTime();
+        map.set(key, {
+          isStart: existing ? existing.isStart || isStart : isStart,
+          isEnd: existing ? existing.isEnd || isEnd : isEnd,
+        });
+        current.setDate(current.getDate() + 1);
+      }
+    }
+    return map;
+  }, [potentialTrips]);
+
+  // Prune excluded dates that fall outside potential trip windows
+  useEffect(() => {
+    setExcludedDates(prev => {
+      const filtered = prev.filter(d => tripDateSet.has(d));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [tripDateSet]);
 
   // Flight category helpers
   const addFlightCategory = () => {
@@ -539,9 +581,14 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
               </div>
             </div>
 
-            <p className="text-xs text-[var(--text-2)] leading-relaxed">
-              Tap dates to block them. Overlapping weekends are excluded from results.
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-[var(--text-2)] leading-relaxed">
+                Tap highlighted dates to block them. Trips overlapping blocked dates are excluded.
+              </p>
+              <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">
+                {potentialTrips.length} trips
+              </span>
+            </div>
             <div className="space-y-4">
               {monthGroups.map((group) => {
                 const firstDow = group.dates[0].dayOfWeek;
@@ -556,17 +603,32 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                       {group.dates.map((d) => {
                         const excluded = excludedDates.includes(d.date);
                         const dayNum = new Date(d.date + "T00:00:00").getDate();
-                        const isWeekend = d.dayOfWeek === 0 || d.dayOfWeek === 6;
+                        const inTrip = tripDateSet.has(d.date);
+                        const pos = tripPositionMap.get(d.date);
+
+                        if (!inTrip) {
+                          return (
+                            <div
+                              key={d.date}
+                              className="py-2 flex items-center justify-center rounded text-sm min-h-[36px] text-[var(--text-3)] opacity-30"
+                            >
+                              {dayNum}
+                            </div>
+                          );
+                        }
+
                         return (
                           <button
                             key={d.date}
                             onClick={() => toggleDate(d.date)}
-                            className={`py-2 flex items-center justify-center rounded text-sm transition-all duration-100 min-h-[36px] ${
+                            className={`py-2 flex items-center justify-center text-sm transition-all duration-100 min-h-[36px] relative ${
+                              pos?.isStart && pos?.isEnd ? "rounded" :
+                              pos?.isStart ? "rounded-l" :
+                              pos?.isEnd ? "rounded-r" : ""
+                            } ${
                               excluded
-                                ? "bg-[var(--red-soft)] text-[var(--red)] font-semibold ring-1 ring-[var(--red-border)]"
-                                : isWeekend
-                                  ? "text-[var(--text-3)] hover:bg-[var(--surface-2)]"
-                                  : "text-[var(--text-1)] hover:bg-[var(--surface-2)]"
+                                ? "bg-[var(--red-soft)] text-[var(--red)] font-semibold ring-1 ring-[var(--red-border)] rounded"
+                                : "bg-[var(--blue-soft)] text-[var(--text-1)] hover:bg-[var(--blue-soft)] hover:brightness-95"
                             }`}
                           >
                             {dayNum}
