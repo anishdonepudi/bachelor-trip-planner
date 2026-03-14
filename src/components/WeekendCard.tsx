@@ -9,100 +9,169 @@ import { ScoreBadge } from "./ScoreBadge";
 import { FlightSummary } from "./FlightSummary";
 import { FlightAllOptions } from "./FlightAllOptions";
 
-const SWIPE_THRESHOLD = 60;
+const CLOSE_THRESHOLD = 0.35;
+const VELOCITY_THRESHOLD = 0.5; // px/ms
 
 function MobileBottomSheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
   const sheetRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const dragStartY = useRef(0);
-  const dragOffsetRef = useRef(0);
-  const isDragging = useRef(false);
+  const dragStartTime = useRef(0);
+  const currentOffset = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  // Lock body scroll
+  useEffect(() => { setMounted(true); }, []);
+
+  // Lock body scroll — position:fixed on body + overflow:hidden on html
   useEffect(() => {
     if (!open) return;
     const scrollY = window.scrollY;
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = "0";
-    document.body.style.right = "0";
+    const body = document.body;
+    const html = document.documentElement;
+
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    html.style.height = `${window.innerHeight}px`;
+    html.style.overflow = "hidden";
+
     return () => {
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.left = "";
-      document.body.style.right = "";
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.width = "";
+      html.style.height = "";
+      html.style.overflow = "";
       window.scrollTo(0, scrollY);
     };
   }, [open]);
 
-  // Swipe-to-dismiss via native touch events
+  // Prevent touchmove on the overlay/backdrop to stop iOS scroll-through
   useEffect(() => {
     if (!open) return;
-    const el = sheetRef.current;
-    if (!el) return;
+    const handler = (e: TouchEvent) => {
+      // Allow touch events inside the sheet content (for scrolling within)
+      if (contentRef.current?.contains(e.target as Node)) return;
+      e.preventDefault();
+    };
+    document.addEventListener("touchmove", handler, { passive: false });
+    return () => document.removeEventListener("touchmove", handler);
+  }, [open]);
 
-    const onTouchStart = (e: TouchEvent) => {
-      if (el.scrollTop > 0) return;
-      dragStartY.current = e.touches[0].clientY;
-      isDragging.current = true;
-      dragOffsetRef.current = 0;
+  // Swipe-to-dismiss via pointer events (works on iOS + Android)
+  useEffect(() => {
+    if (!open) return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+
+    let dragging = false;
+
+    const shouldDrag = (target: EventTarget): boolean => {
+      let el = target as HTMLElement;
+      while (el && el !== sheet) {
+        if (el.scrollHeight > el.clientHeight && el.scrollTop > 0) {
+          return false;
+        }
+        el = el.parentElement as HTMLElement;
+      }
+      return true;
     };
 
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isDragging.current) return;
-      const dy = e.touches[0].clientY - dragStartY.current;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      if (!shouldDrag(e.target!)) return;
+      dragging = true;
+      dragStartY.current = e.clientY;
+      dragStartTime.current = Date.now();
+      currentOffset.current = 0;
+      setIsDragging(true);
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragging) return;
+      const dy = e.clientY - dragStartY.current;
       if (dy > 0) {
-        e.preventDefault();
-        dragOffsetRef.current = dy;
+        currentOffset.current = dy;
         setDragOffset(dy);
+        e.preventDefault();
       } else {
-        isDragging.current = false;
-        dragOffsetRef.current = 0;
+        dragging = false;
+        currentOffset.current = 0;
         setDragOffset(0);
+        setIsDragging(false);
       }
     };
 
-    const onTouchEnd = () => {
-      if (!isDragging.current) return;
-      isDragging.current = false;
-      if (dragOffsetRef.current > SWIPE_THRESHOLD) {
+    const onPointerUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      setIsDragging(false);
+
+      const sheetHeight = sheet.getBoundingClientRect().height;
+      const elapsed = Date.now() - dragStartTime.current;
+      const velocity = currentOffset.current / elapsed;
+
+      if (currentOffset.current > sheetHeight * CLOSE_THRESHOLD || velocity > VELOCITY_THRESHOLD) {
         onClose();
       }
-      dragOffsetRef.current = 0;
+
+      currentOffset.current = 0;
       setDragOffset(0);
     };
 
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    sheet.addEventListener("pointerdown", onPointerDown);
+    sheet.addEventListener("pointermove", onPointerMove);
+    sheet.addEventListener("pointerup", onPointerUp);
+    sheet.addEventListener("pointercancel", onPointerUp);
     return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
+      sheet.removeEventListener("pointerdown", onPointerDown);
+      sheet.removeEventListener("pointermove", onPointerMove);
+      sheet.removeEventListener("pointerup", onPointerUp);
+      sheet.removeEventListener("pointercancel", onPointerUp);
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!mounted || !open) return null;
 
-  const opacity = dragOffset > 0 ? Math.max(0, 1 - dragOffset / (SWIPE_THRESHOLD * 2)) : 1;
+  const opacity = dragOffset > 0 ? Math.max(0, 1 - dragOffset / 300) : 1;
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] md:hidden" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40" style={{ opacity }} />
+    <div className="fixed inset-0 z-[100] md:hidden">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/40"
+        style={{ opacity }}
+        onClick={onClose}
+      />
+      {/* Sheet */}
       <div
         ref={sheetRef}
-        className="absolute bottom-0 left-0 right-0 bg-[var(--surface-0)] rounded-t-2xl border-t border-[var(--border-default)] max-h-[75vh] overflow-y-auto overscroll-none"
+        className="absolute bottom-0 left-0 right-0 bg-[var(--surface-0)] rounded-t-2xl border-t border-[var(--border-default)] max-h-[85vh] flex flex-col"
         style={{
           transform: `translateY(${dragOffset}px)`,
-          transition: isDragging.current ? "none" : "transform 200ms ease-out",
-          opacity,
+          transition: isDragging ? "none" : "transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-center pt-3 pb-2">
+        {/* Drag handle — touch-action:none is critical for iOS */}
+        <div
+          className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing"
+          style={{ touchAction: "none" }}
+        >
           <div className="w-10 h-1 rounded-full bg-[var(--text-3)] opacity-30" />
         </div>
-        <div className="px-4 pb-6">
+        {/* Scrollable content */}
+        <div
+          ref={contentRef}
+          className="flex-1 overflow-y-auto px-4 pb-6"
+          style={{ touchAction: "pan-y", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+        >
           {children}
         </div>
       </div>
