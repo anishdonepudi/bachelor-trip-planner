@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig } from "@/lib/types";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS } from "@/lib/constants";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig } from "@/lib/types";
+import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS, flightCategoryConfigToDisplay } from "@/lib/constants";
 
 interface FilterBarProps {
   flightCategory: FlightCategory;
@@ -10,6 +10,7 @@ interface FilterBarProps {
   priorityCity: string;
   scoringAlgorithm: ScoringAlgorithm;
   cities: CityConfig[];
+  flightCategories?: FlightCategoryConfig[];
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
   onPriorityCityChange: (city: string) => void;
@@ -89,19 +90,23 @@ export function FilterBar({
   priorityCity,
   scoringAlgorithm,
   cities,
+  flightCategories,
   onFlightCategoryChange,
   onBudgetTierChange,
   onPriorityCityChange,
   onScoringAlgorithmChange,
 }: FilterBarProps) {
   const [showAlgoInfo, setShowAlgoInfo] = useState(false);
+  const displayCategories = flightCategories
+    ? flightCategoryConfigToDisplay(flightCategories)
+    : FLIGHT_CATEGORIES;
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-4">
         <SegmentedControl
           label="Flight Type"
-          options={FLIGHT_CATEGORIES.map((c) => ({ value: c.value, label: c.label }))}
+          options={displayCategories.map((c) => ({ value: c.value, label: c.label }))}
           value={flightCategory}
           onChange={onFlightCategoryChange}
         />

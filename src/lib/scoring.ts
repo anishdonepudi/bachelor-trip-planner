@@ -9,16 +9,21 @@ import {
   DateRange,
   WeekendScore,
   FlightOptionRow,
+  FlightCategoryConfig,
 } from "./types";
-import { NIGHTS } from "./constants";
+import { NIGHTS, DEFAULT_FLIGHT_CATEGORIES } from "./constants";
 
-/** Category fallback hierarchy: nonstop_carryon → nonstop_no_carryon → onestop_carryon → onestop_no_carryon */
-const CATEGORY_HIERARCHY: FlightCategory[] = [
-  "nonstop_carryon",
-  "nonstop_no_carryon",
-  "onestop_carryon",
-  "onestop_no_carryon",
-];
+/** Build category fallback hierarchy from configured categories, sorted by quality (nonstop+carryon first) */
+function buildCategoryHierarchy(categories?: FlightCategoryConfig[]): FlightCategory[] {
+  const cats = categories ?? DEFAULT_FLIGHT_CATEGORIES;
+  return [...cats]
+    .sort((a, b) => {
+      if (a.stops !== b.stops) return a.stops - b.stops; // nonstop first
+      if (a.bags !== b.bags) return a.bags === "carryon" ? -1 : 1; // carryon first
+      return 0;
+    })
+    .map(c => c.id);
+}
 
 /**
  * Bayesian weighted rating — balances rating vs review confidence.
@@ -56,7 +61,8 @@ export function calculateWeekendScore(
   airbnbs: AirbnbListingRow[],
   flightCategory: FlightCategory,
   budgetTier: BudgetTier,
-  cities: CityConfig[]
+  cities: CityConfig[],
+  flightCategories?: FlightCategoryConfig[]
 ): { score: number; totalGroupCost: number; perCityCosts: CostBreakdown[]; selectedAirbnbUrl: string | null } {
   const topAirbnb = selectTopAirbnb(airbnbs, budgetTier);
 
@@ -68,8 +74,9 @@ export function calculateWeekendScore(
     (topAirbnb.price_per_person_per_night ?? 0) * NIGHTS;
 
   // Build the fallback order starting from the selected category
-  const startIdx = CATEGORY_HIERARCHY.indexOf(flightCategory);
-  const fallbackOrder = CATEGORY_HIERARCHY.slice(startIdx);
+  const hierarchy = buildCategoryHierarchy(flightCategories);
+  const startIdx = hierarchy.indexOf(flightCategory);
+  const fallbackOrder = startIdx >= 0 ? hierarchy.slice(startIdx) : hierarchy;
 
   let totalGroupCost = 0;
   const perCityCosts: CostBreakdown[] = [];
@@ -134,7 +141,8 @@ export function scoreAllWeekends(
   budgetTier: BudgetTier,
   cities: CityConfig[],
   priorityCity: string = "all",
-  scoringAlgorithm: ScoringAlgorithm = "zscore"
+  scoringAlgorithm: ScoringAlgorithm = "zscore",
+  flightCategories?: FlightCategoryConfig[]
 ): WeekendScore[] {
   // Filter out flights with 2+ stops on either leg (stale data from older scraper runs)
   const maxStops = (f: { outbound_details?: { stops?: number } | null; return_details?: { stops?: number } | null }) =>
@@ -186,7 +194,8 @@ export function scoreAllWeekends(
       weekendAirbnbs,
       flightCategory,
       budgetTier,
-      cities
+      cities,
+      flightCategories
     );
 
     weekendScores.push({

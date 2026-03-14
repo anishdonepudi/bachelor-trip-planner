@@ -9,6 +9,7 @@ import {
   CityConfig,
   WeekendData,
   RankChangeMap,
+  FlightCategoryConfig,
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
@@ -21,7 +22,7 @@ import {
 } from "@/lib/rank-history";
 import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
-import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
+import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES } from "@/lib/constants";
 import { FilterBar } from "./FilterBar";
 import { FilterSheet } from "./FilterSheet";
 import { WeekendCard } from "./WeekendCard";
@@ -38,7 +39,8 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 export function Dashboard() {
   // ── State ──
-  const [flightCategory, setFlightCategory] = useState<FlightCategory>("nonstop_carryon");
+  const [flightCategory, setFlightCategory] = useState<FlightCategory>(DEFAULT_FLIGHT_CATEGORIES[0].id);
+  const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
   const [priorityCity, setPriorityCity] = useState("all");
@@ -166,6 +168,7 @@ export function Dashboard() {
     if (configData?.excluded_dates && Array.isArray(configData.excluded_dates)) setExcludedDates(configData.excluded_dates);
     if (configData?.destination_airport) setDestinationAirport(configData.destination_airport);
     if (configData?.destination_city) setDestinationCity(configData.destination_city);
+    if (configData?.flight_categories && Array.isArray(configData.flight_categories)) setFlightCategories(configData.flight_categories);
   }, [configData]);
 
   // ── Derived data ──
@@ -269,17 +272,23 @@ export function Dashboard() {
     }
   };
 
-  const flightCatLabel = FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
+  const flightCatLabel = flightCategories.find((c) => c.id === flightCategory)?.label ?? FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
   const budgetLabel = BUDGET_TIERS.find((t) => t.value === budgetTier)?.label ?? budgetTier;
 
-  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string) => {
+  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[]) => {
     const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDest !== destinationAirport || newDestCity !== destinationCity;
+    const categoriesChanged = JSON.stringify(newFlightCategories) !== JSON.stringify(flightCategories);
     setCities(newCities);
     setExcludedDates(newExcluded);
     setDestinationAirport(newDest);
     setDestinationCity(newDestCity);
-    if (citiesChanged) setConfigChanged(true);
-  }, [cities, destinationAirport, destinationCity]);
+    setFlightCategories(newFlightCategories);
+    if (citiesChanged || categoriesChanged) setConfigChanged(true);
+    // If the active flight category was removed, fall back to first available
+    if (!newFlightCategories.some(fc => fc.id === flightCategory)) {
+      setFlightCategory(newFlightCategories[0]?.id ?? "nonstop_carryon");
+    }
+  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory]);
 
   // ── Render ──
   return (
@@ -314,6 +323,7 @@ export function Dashboard() {
                 excludedDates={excludedDates}
                 destinationAirport={destinationAirport}
                 destinationCity={destinationCity}
+                flightCategories={flightCategories}
                 onSave={handleConfigSave}
               />
             </div>
@@ -408,6 +418,7 @@ export function Dashboard() {
                     priorityCity={priorityCity}
                     scoringAlgorithm={scoringAlgorithm}
                     cities={cities}
+                    flightCategories={flightCategories}
                     onFlightCategoryChange={setFlightCategory}
                     onBudgetTierChange={setBudgetTier}
                     onPriorityCityChange={setPriorityCity}
@@ -533,6 +544,7 @@ export function Dashboard() {
         priorityCity={priorityCity}
         scoringAlgorithm={scoringAlgorithm}
         cities={cities}
+        flightCategories={flightCategories}
         onFlightCategoryChange={setFlightCategory}
         onBudgetTierChange={setBudgetTier}
         onPriorityCityChange={setPriorityCity}
@@ -566,8 +578,9 @@ export function Dashboard() {
                 excludedDates={excludedDates}
                 destinationAirport={destinationAirport}
                 destinationCity={destinationCity}
-                onSave={(newCities, newExcluded, newDest, newDestCity) => {
-                  handleConfigSave(newCities, newExcluded, newDest, newDestCity);
+                flightCategories={flightCategories}
+                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories) => {
+                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories);
                   setShowMobileConfig(false);
                 }}
                 inlineMode

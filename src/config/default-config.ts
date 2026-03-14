@@ -1,4 +1,7 @@
-import { CityConfig } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig } from "@/lib/types";
+import { DEFAULT_FLIGHT_CATEGORIES } from "@/lib/constants";
+
+export { DEFAULT_FLIGHT_CATEGORIES };
 
 export const DEFAULT_CITIES: CityConfig[] = [
   {

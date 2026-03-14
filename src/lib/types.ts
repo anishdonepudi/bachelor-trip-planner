@@ -56,11 +56,14 @@ export interface AirbnbListing {
   scrapedAt: string;
 }
 
-export type FlightCategory =
-  | "nonstop_carryon"
-  | "nonstop_no_carryon"
-  | "onestop_carryon"
-  | "onestop_no_carryon";
+export interface FlightCategoryConfig {
+  id: string;        // e.g., "nonstop_carryon"
+  stops: 0 | 1;      // 0 = nonstop, 1 = one stop
+  bags: "carryon" | "none";  // carry-on or personal item only
+  label: string;     // display name
+}
+
+export type FlightCategory = string;
 
 export type BudgetTier = "budget" | "mid" | "premium";
 

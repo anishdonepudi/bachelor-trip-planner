@@ -29,7 +29,9 @@ import { generateDateRanges } from "../src/lib/date-ranges";
 import type {
   FlightCategory,
   FlightLeg,
+  FlightCategoryConfig,
 } from "../src/lib/types";
+import { DEFAULT_FLIGHT_CATEGORIES } from "../src/lib/constants";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -49,12 +51,8 @@ const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY
 
 let DESTINATION_AIRPORT = "CUN";
 
-const CATEGORIES_TO_SCRAPE: FlightCategory[] = [
-  "nonstop_carryon",
-  "nonstop_no_carryon",
-  "onestop_carryon",
-  "onestop_no_carryon",
-];
+let CATEGORIES_TO_SCRAPE_CONFIGS: FlightCategoryConfig[] = DEFAULT_FLIGHT_CATEGORIES;
+let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
 
 const TOP_N_PER_CATEGORY = 3;
 const MAX_DURATION_MINUTES = 10 * 60; // 10 hours
@@ -72,7 +70,7 @@ let AIRPORT_TO_CITIES: Record<string, string[]> = {};
 async function loadAirportToCities(): Promise<void> {
   const { data, error } = await supabase
     .from("config")
-    .select("cities, destination_airport")
+    .select("cities, destination_airport, flight_categories")
     .limit(1)
     .single();
 
@@ -95,6 +93,11 @@ async function loadAirportToCities(): Promise<void> {
 
   if (data.destination_airport) {
     DESTINATION_AIRPORT = data.destination_airport;
+  }
+
+  if (data.flight_categories && Array.isArray(data.flight_categories)) {
+    CATEGORIES_TO_SCRAPE_CONFIGS = data.flight_categories;
+    CATEGORIES_TO_SCRAPE = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
   }
 
   console.log(`Loaded config: ${Object.keys(map).length} airports, ${cities.length} cities, destination: ${DESTINATION_AIRPORT}`);
@@ -671,12 +674,11 @@ async function scrapeAirportDate(
   returnDate: string,
   logTag: string
 ): Promise<{ results: ScrapeResult[]; captchaCount: number }> {
-  const categoryDefs: { category: FlightCategory; stopType: "nonstop" | "onestop"; isCarryon: boolean }[] = [
-    { category: "nonstop_no_carryon", stopType: "nonstop", isCarryon: false },
-    { category: "onestop_no_carryon", stopType: "onestop", isCarryon: false },
-    { category: "nonstop_carryon",    stopType: "nonstop", isCarryon: true },
-    { category: "onestop_carryon",    stopType: "onestop", isCarryon: true },
-  ];
+  const categoryDefs = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => ({
+    category: fc.id as FlightCategory,
+    stopType: (fc.stops === 0 ? "nonstop" : "onestop") as "nonstop" | "onestop",
+    isCarryon: fc.bags === "carryon",
+  }));
 
   // Stagger launches to avoid burst requests
   const promises: Promise<CategoryResult>[] = [];

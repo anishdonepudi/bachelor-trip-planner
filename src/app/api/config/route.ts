@@ -28,7 +28,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { cities, destination_airport, destination_city, total_people, excluded_dates, skip_scrape } = body;
+    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, skip_scrape } = body;
 
     const { data: existing } = await supabase
       .from("config")
@@ -46,6 +46,7 @@ export async function PUT(request: Request) {
           destination_city: destination_city ?? null,
           total_people,
           excluded_dates: excluded_dates ?? [],
+          flight_categories: flight_categories ?? null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", existing.id)
@@ -54,7 +55,7 @@ export async function PUT(request: Request) {
     } else {
       result = await supabase
         .from("config")
-        .insert({ cities, destination_airport, destination_city: destination_city ?? null, total_people, excluded_dates: excluded_dates ?? [] })
+        .insert({ cities, destination_airport, destination_city: destination_city ?? null, total_people, excluded_dates: excluded_dates ?? [], flight_categories: flight_categories ?? null })
         .select()
         .single();
     }

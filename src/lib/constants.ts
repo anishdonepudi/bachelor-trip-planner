@@ -1,31 +1,43 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig } from "./types";
+
+export const DEFAULT_FLIGHT_CATEGORIES: FlightCategoryConfig[] = [
+  { id: "nonstop_carryon", stops: 0, bags: "carryon", label: "Nonstop + Carry-on" },
+  { id: "nonstop_no_carryon", stops: 0, bags: "none", label: "Nonstop Basic" },
+  { id: "onestop_carryon", stops: 1, bags: "carryon", label: "1-Stop + Carry-on" },
+  { id: "onestop_no_carryon", stops: 1, bags: "none", label: "1-Stop Basic" },
+];
 
 export const FLIGHT_CATEGORIES: {
   value: FlightCategory;
   label: string;
   description: string;
-}[] = [
-  {
-    value: "nonstop_carryon",
-    label: "Nonstop + Carry-on",
-    description: "Nonstop flight with carry-on bag included",
-  },
-  {
-    value: "nonstop_no_carryon",
-    label: "Nonstop Basic",
-    description: "Nonstop flight, personal item only",
-  },
-  {
-    value: "onestop_carryon",
-    label: "1-Stop + Carry-on",
-    description: "One-stop flight with carry-on bag included",
-  },
-  {
-    value: "onestop_no_carryon",
-    label: "1-Stop Basic",
-    description: "One-stop flight, personal item only",
-  },
-];
+}[] = DEFAULT_FLIGHT_CATEGORIES.map(fc => ({
+  value: fc.id,
+  label: fc.label,
+  description: fc.stops === 0
+    ? (fc.bags === "carryon" ? "Nonstop flight with carry-on bag included" : "Nonstop flight, personal item only")
+    : (fc.bags === "carryon" ? "One-stop flight with carry-on bag included" : "One-stop flight, personal item only"),
+}));
+
+export function flightCategoryConfigToDisplay(categories: FlightCategoryConfig[]): { value: FlightCategory; label: string; description: string }[] {
+  return categories.map(fc => ({
+    value: fc.id,
+    label: fc.label,
+    description: fc.stops === 0
+      ? (fc.bags === "carryon" ? "Nonstop flight with carry-on bag included" : "Nonstop flight, personal item only")
+      : (fc.bags === "carryon" ? "One-stop flight with carry-on bag included" : "One-stop flight, personal item only"),
+  }));
+}
+
+export function generateCategoryId(stops: 0 | 1, bags: "carryon" | "none"): string {
+  return `${stops === 0 ? "nonstop" : "onestop"}_${bags === "carryon" ? "carryon" : "no_carryon"}`;
+}
+
+export function generateCategoryLabel(stops: 0 | 1, bags: "carryon" | "none"): string {
+  const stopLabel = stops === 0 ? "Nonstop" : "1-Stop";
+  const bagLabel = bags === "carryon" ? "+ Carry-on" : "Basic";
+  return `${stopLabel} ${bagLabel}`;
+}
 
 export const BUDGET_TIERS: {
   value: BudgetTier;

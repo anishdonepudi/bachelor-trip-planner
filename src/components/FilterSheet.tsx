@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig } from "@/lib/types";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS } from "@/lib/constants";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig } from "@/lib/types";
+import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS, flightCategoryConfigToDisplay } from "@/lib/constants";
 
 interface FilterSheetProps {
   open: boolean;
@@ -12,6 +12,7 @@ interface FilterSheetProps {
   priorityCity: string;
   scoringAlgorithm: ScoringAlgorithm;
   cities: CityConfig[];
+  flightCategories?: FlightCategoryConfig[];
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
   onPriorityCityChange: (city: string) => void;
@@ -26,11 +27,15 @@ export function FilterSheet({
   priorityCity,
   scoringAlgorithm,
   cities,
+  flightCategories,
   onFlightCategoryChange,
   onBudgetTierChange,
   onPriorityCityChange,
   onScoringAlgorithmChange,
 }: FilterSheetProps) {
+  const displayCategories = flightCategories
+    ? flightCategoryConfigToDisplay(flightCategories)
+    : FLIGHT_CATEGORIES;
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef<number | null>(null);
   const currentY = useRef<number | null>(null);
@@ -65,7 +70,8 @@ export function FilterSheet({
   };
 
   const handleReset = () => {
-    onFlightCategoryChange("nonstop_carryon");
+    const firstCat = flightCategories?.[0]?.id ?? "nonstop_carryon";
+    onFlightCategoryChange(firstCat as FlightCategory);
     onBudgetTierChange("budget");
     onPriorityCityChange("all");
     onScoringAlgorithmChange("zscore");
@@ -114,7 +120,7 @@ export function FilterSheet({
               Flight Type
             </div>
             <div className="grid grid-cols-2 gap-1.5">
-              {FLIGHT_CATEGORIES.map((cat) => (
+              {displayCategories.map((cat) => (
                 <button
                   key={cat.value}
                   onClick={() => onFlightCategoryChange(cat.value)}

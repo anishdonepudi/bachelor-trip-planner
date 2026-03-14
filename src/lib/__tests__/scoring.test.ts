@@ -83,6 +83,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       [makeFlight()],
+      [],
       [], // no airbnbs
       "nonstop_carryon",
       "budget",
@@ -101,6 +102,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       [flight],
+      [],
       [airbnb],
       "nonstop_carryon",
       "budget",
@@ -121,6 +123,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       [flight],
+      [],
       [airbnb],
       "nonstop_carryon",
       "budget",
@@ -145,6 +148,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       flights,
+      [],
       [airbnb],
       "nonstop_carryon",
       "budget",
@@ -164,6 +168,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       [], // no flights
+      [],
       [airbnb],
       "nonstop_carryon",
       "budget",
@@ -187,6 +192,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       [flight],
+      [],
       airbnbs,
       "nonstop_carryon",
       "budget",
@@ -216,6 +222,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       flights,
+      [],
       [airbnb],
       "nonstop_carryon",
       "budget",
@@ -236,6 +243,7 @@ describe("calculateWeekendScore", () => {
     const result = calculateWeekendScore(
       weekend,
       flights,
+      [],
       [airbnb],
       "nonstop_carryon",
       "budget",
@@ -256,6 +264,7 @@ describe("calculateWeekendScore", () => {
 
     const result = calculateWeekendScore(
       weekend,
+      [],
       [],
       [airbnb],
       "nonstop_carryon",
