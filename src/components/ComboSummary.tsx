@@ -9,11 +9,14 @@ import {
   FlightCategory,
   BudgetTier,
   ScoringAlgorithm,
+  RankChangeMap,
+  RankChangeInfo,
 } from "@/lib/types";
+import { computeRankChanges } from "@/lib/rank-changes";
 import { FLIGHT_CATEGORIES, BUDGET_TIERS, TOTAL_PEOPLE } from "@/lib/constants";
 import { scoreAllWeekends } from "@/lib/scoring";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
-import { ScoreBadge } from "./ScoreBadge";
+import { ScoreBadge, RankChangeIndicator } from "./ScoreBadge";
 
 interface ComboSummaryProps {
   weekendData: WeekendData;
@@ -23,6 +26,8 @@ interface ComboSummaryProps {
   scoringAlgorithm: ScoringAlgorithm;
   activeFlightCategory: FlightCategory;
   activeBudgetTier: BudgetTier;
+  previousWeekendData: WeekendData | null;
+  rankChangeSince: string | null;
   onSelectCombo: (flightCategory: FlightCategory, budgetTier: BudgetTier) => void;
 }
 
@@ -49,6 +54,8 @@ export function ComboSummary({
   scoringAlgorithm,
   activeFlightCategory,
   activeBudgetTier,
+  previousWeekendData,
+  rankChangeSince,
   onSelectCombo,
 }: ComboSummaryProps) {
   const [mobileFlightCat, setMobileFlightCat] = useState<FlightCategory>(activeFlightCategory);
@@ -83,6 +90,27 @@ export function ComboSummary({
     return results;
   }, [weekendData, dateRanges, cities, priorityCity, scoringAlgorithm]);
 
+  // Compute rank changes per combo
+  const comboRankChanges = useMemo(() => {
+    if (!previousWeekendData) return new Map<string, RankChangeMap>();
+    const map = new Map<string, RankChangeMap>();
+    for (const combo of comboResults) {
+      const key = `${combo.flightCategory}:${combo.budgetTier}`;
+      // Reuse the top3 scores from comboResults to compute changes
+      // We need the full scored list for proper rank comparison
+      const currentScores = scoreAllWeekends(
+        dateRanges, weekendData.flights ?? [], weekendData.flightOptions ?? [],
+        weekendData.airbnbListings ?? [], combo.flightCategory, combo.budgetTier,
+        cities, priorityCity, scoringAlgorithm
+      );
+      map.set(key, computeRankChanges(
+        previousWeekendData, currentScores, dateRanges,
+        combo.flightCategory, combo.budgetTier, cities, priorityCity, scoringAlgorithm
+      ));
+    }
+    return map;
+  }, [previousWeekendData, comboResults, weekendData, dateRanges, cities, priorityCity, scoringAlgorithm]);
+
   const mobileFilteredCombos = comboResults.filter((r) => r.flightCategory === mobileFlightCat);
 
   const popularWeekends = useMemo(() => {
@@ -105,6 +133,38 @@ export function ComboSummary({
     return Array.from(data.values())
       .sort((a, b) => b.points - a.points || (b.totalScore / b.appearances) - (a.totalScore / a.appearances));
   }, [comboResults]);
+
+  // Compute previous popular rankings for rank change display
+  const previousPopularRanks = useMemo(() => {
+    if (!previousWeekendData) return null;
+    const RANK_POINTS = [3, 2, 1];
+    const data = new Map<string, { points: number; totalScore: number; appearances: number }>();
+    for (const fc of FLIGHT_CATEGORIES) {
+      for (const bt of BUDGET_TIERS) {
+        const scored = scoreAllWeekends(
+          dateRanges, previousWeekendData.flights ?? [], previousWeekendData.flightOptions ?? [],
+          previousWeekendData.airbnbListings ?? [], fc.value, bt.value, cities, priorityCity, scoringAlgorithm
+        );
+        for (let i = 0; i < Math.min(scored.length, 3); i++) {
+          const ws = scored[i];
+          const id = ws.dateRange.id;
+          const existing = data.get(id);
+          if (existing) {
+            existing.points += RANK_POINTS[i];
+            existing.totalScore += ws.score;
+            existing.appearances++;
+          } else {
+            data.set(id, { points: RANK_POINTS[i], totalScore: ws.score, appearances: 1 });
+          }
+        }
+      }
+    }
+    const sorted = Array.from(data.entries())
+      .sort((a, b) => b[1].points - a[1].points || (b[1].totalScore / b[1].appearances) - (a[1].totalScore / a[1].appearances));
+    const rankMap = new Map<string, number>();
+    sorted.forEach(([id], i) => rankMap.set(id, i + 1));
+    return rankMap;
+  }, [previousWeekendData, dateRanges, cities, priorityCity, scoringAlgorithm]);
 
   const maxPoints = popularWeekends.length > 0 ? popularWeekends[0].points : 1;
 
@@ -161,6 +221,31 @@ export function ComboSummary({
                     <span className="text-[11px] font-mono font-semibold text-[var(--text-3)] w-5 text-right shrink-0">
                       {getRankIcon(i + 1)}
                     </span>
+                    {previousPopularRanks && (() => {
+                      const prevRank = previousPopularRanks.get(dateRange.id);
+                      const currentRank = i + 1;
+                      const info: RankChangeInfo = {
+                        rankDelta: prevRank !== undefined ? prevRank - currentRank : null,
+                        previousRank: prevRank ?? null,
+                        currentRank,
+                        previousScore: null,
+                        currentScore: avgScore,
+                        previousCost: null,
+                        currentCost: 0,
+                        scoringAlgorithm,
+                        cityChanges: [],
+                        previousAirbnbCount: null,
+                        currentAirbnbCount: 0,
+                        airbnbChange: null,
+                        previousCostVariance: null,
+                        currentCostVariance: null,
+                        previousAirbnbRating: null,
+                        currentAirbnbRating: null,
+                        previousAirbnbReviews: null,
+                        currentAirbnbReviews: null,
+                      };
+                      return <RankChangeIndicator info={info} sinceTimestamp={rankChangeSince} />;
+                    })()}
                     <div className="flex-1 min-w-0">
                       <span className="text-sm text-[var(--text-1)]">{formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}</span>
                       <span className="text-[11px] text-[var(--text-3)] ml-2">{departDay} - {returnDay}</span>
@@ -206,7 +291,7 @@ export function ComboSummary({
 
         {/* Budget sections */}
         {mobileFilteredCombos.map((combo) => (
-          <div key={combo.budgetTier} className="rounded-md border border-[var(--border-default)] bg-[var(--surface-0)] overflow-hidden">
+          <div key={combo.budgetTier} className="rounded-md border border-[var(--border-default)] bg-[var(--surface-0)]">
             <button
               className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors duration-150 ${
                 combo.flightCategory === activeFlightCategory && combo.budgetTier === activeBudgetTier
@@ -276,7 +361,7 @@ export function ComboSummary({
           return (
             <div
               key={fc.value}
-              className={`rounded-lg border overflow-hidden ${
+              className={`rounded-lg border ${
                 isActiveCategory
                   ? "border-[var(--blue-border)] shadow-sm"
                   : "border-[var(--border-default)]"
@@ -311,9 +396,14 @@ export function ComboSummary({
                         <p className="text-[11px] text-[var(--text-3)] italic">No data</p>
                       ) : (
                         <div className="space-y-1.5">
-                          {combo.top3.map((ws, i) => (
-                            <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} />
-                          ))}
+                          {combo.top3.map((ws, i) => {
+                            const comboKey = `${combo.flightCategory}:${combo.budgetTier}`;
+                            const changes = comboRankChanges.get(comboKey);
+                            const rc = changes ? changes[ws.dateRange.id] : undefined;
+                            return (
+                              <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} rankChangeInfo={rc} sinceTimestamp={rankChangeSince} />
+                            );
+                          })}
                         </div>
                       )}
                     </button>
@@ -328,12 +418,17 @@ export function ComboSummary({
   );
 }
 
-function WeekendPill({ weekend, rank, priorityCity }: { weekend: WeekendScore; rank: number; priorityCity: string }) {
+function WeekendPill({ weekend, rank, priorityCity, rankChangeInfo, sinceTimestamp }: { weekend: WeekendScore; rank: number; priorityCity: string; rankChangeInfo?: RankChangeInfo; sinceTimestamp?: string | null }) {
   const { dateRange, score, totalGroupCost, perCityCosts, cityAverages } = weekend;
   const selectedCityCost = priorityCity !== "all" ? perCityCosts.find((c) => c.city === priorityCity) : null;
 
   return (
     <div className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+      {rankChangeInfo !== undefined && (
+        <span className="w-7 flex justify-end shrink-0">
+          <RankChangeIndicator info={rankChangeInfo} sinceTimestamp={sinceTimestamp} />
+        </span>
+      )}
       <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} />
       <div className="flex-1 min-w-0 text-center">
         <div className="text-[11px] font-medium text-[var(--text-1)] truncate">

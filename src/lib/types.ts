@@ -171,3 +171,50 @@ export interface WeekendData {
   flightOptions: FlightOptionRow[];
   airbnbListings: AirbnbListingRow[];
 }
+
+export interface CityPriceChange {
+  city: string;
+  previousFlightCost: number | null;
+  currentFlightCost: number | null;
+  previousStayCost: number | null;
+  currentStayCost: number;
+  previousPerPerson: number | null;
+  currentPerPerson: number | null;
+  previousCityAvg: number | null;
+  currentCityAvg: number | null;
+}
+
+export interface AirbnbChange {
+  previousUrl: string | null;
+  currentUrl: string | null;
+  previousName: string | null;
+  currentName: string | null;
+  previousCostPerNight: number | null;
+  currentCostPerNight: number | null;
+  selectionChanged: boolean;
+}
+
+export interface RankChangeInfo {
+  rankDelta: number | null; // positive = improved, negative = dropped, null = new
+  previousRank: number | null;
+  currentRank: number;
+  previousScore: number | null;
+  currentScore: number;
+  previousCost: number | null;
+  currentCost: number;
+  scoringAlgorithm: ScoringAlgorithm;
+  cityChanges: CityPriceChange[];
+  previousAirbnbCount: number | null;
+  currentAirbnbCount: number;
+  airbnbChange: AirbnbChange | null;
+  // Fairness-specific
+  previousCostVariance: number | null;
+  currentCostVariance: number | null;
+  // Best value-specific
+  previousAirbnbRating: number | null;
+  currentAirbnbRating: number | null;
+  previousAirbnbReviews: number | null;
+  currentAirbnbReviews: number | null;
+}
+
+export type RankChangeMap = Record<string, RankChangeInfo>;

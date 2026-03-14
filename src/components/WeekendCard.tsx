@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { WeekendScore, FlightCategory, BudgetTier } from "@/lib/types";
 import { FLIGHT_CATEGORIES, TOTAL_PEOPLE } from "@/lib/constants";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
@@ -16,6 +16,7 @@ interface WeekendCardProps {
   flightCategory: FlightCategory;
   budgetTier: BudgetTier;
   priorityCity?: string;
+  onCollapsedHeight?: (height: number) => void;
 }
 
 type DetailTab = "flights" | "stays" | "costs";
@@ -28,9 +29,16 @@ function getTierColor(score: number): string {
   return "var(--red)";
 }
 
-export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorityCity }: WeekendCardProps) {
+export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorityCity, onCollapsedHeight }: WeekendCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailTab>("flights");
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (onCollapsedHeight && cardRef.current && !expanded) {
+      onCollapsedHeight(cardRef.current.offsetHeight);
+    }
+  }, [onCollapsedHeight, expanded]);
   const { dateRange, score, totalGroupCost, perCityCosts, cityAverages } = weekend;
 
   const selectedCityCost = priorityCity && priorityCity !== "all"
@@ -61,7 +69,8 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
 
   return (
     <div
-      className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-0)] hover:border-[var(--border-hover)] transition-all duration-200 overflow-hidden"
+      ref={cardRef}
+      className={`rounded-lg border border-[var(--border-default)] bg-[var(--surface-0)] hover:border-[var(--border-hover)] transition-all duration-200 ${expanded ? "overflow-hidden" : ""}`}
       style={{ borderLeftWidth: "3px", borderLeftColor: tierColor }}
     >
       {/* Header row */}

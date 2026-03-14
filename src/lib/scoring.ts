@@ -324,8 +324,8 @@ export function scoreAllWeekends(
     ws.cityAverages = cityStats;
   }
 
-  // Sort by score descending (best first)
-  weekendScores.sort((a, b) => b.score - a.score);
+  // Sort by score descending (best first), break ties by lowest total group cost
+  weekendScores.sort((a, b) => b.score - a.score || a.totalGroupCost - b.totalGroupCost);
 
   return weekendScores;
 }
