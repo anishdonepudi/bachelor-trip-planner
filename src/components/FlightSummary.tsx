@@ -62,12 +62,6 @@ function FlightLeg({ leg, fromAirport, toAirport, label }: {
           <span className="text-[var(--text-3)] shrink-0">{leg.duration}</span>
         </>
       )}
-      {leg.departTime && leg.arriveTime && (
-        <>
-          <span className="text-[var(--text-3)]">&middot;</span>
-          <span className="font-mono tabular-nums text-[var(--text-3)] shrink-0">{to12h(leg.departTime)}–{to12h(leg.arriveTime)}</span>
-        </>
-      )}
     </div>
   );
 }
@@ -153,6 +147,21 @@ function MobileCityFlightCard({ cost }: { cost: CostBreakdown }) {
               toAirport={apt}
               label="Ret"
             />
+          )}
+          {/* Times */}
+          {primaryOption.outbound_details?.departTime && primaryOption.outbound_details?.arriveTime && (
+            <div className="flex items-center gap-3 pt-1.5 border-t border-[var(--border-default)] whitespace-nowrap overflow-hidden">
+              <div className="flex items-center gap-1 text-[11px] text-[var(--text-3)] shrink-0">
+                <span className="text-[10px] uppercase font-medium">Out</span>
+                <span className="font-mono tabular-nums">{to12h(primaryOption.outbound_details.departTime)}–{to12h(primaryOption.outbound_details.arriveTime)}</span>
+              </div>
+              {primaryOption.return_details?.departTime && primaryOption.return_details?.arriveTime && (
+                <div className="flex items-center gap-1 text-[11px] text-[var(--text-3)] shrink-0">
+                  <span className="text-[10px] uppercase font-medium">Ret</span>
+                  <span className="font-mono tabular-nums">{to12h(primaryOption.return_details.departTime)}–{to12h(primaryOption.return_details.arriveTime)}</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       )}
