@@ -121,12 +121,13 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
 
   // Flight category helpers
   const addFlightCategory = () => {
-    const combos: Array<{ stops: 0 | 1; bags: "carryon" | "none" }> = [
+    const combos: Array<{ stops: 0 | 1 | 2; bags: "carryon" | "none" }> = [
       { stops: 0, bags: "carryon" }, { stops: 0, bags: "none" },
       { stops: 1, bags: "carryon" }, { stops: 1, bags: "none" },
+      { stops: 2, bags: "carryon" }, { stops: 2, bags: "none" },
     ];
     const unused = combos.find(c => !flightCategories.some(fc => fc.stops === c.stops && fc.bags === c.bags));
-    if (!unused) return; // all 4 combos used
+    if (!unused) return;
     const id = generateCategoryId(unused.stops, unused.bags);
     const label = generateCategoryLabel(unused.stops, unused.bags);
     setFlightCategories([...flightCategories, { id, stops: unused.stops, bags: unused.bags, label }]);
@@ -136,10 +137,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setFlightCategories(flightCategories.filter((_, i) => i !== index));
   };
 
-  const updateFlightCategory = (index: number, field: "stops" | "bags", value: 0 | 1 | "carryon" | "none") => {
+  const updateFlightCategory = (index: number, field: "stops" | "bags", value: 0 | 1 | 2 | "carryon" | "none") => {
     const updated = [...flightCategories];
     if (field === "stops") {
-      updated[index] = { ...updated[index], stops: value as 0 | 1 };
+      updated[index] = { ...updated[index], stops: value as 0 | 1 | 2 };
     } else {
       updated[index] = { ...updated[index], bags: value as "carryon" | "none" };
     }
@@ -156,12 +157,12 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   // Time filter helpers
   const updateTimeFilter = (
     leg: "outboundDeparture" | "outboundArrival" | "returnDeparture" | "returnArrival",
-    bound: "earliest" | "latest",
-    value: string
+    field: "time" | "plusMinus",
+    value: string | number
   ) => {
     setTimeFilters(prev => ({
       ...prev,
-      [leg]: { ...prev[leg], [bound]: value },
+      [leg]: { ...prev[leg], [field]: value },
     }));
   };
 
@@ -170,8 +171,6 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     const m = i % 2 === 0 ? "00" : "30";
     return `${String(h).padStart(2, "0")}:${m}`;
   });
-  // Add 23:59 as the final option for "latest"
-  const TIME_OPTIONS_LATEST = [...TIME_OPTIONS, "23:59"];
 
   const handleSave = async () => {
     setSaving(true);
@@ -375,7 +374,34 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div className="text-xs text-[var(--blue)] leading-relaxed">
-                  <span className="font-semibold">Max duration (10hr)</span> is applied to every search automatically. Configure stops and bags per category, and time windows per leg below.
+                  Configure max duration, stops and bags per category, and time windows per leg below.
+                </div>
+              </div>
+            </div>
+
+            {/* Max Duration */}
+            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Max Duration</div>
+                  <div className="text-[11px] text-[var(--text-2)] mt-0.5">Flights longer than this are excluded</div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setTimeFilters(prev => ({ ...prev, maxDuration: Math.max(1, prev.maxDuration - 1) }))}
+                    className="w-8 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                    </svg>
+                  </button>
+                  <div className="w-14 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
+                    <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{timeFilters.maxDuration}hr</span>
+                  </div>
+                  <button onClick={() => setTimeFilters(prev => ({ ...prev, maxDuration: Math.min(24, prev.maxDuration + 1) }))}
+                    className="w-8 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
@@ -399,12 +425,12 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                       <div>
                         <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1">Stops</div>
                         <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)] w-fit">
-                          {([0, 1] as const).map(s => (
+                          {([0, 1, 2] as const).map(s => (
                             <button key={s} onClick={() => updateFlightCategory(i, "stops", s)}
                               className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
                                 cat.stops === s ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text-1)]"
                               }`}>
-                              {s === 0 ? "Nonstop" : "1 Stop"}
+                              {s === 0 ? "Nonstop" : s === 1 ? "1 Stop" : "2 Stops"}
                             </button>
                           ))}
                         </div>
@@ -469,42 +495,60 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
 
             {/* Time filter cards */}
             {([
-              { key: "outboundDeparture" as const, label: "Outbound Departure", icon: "M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" },
-              { key: "outboundArrival" as const, label: "Outbound Arrival", icon: "M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" },
-              { key: "returnDeparture" as const, label: "Return Departure", icon: "M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" },
-              { key: "returnArrival" as const, label: "Return Arrival", icon: "M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" },
-            ]).map(({ key, label }) => (
-              <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
-                <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">From</label>
-                    <select
-                      value={timeFilters[key].earliest}
-                      onChange={(e) => updateTimeFilter(key, "earliest", e.target.value)}
-                      className="w-full h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                    >
-                      {TIME_OPTIONS.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+              { key: "outboundDeparture" as const, label: "Outbound Departure" },
+              { key: "outboundArrival" as const, label: "Outbound Arrival" },
+              { key: "returnDeparture" as const, label: "Return Departure" },
+              { key: "returnArrival" as const, label: "Return Arrival" },
+            ]).map(({ key, label }) => {
+              const filter = timeFilters[key];
+              // Compute the effective window for display
+              const centerMin = parseInt(filter.time.split(":")[0], 10) * 60 + parseInt(filter.time.split(":")[1], 10);
+              const earliest = Math.max(0, centerMin - filter.plusMinus * 60);
+              const latest = Math.min(24 * 60 - 1, centerMin + filter.plusMinus * 60);
+              const fmtTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+              return (
+                <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
+                  <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">Target Time</label>
+                      <select
+                        value={filter.time}
+                        onChange={(e) => updateTimeFilter(key, "time", e.target.value)}
+                        className="w-full h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                      >
+                        {TIME_OPTIONS.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="shrink-0">
+                      <label className="text-[10px] text-[var(--text-3)] mb-0.5 block text-center">&plusmn; Hours</label>
+                      <div className="flex items-center">
+                        <button onClick={() => updateTimeFilter(key, "plusMinus", Math.max(1, filter.plusMinus - 1))}
+                          className="w-7 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                          </svg>
+                        </button>
+                        <div className="w-8 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
+                          <span className="text-xs font-semibold font-mono tabular-nums text-[var(--text-1)]">{filter.plusMinus}</span>
+                        </div>
+                        <button onClick={() => updateTimeFilter(key, "plusMinus", Math.min(12, filter.plusMinus + 1))}
+                          className="w-7 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <span className="text-[var(--text-3)] text-xs mt-3.5">-</span>
-                  <div className="flex-1">
-                    <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">To</label>
-                    <select
-                      value={timeFilters[key].latest}
-                      onChange={(e) => updateTimeFilter(key, "latest", e.target.value)}
-                      className="w-full h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                    >
-                      {TIME_OPTIONS_LATEST.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
+                  <div className="text-[10px] text-[var(--text-3)] mt-1.5 font-mono tabular-nums">
+                    Window: {fmtTime(earliest)} - {fmtTime(latest)}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : null}
       </div>

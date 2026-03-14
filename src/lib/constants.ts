@@ -1,5 +1,30 @@
 import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters } from "./types";
 
+function stopDescription(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
+  const stopPart = stops === 0 ? "Nonstop flight" : stops === 1 ? "One-stop flight" : "Two-stop flight";
+  const bagPart = bags === "carryon" ? "with carry-on bag included" : "personal item only";
+  return `${stopPart}, ${bagPart}`;
+}
+
+export function flightCategoryConfigToDisplay(categories: FlightCategoryConfig[]): { value: FlightCategory; label: string; description: string }[] {
+  return categories.map(fc => ({
+    value: fc.id,
+    label: fc.label,
+    description: stopDescription(fc.stops, fc.bags),
+  }));
+}
+
+export function generateCategoryId(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
+  const stopPart = stops === 0 ? "nonstop" : stops === 1 ? "onestop" : "twostop";
+  return `${stopPart}_${bags === "carryon" ? "carryon" : "no_carryon"}`;
+}
+
+export function generateCategoryLabel(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
+  const stopLabel = stops === 0 ? "Nonstop" : stops === 1 ? "1-Stop" : "2-Stop";
+  const bagLabel = bags === "carryon" ? "+ Carry-on" : "Basic";
+  return `${stopLabel} ${bagLabel}`;
+}
+
 export const DEFAULT_FLIGHT_CATEGORIES: FlightCategoryConfig[] = [
   { id: "nonstop_carryon", stops: 0, bags: "carryon", label: "Nonstop + Carry-on" },
   { id: "nonstop_no_carryon", stops: 0, bags: "none", label: "Nonstop Basic" },
@@ -11,39 +36,14 @@ export const FLIGHT_CATEGORIES: {
   value: FlightCategory;
   label: string;
   description: string;
-}[] = DEFAULT_FLIGHT_CATEGORIES.map(fc => ({
-  value: fc.id,
-  label: fc.label,
-  description: fc.stops === 0
-    ? (fc.bags === "carryon" ? "Nonstop flight with carry-on bag included" : "Nonstop flight, personal item only")
-    : (fc.bags === "carryon" ? "One-stop flight with carry-on bag included" : "One-stop flight, personal item only"),
-}));
-
-export function flightCategoryConfigToDisplay(categories: FlightCategoryConfig[]): { value: FlightCategory; label: string; description: string }[] {
-  return categories.map(fc => ({
-    value: fc.id,
-    label: fc.label,
-    description: fc.stops === 0
-      ? (fc.bags === "carryon" ? "Nonstop flight with carry-on bag included" : "Nonstop flight, personal item only")
-      : (fc.bags === "carryon" ? "One-stop flight with carry-on bag included" : "One-stop flight, personal item only"),
-  }));
-}
-
-export function generateCategoryId(stops: 0 | 1, bags: "carryon" | "none"): string {
-  return `${stops === 0 ? "nonstop" : "onestop"}_${bags === "carryon" ? "carryon" : "no_carryon"}`;
-}
-
-export function generateCategoryLabel(stops: 0 | 1, bags: "carryon" | "none"): string {
-  const stopLabel = stops === 0 ? "Nonstop" : "1-Stop";
-  const bagLabel = bags === "carryon" ? "+ Carry-on" : "Basic";
-  return `${stopLabel} ${bagLabel}`;
-}
+}[] = flightCategoryConfigToDisplay(DEFAULT_FLIGHT_CATEGORIES);
 
 export const DEFAULT_TIME_FILTERS: FlightTimeFilters = {
-  outboundDeparture: { earliest: "00:00", latest: "23:59" },
-  outboundArrival: { earliest: "00:00", latest: "23:59" },
-  returnDeparture: { earliest: "00:00", latest: "23:59" },
-  returnArrival: { earliest: "00:00", latest: "23:59" },
+  outboundDeparture: { time: "12:00", plusMinus: 12 },
+  outboundArrival: { time: "12:00", plusMinus: 12 },
+  returnDeparture: { time: "12:00", plusMinus: 12 },
+  returnArrival: { time: "12:00", plusMinus: 12 },
+  maxDuration: 10,
 };
 
 export const BUDGET_TIERS: {

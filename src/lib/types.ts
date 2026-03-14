@@ -58,15 +58,15 @@ export interface AirbnbListing {
 
 export interface FlightCategoryConfig {
   id: string;        // e.g., "nonstop_carryon"
-  stops: 0 | 1;      // 0 = nonstop, 1 = one stop
+  stops: 0 | 1 | 2;  // 0 = nonstop, 1 = one stop, 2 = two stops
   bags: "carryon" | "none";  // carry-on or personal item only
   label: string;     // display name
 }
 
-/** Time range as [earliest, latest] in "HH:MM" 24-hour format */
+/** Time filter: a target time with +/- hours tolerance */
 export interface TimeRange {
-  earliest: string;  // e.g. "06:00"
-  latest: string;    // e.g. "23:00"
+  time: string;     // target time in "HH:MM" 24-hour format, e.g. "14:00"
+  plusMinus: number; // hours tolerance, e.g. 3 means 11:00-17:00
 }
 
 /** Global time filters applied to every flight search */
@@ -75,6 +75,7 @@ export interface FlightTimeFilters {
   outboundArrival: TimeRange;
   returnDeparture: TimeRange;
   returnArrival: TimeRange;
+  maxDuration: number; // max flight duration in hours
 }
 
 export type FlightCategory = string;

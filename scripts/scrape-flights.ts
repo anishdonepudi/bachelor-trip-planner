@@ -57,7 +57,6 @@ let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc
 let TIME_FILTERS: FlightTimeFilters = DEFAULT_TIME_FILTERS;
 
 const TOP_N_PER_CATEGORY = 3;
-const MAX_DURATION_MINUTES = 10 * 60; // 10 hours
 
 // Performance tuning — configurable via env vars
 const DATE_RANGE_CONCURRENCY = parseInt(process.env.DATE_RANGE_CONCURRENCY ?? "2", 10);
@@ -137,13 +136,16 @@ function timeToMinutes(time: string): number {
   return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 }
 
-/** Check if a flight time (e.g. "14:30") is within a range (e.g. "06:00"-"23:00") */
-function isTimeInRange(time: string, earliest: string, latest: string): boolean {
+/** Check if a flight time is within a target +/- hours range */
+function isTimeInFilter(time: string, filter: { time: string; plusMinus: number }): boolean {
   if (time === "?" || !time) return true; // can't filter unknown times
   const t = timeToMinutes(time);
-  const e = timeToMinutes(earliest);
-  const l = timeToMinutes(latest);
-  return t >= e && t <= l;
+  const center = timeToMinutes(filter.time);
+  const tolerance = filter.plusMinus * 60;
+  const earliest = center - tolerance;
+  const latest = center + tolerance;
+  // Clamp to valid day range
+  return t >= Math.max(0, earliest) && t <= Math.min(24 * 60 - 1, latest);
 }
 
 function buildFlightsUrl(
@@ -278,12 +280,13 @@ function extractInner(parts: unknown[]): any[] {
 /**
  * Parse structured flight data from API inner response.
  * Extracts token and segment data needed for click-free return requests.
- * Filters: duration ≤ MAX_DURATION_MINUTES, stops 0 or 1.
+ * Filters: duration ≤ maxDuration, stops 0/1/2, time ranges.
  * Sorts by price ascending.
  */
-function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outbound"): { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } {
+function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outbound"): { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[]; twostop: ApiParsedFlight[] } {
   const nonstop: ApiParsedFlight[] = [];
   const onestop: ApiParsedFlight[] = [];
+  const twostop: ApiParsedFlight[] = [];
 
   for (const idx of [2, 3]) {
     if (!inner[idx]?.[0] || !Array.isArray(inner[idx][0])) continue;
@@ -324,7 +327,7 @@ function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outboun
 
       let layoverAirport: string | undefined;
       let layoverDuration: number | undefined;
-      if (stops === 1 && d[13]?.[0]) {
+      if (stops >= 1 && d[13]?.[0]) {
         layoverDuration = d[13][0][0];
         layoverAirport = d[13][0][1] ?? d[13][0][2];
       }
@@ -347,23 +350,25 @@ function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outboun
         segments,
       };
 
-      if (flight.duration > MAX_DURATION_MINUTES) continue;
+      if (flight.duration > TIME_FILTERS.maxDuration * 60) continue;
 
       // Apply time filters based on leg
       const depFilter = leg === "outbound" ? TIME_FILTERS.outboundDeparture : TIME_FILTERS.returnDeparture;
       const arrFilter = leg === "outbound" ? TIME_FILTERS.outboundArrival : TIME_FILTERS.returnArrival;
-      if (!isTimeInRange(flight.departTime, depFilter.earliest, depFilter.latest)) continue;
-      if (!isTimeInRange(flight.arriveTime, arrFilter.earliest, arrFilter.latest)) continue;
+      if (!isTimeInFilter(flight.departTime, depFilter)) continue;
+      if (!isTimeInFilter(flight.arriveTime, arrFilter)) continue;
 
       if (stops === 0) nonstop.push(flight);
       else if (stops === 1) onestop.push(flight);
+      else if (stops === 2) twostop.push(flight);
     }
   }
 
   nonstop.sort((a, b) => a.price - b.price);
   onestop.sort((a, b) => a.price - b.price);
+  twostop.sort((a, b) => a.price - b.price);
 
-  return { nonstop, onestop };
+  return { nonstop, onestop, twostop };
 }
 
 // ---------------------------------------------------------------------------
@@ -412,7 +417,7 @@ async function fetchReturnViaPost(
   originAirport: string,
   departDate: string,
   returnDate: string
-): Promise<{ nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null> {
+): Promise<{ nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[]; twostop: ApiParsedFlight[] } | null> {
   const freqValue = buildFreqValue(
     target.token, target.segments,
     originAirport, DESTINATION_AIRPORT, departDate, returnDate
@@ -439,7 +444,7 @@ async function fetchReturnViaPost(
   const inners = extractInner(parts);
   for (const inner of inners) {
     const parsed = parseFlightsFromApi(inner, "return");
-    if (parsed.nonstop.length > 0 || parsed.onestop.length > 0) return parsed;
+    if (parsed.nonstop.length > 0 || parsed.onestop.length > 0 || parsed.twostop.length > 0) return parsed;
   }
   return null;
 }
@@ -510,7 +515,7 @@ async function waitForApiResponse(
   captured: CapturedApiCall[],
   afterIndex: number,
   timeoutMs = 15_000
-): Promise<{ nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null> {
+): Promise<{ nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[]; twostop: ApiParsedFlight[] } | null> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     for (let i = captured.length - 1; i >= afterIndex; i--) {
@@ -520,7 +525,7 @@ async function waitForApiResponse(
       const inners = extractInner(parts);
       for (const inner of inners) {
         const parsed = parseFlightsFromApi(inner);
-        if (parsed.nonstop.length > 0 || parsed.onestop.length > 0) {
+        if (parsed.nonstop.length > 0 || parsed.onestop.length > 0 || parsed.twostop.length > 0) {
           return parsed;
         }
       }
@@ -562,7 +567,7 @@ async function scrapeSingleCategory(
   browser: Browser,
   baseUrl: string,
   category: FlightCategory,
-  stopType: "nonstop" | "onestop",
+  stopType: "nonstop" | "onestop" | "twostop",
   isCarryon: boolean,
   originAirport: string,
   departDate: string,
@@ -601,7 +606,7 @@ async function scrapeSingleCategory(
     await new Promise((r) => setTimeout(r, POST_LOAD_DELAY_MS));
 
     // Step 2: Optionally apply carry-on filter
-    let outbound: { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } | null = null;
+    let outbound: { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[]; twostop: ApiParsedFlight[] } | null = null;
 
     if (isCarryon) {
       const preFilterCount = captured.length;
@@ -628,7 +633,7 @@ async function scrapeSingleCategory(
     }
 
     const googleFlightsUrl = page.url();
-    const outboundList = stopType === "nonstop" ? outbound.nonstop : outbound.onestop;
+    const outboundList = stopType === "nonstop" ? outbound.nonstop : stopType === "onestop" ? outbound.onestop : outbound.twostop;
     const topCount = Math.min(TOP_N_PER_CATEGORY, outboundList.length);
 
     console.log(`      ${logTag} [${category}] ${outboundList.length} outbound, fetching returns for top ${topCount}`);
@@ -644,13 +649,15 @@ async function scrapeSingleCategory(
         originAirport, departDate, returnDate
       );
 
-      // Pick best return for this category
+      // Pick best return for this category (match stop type)
       let bestReturn: ApiParsedFlight | null = null;
       if (returns) {
         if (stopType === "nonstop") {
           bestReturn = returns.nonstop.find(r => r.stops === 0) ?? null;
-        } else {
+        } else if (stopType === "onestop") {
           bestReturn = returns.onestop[0] ?? returns.nonstop[0] ?? null;
+        } else {
+          bestReturn = returns.twostop[0] ?? returns.onestop[0] ?? returns.nonstop[0] ?? null;
         }
       }
 
@@ -659,8 +666,9 @@ async function scrapeSingleCategory(
         console.log(`      ${logTag} [${category}] #${i + 1}: no return, skipping`);
         continue;
       }
-      if (stopType === "nonstop" && bestReturn.stops > 0) {
-        console.log(`      ${logTag} [${category}] #${i + 1}: return has ${bestReturn.stops} stops, skipping`);
+      const maxStops = stopType === "nonstop" ? 0 : stopType === "onestop" ? 1 : 2;
+      if (bestReturn.stops > maxStops) {
+        console.log(`      ${logTag} [${category}] #${i + 1}: return has ${bestReturn.stops} stops (max ${maxStops}), skipping`);
         continue;
       }
 
@@ -703,7 +711,7 @@ async function scrapeAirportDate(
 ): Promise<{ results: ScrapeResult[]; captchaCount: number }> {
   const categoryDefs = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => ({
     category: fc.id as FlightCategory,
-    stopType: (fc.stops === 0 ? "nonstop" : "onestop") as "nonstop" | "onestop",
+    stopType: (fc.stops === 0 ? "nonstop" : fc.stops === 1 ? "onestop" : "twostop") as "nonstop" | "onestop" | "twostop",
     isCarryon: fc.bags === "carryon",
   }));
 
@@ -889,7 +897,7 @@ async function main(): Promise<void> {
   console.log(`Date ranges: ${dateRanges.length}`);
   console.log(`Categories: ${CATEGORIES_TO_SCRAPE.join(", ")}`);
   console.log(`Top N per category: ${TOP_N_PER_CATEGORY}`);
-  console.log(`Max duration: ${MAX_DURATION_MINUTES} min`);
+  console.log(`Max duration: ${TIME_FILTERS.maxDuration}hr`);
   console.log(`Concurrency: ${DATE_RANGE_CONCURRENCY} date ranges in parallel`);
   console.log(`Category stagger: ${CATEGORY_STAGGER_MS}ms`);
   console.log(`Total tasks: ${totalTasks}\n`);
