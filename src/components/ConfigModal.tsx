@@ -5,6 +5,7 @@ import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange, TripDu
 import { CITY_AIRPORTS } from "@/lib/airports";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
+import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { CitySelect } from "./CitySelect";
 import {
   Dialog,
@@ -207,18 +208,11 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     for (const c of cities) {
       for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) uniqueAirports.add(apt);
     }
-    const airportCount = uniqueAirports.size;
-    const dateRangeCount = potentialTrips.length;
-    const categoryCount = flightCategories.length;
-    const setupMin = 2;
-    const jobCount = Math.min(airportCount, 19);
-    const airportsPerJob = jobCount > 0 ? Math.ceil(airportCount / jobCount) : 0;
-    const taskWaves = Math.ceil(dateRangeCount / 4);
-    const secondsPerWave = 50 * categoryCount / 4;
-    const flightMin = airportsPerJob > 0 ? (airportsPerJob * taskWaves * secondsPerWave) / 60 : 0;
-    const airbnbMin = Math.max(5, Math.ceil(dateRangeCount / 10) + 3);
-    const finalizeMin = 4;
-    return Math.round(setupMin + flightMin + airbnbMin + finalizeMin);
+    return estimateRefreshMinutes({
+      airportCount: uniqueAirports.size,
+      dateRangeCount: potentialTrips.length,
+      categoryCount: flightCategories.length,
+    });
   }, [citiesChanged, cities, potentialTrips.length, flightCategories.length]);
 
   // Prune excluded dates that fall outside potential trip windows

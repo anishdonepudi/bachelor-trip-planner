@@ -26,6 +26,7 @@ import {
 import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
 import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
+import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { FilterBar } from "./FilterBar";
 import { FilterSheet } from "./FilterSheet";
 import { WeekendCard } from "./WeekendCard";
@@ -189,33 +190,11 @@ export function Dashboard() {
     for (const c of cities) {
       for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) uniqueAirports.add(apt);
     }
-    const airportCount = uniqueAirports.size;
-    const dateRangeCount = allDateRanges.length;
-    const categoryCount = flightCategories.length;
-
-    // Setup + workflow boot: ~2 min
-    const setupMin = 2;
-
-    // Flight scraping: jobs run in parallel (max 19), each processes ceil(airports/19) airports
-    // Per airport-daterange-category: ~45-60s, but 4 date ranges run in parallel per job
-    const jobCount = Math.min(airportCount, 19);
-    const airportsPerJob = jobCount > 0 ? Math.ceil(airportCount / jobCount) : 0;
-    const taskWaves = Math.ceil(dateRangeCount / 4); // 4 date ranges in parallel
-    const secondsPerWave = 50 * categoryCount / 4; // ~50s per category, overlapped
-    const flightMin = airportsPerJob > 0
-      ? (airportsPerJob * taskWaves * secondsPerWave) / 60
-      : 0;
-
-    // Airbnb: ~5-8 min (relatively constant, 3 concurrent date ranges)
-    const airbnbMin = Math.max(5, Math.ceil(dateRangeCount / 10) + 3);
-
-    // Finalize: ~3-5 min
-    const finalizeMin = 4;
-
-    // Flights and Airbnb run sequentially, not in parallel
-    const total = setupMin + flightMin + airbnbMin + finalizeMin;
-
-    return Math.round(total);
+    return estimateRefreshMinutes({
+      airportCount: uniqueAirports.size,
+      dateRangeCount: allDateRanges.length,
+      categoryCount: flightCategories.length,
+    });
   }, [cities, allDateRanges.length, flightCategories.length]);
 
   const dateRanges = useMemo(() => {
