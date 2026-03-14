@@ -151,11 +151,12 @@ export function Dashboard() {
     setScrapeTriggered(false);
     initialLastUpdated.current = scrapeData?.lastFlightUpdate ?? null;
     modalCooldownUntil.current = Date.now() + 60_000; // ignore changes for 60s after dismissing
-    // Await the data fetch so the modal stays open until new data is ready
-    // Rank changes compute synchronously via useMemo in the same render cycle
+    // Await the data fetch — modal stays visible until data is ready,
+    // then fades out to reveal the new content underneath
     await mutateWeekends();
     mutateScrape();
-    setShowUpdateModal(false);
+    // Don't setShowUpdateModal(false) here — modal handles its own fade-out
+    // and calls onDismissed when the transition completes
   }, [scrapeData?.lastFlightUpdate, mutateWeekends, mutateScrape]);
 
   const { data: configData } = useSWR("/api/config", fetcher, { revalidateOnFocus: false });
@@ -495,7 +496,7 @@ export function Dashboard() {
       </main>
 
       {/* ── Modals & overlays ── */}
-      <DataUpdateModal open={showUpdateModal} onRefresh={handleDataRefresh} />
+      <DataUpdateModal open={showUpdateModal} onRefresh={handleDataRefresh} onDismissed={() => setShowUpdateModal(false)} />
 
       {/* Mobile filter badge — floating above bottom nav */}
       {hasData && !weekendsLoading && (
