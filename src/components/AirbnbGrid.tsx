@@ -23,14 +23,14 @@ function AmenityPills({ amenities }: { amenities: string[] }) {
   return (
     <div className="flex flex-wrap gap-1 mb-2">
       {visible.map((a) => (
-        <span key={a} className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-3)] border border-[var(--border-default)]">
+        <span key={a} className="text-[11px] md:text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--text-3)] border border-[var(--border-default)]">
           {a}
         </span>
       ))}
       {hasMore && (
         <button
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowAll(!showAll); }}
-          className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--blue)] hover:text-[var(--text-1)] border border-[var(--border-default)] transition-colors duration-150"
+          className="text-[11px] md:text-[9px] px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--blue)] hover:text-[var(--text-1)] border border-[var(--border-default)] transition-colors duration-150"
         >
           {showAll ? "Show less" : `+${amenities.length - 4}`}
         </button>
@@ -156,7 +156,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <h5 className="text-sm font-medium text-[var(--text-1)] line-clamp-1">{listing.listing_name ?? "Villa in Tulum"}</h5>
                   {listing.superhost && (
-                    <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-[var(--rose-soft)] text-[var(--rose)] border border-[var(--rose-border)] font-semibold">
+                    <span className="shrink-0 text-[11px] md:text-[9px] px-1.5 py-0.5 rounded bg-[var(--rose-soft)] text-[var(--rose)] border border-[var(--rose-border)] font-semibold">
                       Superhost
                     </span>
                   )}

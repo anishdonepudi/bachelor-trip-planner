@@ -78,37 +78,31 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
         onClick={() => setExpanded(!expanded)}
         className="w-full text-left hover:bg-[var(--surface-1)] transition-colors duration-150"
       >
-        {/* Mobile layout */}
-        <div className="sm:hidden p-3.5 space-y-2">
-          <div className="flex items-center gap-2">
-            <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} />
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-heading font-semibold text-[var(--text-1)] truncate">
-                {formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}
-              </h3>
-              <span className="text-[11px] text-[var(--text-3)]">{departDay} - {returnDay}</span>
+        {/* Mobile layout — compact horizontal row ~80px */}
+        <div className="sm:hidden flex items-center gap-2.5 px-3 py-2.5 min-h-[72px]">
+          <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} />
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[13px] font-heading font-semibold text-[var(--text-1)] truncate leading-tight">
+              {formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}
+            </h3>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[11px] text-[var(--text-3)]">{departDay} – {returnDay}</span>
+              <span className="text-[11px] text-[var(--text-3)]">·</span>
+              <span className="text-[11px] text-[var(--text-3)] font-mono tabular-nums">{daysUntil > 0 ? `${daysUntil}d` : daysUntil === 0 ? "Today" : "Past"}</span>
+              <span className="text-[11px] text-[var(--text-3)]">·</span>
+              <span className="text-[11px] text-[var(--text-3)] font-mono tabular-nums">{villaCount} stays</span>
             </div>
-            <svg className={`w-4 h-4 text-[var(--text-3)] transition-transform duration-150 shrink-0 ${expanded ? "rotate-180" : ""}`}
-              fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
           </div>
-
-          {/* Price hero */}
           {avgPerPerson !== null && (
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold font-mono tabular-nums text-[var(--gold)]">${avgPerPerson}</span>
-              <span className="text-[11px] text-[var(--text-3)]">avg/person</span>
+            <div className="text-right shrink-0">
+              <span className="text-lg font-bold font-mono tabular-nums text-[var(--gold)] leading-tight">${avgPerPerson}</span>
+              <div className="text-[10px] text-[var(--text-3)] leading-tight">pp</div>
             </div>
           )}
-
-          {/* Compact meta */}
-          <div className="flex items-center gap-1.5 text-[11px]">
-            <span className="px-1.5 py-0.5 rounded bg-[var(--surface-1)] text-[var(--text-2)] font-mono tabular-nums">{villaCount} stays</span>
-            <span className="px-1.5 py-0.5 rounded bg-[var(--surface-1)] text-[var(--text-2)] font-mono tabular-nums">
-              {daysUntil > 0 ? `${daysUntil}d away` : daysUntil === 0 ? "Today" : "Passed"}
-            </span>
-          </div>
+          <svg className={`w-5 h-5 text-[var(--text-3)] transition-transform duration-150 shrink-0 ${expanded ? "rotate-180" : ""}`}
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
         </div>
 
         {/* Desktop layout - single compact row */}
