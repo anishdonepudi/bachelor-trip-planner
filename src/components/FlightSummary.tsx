@@ -54,7 +54,7 @@ function FlightLeg({ leg, fromAirport, toAirport, label }: {
       {leg.stops === 0 ? (
         <span className="text-[var(--teal)] font-medium shrink-0">Direct</span>
       ) : (
-        <span className="text-[var(--orange)] shrink-0">{leg.stops} stop</span>
+        <span className="text-[var(--orange)] shrink-0">{leg.stops} stop{leg.layoverAirport && ` ${leg.layoverAirport}`}{leg.layoverDuration && ` (${leg.layoverDuration})`}</span>
       )}
       {leg.duration && (
         <>
