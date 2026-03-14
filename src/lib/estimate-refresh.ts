@@ -11,8 +11,10 @@
  * and the script defaults in scripts/scrape-flights.ts / scrape-airbnb.ts.
  */
 
-// ── Workflow-level constants (from scrape.yml) ──
-const MAX_PARALLEL_JOBS = 19;
+// ── Workflow-level constants (from scrape.yml + get-airport-matrix.ts) ──
+// GitHub Actions allows 20 concurrent jobs; 19 are reserved for Google Flights
+// scraping (MAX_JOBS in get-airport-matrix.ts), leaving 1 slot for airbnb/finalize.
+const MAX_FLIGHT_JOBS = 19;
 
 // ── Flight scraper constants (from scrape.yml env overrides) ──
 const DATE_RANGE_CONCURRENCY = 4;      // scrape.yml: "4" (script default: 2)
@@ -46,8 +48,8 @@ export function estimateRefreshMinutes({ airportCount, dateRangeCount, categoryC
   const setupMs = 90_000;
 
   // ── Stage 2: Flights ──
-  // Each job processes ceil(airports / min(airports, 19)) airports
-  const jobCount = Math.min(airportCount, MAX_PARALLEL_JOBS);
+  // Airports distributed round-robin across up to 19 flight jobs
+  const jobCount = Math.min(airportCount, MAX_FLIGHT_JOBS);
   const airportsPerJob = Math.ceil(airportCount / jobCount);
 
   // Per airport+daterange: all categories launch in parallel with stagger
