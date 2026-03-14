@@ -182,6 +182,42 @@ export function Dashboard() {
 
   // ── Derived data ──
   const allDateRanges = useMemo(() => generateDateRanges(monthRange, tripDuration), [monthRange, tripDuration]);
+
+  // ── Estimated refresh time ──
+  const estimatedRefreshMinutes = useMemo(() => {
+    const uniqueAirports = new Set<string>();
+    for (const c of cities) {
+      for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) uniqueAirports.add(apt);
+    }
+    const airportCount = uniqueAirports.size;
+    const dateRangeCount = allDateRanges.length;
+    const categoryCount = flightCategories.length;
+
+    // Setup + workflow boot: ~2 min
+    const setupMin = 2;
+
+    // Flight scraping: jobs run in parallel (max 19), each processes ceil(airports/19) airports
+    // Per airport-daterange-category: ~45-60s, but 4 date ranges run in parallel per job
+    const jobCount = Math.min(airportCount, 19);
+    const airportsPerJob = jobCount > 0 ? Math.ceil(airportCount / jobCount) : 0;
+    const taskWaves = Math.ceil(dateRangeCount / 4); // 4 date ranges in parallel
+    const secondsPerWave = 50 * categoryCount / 4; // ~50s per category, overlapped
+    const flightMin = airportsPerJob > 0
+      ? (airportsPerJob * taskWaves * secondsPerWave) / 60
+      : 0;
+
+    // Airbnb: ~5-8 min (relatively constant, 3 concurrent date ranges)
+    const airbnbMin = Math.max(5, Math.ceil(dateRangeCount / 10) + 3);
+
+    // Finalize: ~3-5 min
+    const finalizeMin = 4;
+
+    // Flights and Airbnb run sequentially, not in parallel
+    const total = setupMin + flightMin + airbnbMin + finalizeMin;
+
+    return Math.round(total);
+  }, [cities, allDateRanges.length, flightCategories.length]);
+
   const dateRanges = useMemo(() => {
     if (excludedDates.length === 0) return allDateRanges;
     const excludedSet = new Set(excludedDates);
@@ -362,6 +398,13 @@ export function Dashboard() {
               </svg>
               <span className="text-xs text-[var(--blue)] flex-1">
                 {runningJobs.length > 0 ? "Refreshing prices..." : "Starting refresh..."}
+                {estimatedRefreshMinutes > 0 && (
+                  <span className="text-[var(--blue)] opacity-70">
+                    {" "}&mdash; ~{refreshProgress > 5
+                      ? Math.max(1, Math.round(estimatedRefreshMinutes * (100 - refreshProgress) / 100))
+                      : estimatedRefreshMinutes} min remaining
+                  </span>
+                )}
               </span>
               {activeRun && (
                 <span className="text-xs font-mono font-semibold text-[var(--blue)] tabular-nums">{refreshProgress}%</span>
@@ -383,7 +426,7 @@ export function Dashboard() {
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
               <span className="text-xs text-[var(--gold)]">
-                Config updated. Refresh in progress. Showing previous data.
+                Config updated. Refresh in progress &mdash; estimated ~{estimatedRefreshMinutes} min. Showing previous data.
               </span>
             </div>
             <button onClick={() => setConfigChanged(false)} className="text-[var(--gold)] opacity-60 hover:opacity-100 transition-opacity duration-150">

@@ -200,6 +200,27 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     return map;
   }, [potentialTrips]);
 
+  // Estimate refresh time based on current config
+  const estimatedRefreshMinutes = useMemo(() => {
+    if (!citiesChanged) return 0;
+    const uniqueAirports = new Set<string>();
+    for (const c of cities) {
+      for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) uniqueAirports.add(apt);
+    }
+    const airportCount = uniqueAirports.size;
+    const dateRangeCount = potentialTrips.length;
+    const categoryCount = flightCategories.length;
+    const setupMin = 2;
+    const jobCount = Math.min(airportCount, 19);
+    const airportsPerJob = jobCount > 0 ? Math.ceil(airportCount / jobCount) : 0;
+    const taskWaves = Math.ceil(dateRangeCount / 4);
+    const secondsPerWave = 50 * categoryCount / 4;
+    const flightMin = airportsPerJob > 0 ? (airportsPerJob * taskWaves * secondsPerWave) / 60 : 0;
+    const airbnbMin = Math.max(5, Math.ceil(dateRangeCount / 10) + 3);
+    const finalizeMin = 4;
+    return Math.round(setupMin + flightMin + airbnbMin + finalizeMin);
+  }, [citiesChanged, cities, potentialTrips.length, flightCategories.length]);
+
   // Prune excluded dates that fall outside potential trip windows
   useEffect(() => {
     setExcludedDates(prev => {
@@ -847,7 +868,11 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
           <div className="flex items-center gap-1.5 text-xs">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] animate-pulse" />
             <span className="text-[var(--gold)]">Unsaved changes</span>
-            {citiesChanged && <span className="text-[var(--text-3)]">- triggers refresh</span>}
+            {citiesChanged && (
+              <span className="text-[var(--text-3)]">
+                - triggers refresh{estimatedRefreshMinutes > 0 && <> (~{estimatedRefreshMinutes} min)</>}
+              </span>
+            )}
           </div>
         )}
         <button onClick={handleSave} disabled={saving || !hasChanges || (categoriesChanged && hasDuplicateCategories)}
