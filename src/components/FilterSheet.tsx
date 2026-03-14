@@ -91,10 +91,19 @@ export function FilterSheet({
         {/* Header */}
         <div className="flex items-center justify-between px-4 pb-2.5 border-b border-[var(--border-default)] shrink-0">
           <h2 className="text-sm font-heading font-semibold text-[var(--text-1)]">Filters</h2>
-          <button onClick={handleReset}
-            className="text-[11px] text-[var(--text-3)] hover:text-[var(--text-2)] transition-colors duration-150">
-            Reset
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={handleReset}
+              className="text-[11px] text-[var(--text-3)] hover:text-[var(--text-2)] transition-colors duration-150">
+              Reset
+            </button>
+            <button onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--surface-2)] transition-colors duration-150"
+              aria-label="Close filters">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* Content */}

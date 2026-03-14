@@ -22,6 +22,7 @@ interface Run {
 
 interface JobsPanelProps {
   runs: Run[];
+  inlineMode?: boolean;
 }
 
 function formatDateTime(dateStr: string): string {
@@ -145,9 +146,47 @@ function RunCard({ run, defaultExpanded }: { run: Run; defaultExpanded: boolean 
   );
 }
 
-export function JobsPanel({ runs }: JobsPanelProps) {
+export function JobsPanel({ runs, inlineMode }: JobsPanelProps) {
   const [open, setOpen] = useState(false);
 
+  // Inline mode: render directly for mobile panels
+  if (inlineMode) {
+    if (runs.length === 0) {
+      return (
+        <div className="flex flex-col h-full">
+          <div className="mb-3">
+            <h3 className="text-base font-heading font-semibold text-[var(--text-1)]">Job History</h3>
+            <p className="text-xs text-[var(--text-3)] mt-0.5">Recent scrape runs</p>
+          </div>
+          <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-12">
+            <svg className="w-10 h-10 text-[var(--text-3)] mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <p className="text-sm text-[var(--text-2)] font-medium">No recent jobs</p>
+            <p className="text-xs text-[var(--text-3)] mt-1">Trigger a data refresh to see job progress here.</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-full">
+        <div className="mb-3">
+          <h3 className="text-base font-heading font-semibold text-[var(--text-1)]">Job History</h3>
+          <p className="text-xs text-[var(--text-3)] mt-0.5 font-mono tabular-nums">
+            {runs.length} run{runs.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+        <div className="flex-1 overflow-y-auto space-y-2 scrollbar-thin">
+          {runs.map((run, i) => (
+            <RunCard key={run.run_id} run={run} defaultExpanded={i === 0} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Desktop mode: button trigger + portal modal
   if (runs.length === 0) return null;
 
   const allJobs = runs.flatMap((r) => r.jobs);

@@ -364,18 +364,18 @@ export function Dashboard() {
       {/* ── Mobile filter chips ── */}
       {hasData && !weekendsLoading && (
         <div className="md:hidden border-b border-[var(--border-default)] bg-[var(--surface-0)]">
-          <div className="flex overflow-x-auto gap-1.5 px-4 py-2 whitespace-nowrap scrollbar-thin">
+          <div className="flex overflow-x-auto gap-2 px-4 py-2.5 whitespace-nowrap scrollbar-thin">
             <button onClick={() => setShowFilterSheet(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] shrink-0">
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] shrink-0 min-h-[36px]">
               {flightCatLabel}
             </button>
             <button onClick={() => setShowFilterSheet(true)}
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[var(--gold-soft)] text-[var(--gold)] border border-[var(--gold-border)] shrink-0">
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium bg-[var(--gold-soft)] text-[var(--gold)] border border-[var(--gold-border)] shrink-0 min-h-[36px]">
               {budgetLabel}
             </button>
             {priorityCity !== "all" && (
               <button onClick={() => setShowFilterSheet(true)}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[var(--teal-soft)] text-[var(--teal)] border border-[var(--teal-border)] shrink-0">
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium bg-[var(--teal-soft)] text-[var(--teal)] border border-[var(--teal-border)] shrink-0 min-h-[36px]">
                 {priorityCity}
               </button>
             )}
@@ -396,7 +396,7 @@ export function Dashboard() {
                 <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] w-fit">
                   <button
                     onClick={() => setShowComboView(true)}
-                    className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
+                    className={`px-3 py-1.5 md:py-1.5 min-h-[40px] md:min-h-0 rounded text-sm md:text-xs font-medium transition-all duration-150 ${
                       showComboView
                         ? "bg-[var(--blue)] text-white shadow-sm"
                         : "text-[var(--text-2)] hover:text-[var(--text-1)]"
@@ -406,7 +406,7 @@ export function Dashboard() {
                   </button>
                   <button
                     onClick={() => setShowComboView(false)}
-                    className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
+                    className={`px-3 py-1.5 md:py-1.5 min-h-[40px] md:min-h-0 rounded text-sm md:text-xs font-medium transition-all duration-150 ${
                       !showComboView
                         ? "bg-[var(--blue)] text-white shadow-sm"
                         : "text-[var(--text-2)] hover:text-[var(--text-1)]"
@@ -549,6 +549,7 @@ export function Dashboard() {
                   handleConfigSave(newCities, newExcluded, newDest, newDestCity);
                   setShowMobileConfig(false);
                 }}
+                inlineMode
               />
             </div>
           </div>
@@ -570,7 +571,7 @@ export function Dashboard() {
               </button>
             </div>
             <div className="p-4 pb-20">
-              <JobsPanel runs={scrapeData?.runs ?? []} />
+              <JobsPanel runs={scrapeData?.runs ?? []} inlineMode />
             </div>
           </div>
         </div>

@@ -165,7 +165,7 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-xs font-heading font-semibold uppercase tracking-wider transition-colors duration-150 relative ${
+                className={`px-4 py-3 md:py-2 text-sm md:text-xs font-heading font-semibold uppercase tracking-wider transition-colors duration-150 relative min-h-[44px] md:min-h-0 ${
                   activeTab === tab.id
                     ? "text-[var(--text-1)]"
                     : "text-[var(--text-3)] hover:text-[var(--text-2)]"
