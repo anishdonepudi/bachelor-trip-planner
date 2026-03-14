@@ -104,7 +104,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setCities(cities.filter((_, i) => i !== index));
   };
 
-  const updateCity = (index: number, field: string, value: string | number) => {
+  const updateCity = (index: number, field: string, value: string | number, airports?: { primary: string[]; nearby: string[] }) => {
     hasEdited.current = true;
     const updated = [...cities];
     if (field === "city") {
@@ -112,8 +112,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       updated[index] = {
         ...updated[index],
         city: cityName,
-        primaryAirports: CITY_AIRPORTS[cityName]?.primary ?? [],
-        nearbyAirports: CITY_AIRPORTS[cityName]?.nearby ?? [],
+        primaryAirports: airports?.primary ?? CITY_AIRPORTS[cityName]?.primary ?? [],
+        nearbyAirports: airports?.nearby ?? CITY_AIRPORTS[cityName]?.nearby ?? [],
       };
     } else if (field === "people") {
       updated[index] = { ...updated[index], people: value as number };
@@ -296,17 +296,29 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         {activeTab === "group" ? (
           <div className="space-y-2">
             {/* Destination */}
-            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] space-y-2 opacity-50">
-              <div>
-                <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Destination</label>
-                <div className="mt-1 flex gap-2">
-                  <input type="text" value={destinationAirport} disabled
-                    className="w-16 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-md px-2 py-2 text-sm text-[var(--text-1)] font-mono cursor-not-allowed" />
-                  <input type="text" value={destinationCity} disabled
-                    className="flex-1 bg-[var(--surface-2)] border border-[var(--border-default)] rounded-md px-2 py-2 text-sm text-[var(--text-1)] cursor-not-allowed" />
-                </div>
+            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] space-y-2">
+              <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Destination</label>
+              <div className="mt-1">
+                <CitySelect
+                  value={destinationCity}
+                  onChange={(name, airports) => {
+                    hasEdited.current = true;
+                    setDestinationCity(name);
+                    if (airports?.primary?.[0]) {
+                      setDestinationAirport(airports.primary[0]);
+                    }
+                  }}
+                  placeholder="Search destination..."
+                />
               </div>
-              <p className="text-[11px] text-[var(--text-3)]">Destination editing coming soon</p>
+              {destinationAirport && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-[var(--text-3)]">Airport:</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] font-mono font-medium">
+                    {destinationAirport}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Divider */}
@@ -324,8 +336,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   <div className="flex-1 min-w-0">
                     <CitySelect
                       value={city.city}
-                      onChange={(name) => updateCity(i, "city", name)}
+                      onChange={(name, airports) => updateCity(i, "city", name, airports)}
                       excludeCities={selectedCityNames.filter((c) => c !== city.city)}
+                      currentAirports={city.city ? { primary: city.primaryAirports, nearby: city.nearbyAirports } : undefined}
                     />
                   </div>
 
