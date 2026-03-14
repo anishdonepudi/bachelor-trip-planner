@@ -27,6 +27,7 @@ import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
 import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
+import { useAuth } from "./auth/AuthProvider";
 import { FilterBar } from "./FilterBar";
 import { FilterSheet } from "./FilterSheet";
 import { WeekendCard } from "./WeekendCard";
@@ -41,7 +42,14 @@ import { RankChangeIndicator } from "./ScoreBadge";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-export function Dashboard() {
+interface DashboardProps {
+  tripId?: string;
+}
+
+export function Dashboard({ tripId }: DashboardProps) {
+  const { user } = useAuth();
+  const [canEdit, setCanEdit] = useState(false);
+  const [tripName, setTripName] = useState<string | null>(null);
   // ── State ──
   const [flightCategory, setFlightCategory] = useState<FlightCategory>(DEFAULT_FLIGHT_CATEGORIES[0].id);
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
@@ -66,9 +74,12 @@ export function Dashboard() {
   const [collapsedCardHeight, setCollapsedCardHeight] = useState(0);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
 
+  // ── API base path ──
+  const apiBase = tripId ? `/api/trips/${tripId}` : "/api";
+
   // ── Data fetching ──
   const { data: weekendData, isLoading: weekendsLoading, mutate: mutateWeekends } = useSWR<WeekendData>(
-    "/api/weekends", fetcher, { revalidateOnFocus: false, dedupingInterval: 1800000 }
+    `${apiBase}/weekends`, fetcher, { revalidateOnFocus: false, dedupingInterval: 1800000 }
   );
 
   const { data: scrapeData, mutate: mutateScrape } = useSWR<{
@@ -78,7 +89,7 @@ export function Dashboard() {
     }[];
     lastFlightUpdate: string | null;
     scraperProgress: { completed: number; total: number; jobs: number } | null;
-  }>("/api/scrape-status", fetcher, {
+  }>(`${apiBase}/scrape-status`, fetcher, {
     revalidateOnFocus: false,
     refreshInterval: (latestData) => {
       if (scrapeTriggered) return 1000;
@@ -148,7 +159,7 @@ export function Dashboard() {
       initialLastUpdated.current = scrapeData.lastFlightUpdate;
     } else if (scrapeData.lastFlightUpdate !== initialLastUpdated.current) {
       if (weekendData) {
-        savePreviousWeekendData(weekendData);
+        savePreviousWeekendData(weekendData, tripId);
         setRankChangeVersion((v) => v + 1);
       }
       setShowUpdateModal(true);
@@ -168,7 +179,8 @@ export function Dashboard() {
     // and calls onDismissed when the transition completes
   }, [scrapeData?.lastFlightUpdate, mutateWeekends, mutateScrape]);
 
-  const { data: configData, mutate: mutateConfig } = useSWR("/api/config", fetcher, { revalidateOnFocus: false });
+  const configUrl = tripId ? `/api/trips/${tripId}` : "/api/config";
+  const { data: configData, mutate: mutateConfig } = useSWR(configUrl, fetcher, { revalidateOnFocus: false });
 
   useEffect(() => {
     if (configData?.cities && Array.isArray(configData.cities)) setCities(configData.cities);
@@ -179,7 +191,25 @@ export function Dashboard() {
     if (configData?.flight_time_filters) setFlightTimeFilters(configData.flight_time_filters);
     if (configData?.month_range) setMonthRange(configData.month_range);
     if (configData?.trip_duration) setTripDuration(configData.trip_duration);
-  }, [configData]);
+    if (configData?.name) setTripName(configData.name);
+    // Check edit permissions for trip-scoped dashboard
+    if (tripId && configData?.owner_id && user) {
+      if (configData.owner_id === user.id) {
+        setCanEdit(true);
+      } else {
+        // Check collaborator status
+        fetch(`/api/trips/${tripId}/collaborators`)
+          .then(r => r.json())
+          .then(d => {
+            const isCollab = d.collaborators?.some((c: { user_id: string }) => c.user_id === user.id);
+            setCanEdit(!!isCollab);
+          })
+          .catch(() => setCanEdit(false));
+      }
+    } else if (!tripId) {
+      setCanEdit(true); // Legacy mode — always editable
+    }
+  }, [configData, tripId, user]);
 
   // ── Derived data ──
   const allDateRanges = useMemo(() => generateDateRanges(monthRange, tripDuration), [monthRange, tripDuration]);
@@ -228,19 +258,19 @@ export function Dashboard() {
   const localPreviousData = useMemo(() => {
     void rankChangeVersion; // re-read when data is saved
     if (!weekendData) return null;
-    const localData = loadPreviousWeekendData();
+    const localData = loadPreviousWeekendData(tripId);
     if (!localData) return null;
     if (isLocalStorageStale(weekendData, localData)) return null;
     return localData;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rankChangeVersion, weekendData]);
+  }, [rankChangeVersion, weekendData, tripId]);
 
   const localRankChangeSince = useMemo(() => {
     void rankChangeVersion;
     if (!localPreviousData) return null;
-    return getPreviousDataTimestamp();
+    return getPreviousDataTimestamp(tripId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rankChangeVersion, localPreviousData]);
+  }, [rankChangeVersion, localPreviousData, tripId]);
 
   // Async fallback: DB fetch only when localStorage is stale/missing
   const [dbPreviousData, setDbPreviousData] = useState<{ data: WeekendData; timestamp: string } | null>(null);
@@ -250,22 +280,22 @@ export function Dashboard() {
     if (localPreviousData || !weekendData) return; // localStorage worked, skip DB
     if (dbFetchedRef.current) {
       // DB already fetched with no result — seed localStorage for next session
-      if (!loadPreviousWeekendData()) {
-        savePreviousWeekendData(weekendData);
+      if (!loadPreviousWeekendData(tripId)) {
+        savePreviousWeekendData(weekendData, tripId);
         setRankChangeVersion((v) => v + 1);
       }
       return;
     }
     dbFetchedRef.current = true;
-    fetchPreviousWeekendDataFromDB().then((result) => {
+    fetchPreviousWeekendDataFromDB(tripId).then((result) => {
       if (result && !isLocalStorageStale(weekendData, result.data)) {
         setDbPreviousData(result);
-      } else if (!loadPreviousWeekendData()) {
-        savePreviousWeekendData(weekendData);
+      } else if (!loadPreviousWeekendData(tripId)) {
+        savePreviousWeekendData(weekendData, tripId);
         setRankChangeVersion((v) => v + 1);
       }
     });
-  }, [weekendData, localPreviousData]);
+  }, [weekendData, localPreviousData, tripId]);
 
   // Use whichever source has data (localStorage is preferred — instant)
   const previousWeekendData = localPreviousData ?? dbPreviousData?.data ?? null;
@@ -289,6 +319,7 @@ export function Dashboard() {
 
   const handleMobileTab = (tab: "overview" | "ranked" | "configure") => {
     if (tab === "configure") {
+      if (!canEdit) return;
       mutateConfig();
       setShowMobileConfig(true);
     } else {
@@ -330,8 +361,15 @@ export function Dashboard() {
         <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
           {/* Left: brand */}
           <div className="flex items-center gap-3">
+            {tripId && (
+              <a href="/" className="text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors duration-150 mr-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </a>
+            )}
             <h1 className="text-sm font-heading font-bold tracking-tight text-[var(--text-1)]">
-              TripSync
+              {tripName || "TripSync"}
             </h1>
             <span className="text-[11px] text-[var(--text-3)] font-mono tabular-nums hidden sm:inline">
               {cities.filter(c => c.city).length} cities &middot; {cities.reduce((s, c) => s + c.people, 0)} people
@@ -340,6 +378,20 @@ export function Dashboard() {
 
           {/* Right: actions */}
           <div className="flex items-center gap-1.5">
+            {tripId && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href);
+                }}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)] text-[var(--text-1)] hover:bg-[var(--surface-3)] hover:border-[var(--border-hover)] transition-all duration-150 text-xs font-medium"
+                title="Copy trip link"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                <span className="hidden sm:inline">Share</span>
+              </button>
+            )}
             <div className="hidden md:block">
               <JobsPanel runs={scrapeData?.runs ?? []} />
             </div>
@@ -347,27 +399,31 @@ export function Dashboard() {
               lastUpdated={scrapeData?.lastFlightUpdate ?? null}
               isRunning={isRunning}
               onTriggered={handleScrapeTriggered}
+              tripId={tripId}
             />
-            <div className="hidden md:block">
-              <ConfigModal
-                cities={cities}
-                excludedDates={excludedDates}
-                destinationAirport={destinationAirport}
-                destinationCity={destinationCity}
-                flightCategories={flightCategories}
-                flightTimeFilters={flightTimeFilters}
-                monthRange={monthRange}
-                tripDuration={tripDuration}
-                onOpen={() => mutateConfig()}
-                onSave={handleConfigSave}
-              />
-            </div>
+            {canEdit && (
+              <div className="hidden md:block">
+                <ConfigModal
+                  cities={cities}
+                  excludedDates={excludedDates}
+                  destinationAirport={destinationAirport}
+                  destinationCity={destinationCity}
+                  flightCategories={flightCategories}
+                  flightTimeFilters={flightTimeFilters}
+                  monthRange={monthRange}
+                  tripDuration={tripDuration}
+                  onOpen={() => mutateConfig()}
+                  onSave={handleConfigSave}
+                  tripId={tripId}
+                />
+              </div>
+            )}
           </div>
         </div>
       </header>
 
-      {/* ── Progress banner ── */}
-      {isRunning && (
+      {/* ── Refresh / config-changed banner ── */}
+      {isRunning ? (
         <div className="border-b border-[var(--blue-border)] bg-[var(--blue-soft)]">
           <div className="max-w-5xl mx-auto px-4 py-2 space-y-1.5">
             <div className="flex items-center gap-2.5">
@@ -376,7 +432,7 @@ export function Dashboard() {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
               <span className="text-xs text-[var(--blue)] flex-1">
-                {runningJobs.length > 0 ? "Refreshing prices..." : "Starting refresh..."}
+                {configChanged ? "Config updated — refreshing prices..." : runningJobs.length > 0 ? "Refreshing prices..." : "Starting refresh..."}
                 {estimatedRefreshMinutes > 0 && (
                   <span className="text-[var(--blue)] opacity-70">
                     {" "}&mdash; ~{refreshProgress > 5
@@ -384,9 +440,17 @@ export function Dashboard() {
                       : estimatedRefreshMinutes} min remaining
                   </span>
                 )}
+                {configChanged && <span className="text-[var(--blue)] opacity-70">{" "}(showing previous data)</span>}
               </span>
               {activeRun && (
                 <span className="text-xs font-mono font-semibold text-[var(--blue)] tabular-nums">{refreshProgress}%</span>
+              )}
+              {configChanged && (
+                <button onClick={() => setConfigChanged(false)} className="text-[var(--blue)] opacity-60 hover:opacity-100 transition-opacity duration-150">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               )}
             </div>
             {activeRun && (
@@ -396,16 +460,13 @@ export function Dashboard() {
             )}
           </div>
         </div>
-      )}
-
-      {/* ── Config changed banner ── */}
-      {configChanged && (
+      ) : configChanged && (
         <div className="border-b border-[var(--gold-border)] bg-[var(--gold-soft)]">
           <div className="max-w-5xl mx-auto px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
               <span className="text-xs text-[var(--gold)]">
-                Config updated. Refresh in progress &mdash; estimated ~{estimatedRefreshMinutes} min. Showing previous data.
+                Config updated &mdash; starting refresh (estimated ~{estimatedRefreshMinutes} min).
               </span>
             </div>
             <button onClick={() => setConfigChanged(false)} className="text-[var(--gold)] opacity-60 hover:opacity-100 transition-opacity duration-150">
@@ -594,7 +655,7 @@ export function Dashboard() {
       />
 
       {/* Mobile configure — bottom sheet style */}
-      {showMobileConfig && (
+      {showMobileConfig && canEdit && (
         <div className="fixed inset-0 z-[100] md:hidden">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowMobileConfig(false)} />
           <div className="absolute bottom-0 left-0 right-0 rounded-t-xl bg-[var(--surface-0)] border-t border-[var(--border-default)] shadow-2xl max-h-[90vh] flex flex-col animate-slide-up">
@@ -629,6 +690,7 @@ export function Dashboard() {
                   setShowMobileConfig(false);
                 }}
                 inlineMode
+                tripId={tripId}
               />
             </div>
           </div>

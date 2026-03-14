@@ -1,0 +1,167 @@
+import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabase/server";
+
+interface GitHubJob {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+interface GitHubRun {
+  id: number;
+  status: string;
+  conclusion: string | null;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+}
+
+function mapStatus(job: GitHubJob): string {
+  if (job.status === "queued") return "queued";
+  if (job.status === "in_progress") return "running";
+  if (job.conclusion === "success") return "completed";
+  if (job.conclusion === "skipped") return "skipped";
+  return "failed";
+}
+
+async function fetchGitHubJobs() {
+  const githubPat = process.env.GITHUB_PAT;
+  const githubRepo = process.env.GITHUB_REPO;
+
+  if (!githubPat || !githubRepo) return null;
+
+  const runsRes = await fetch(
+    `https://api.github.com/repos/${githubRepo}/actions/workflows/scrape.yml/runs?per_page=5`,
+    {
+      headers: {
+        Authorization: `token ${githubPat}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+      next: { revalidate: 0 },
+    }
+  );
+
+  if (!runsRes.ok) return null;
+  const runsData = await runsRes.json();
+  const runs: GitHubRun[] = runsData.workflow_runs ?? [];
+
+  if (runs.length === 0) return { runs: [], allJobs: [] };
+
+  const allJobs = await Promise.all(
+    runs.map(async (run) => {
+      const jobsRes = await fetch(
+        `https://api.github.com/repos/${githubRepo}/actions/runs/${run.id}/jobs?per_page=100`,
+        {
+          headers: {
+            Authorization: `token ${githubPat}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+          next: { revalidate: 0 },
+        }
+      );
+      if (!jobsRes.ok) return { run, jobs: [] as GitHubJob[] };
+      const jobsData = await jobsRes.json();
+      return { run, jobs: (jobsData.jobs ?? []) as GitHubJob[] };
+    })
+  );
+
+  return { runs, allJobs };
+}
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ tripId: string }> }
+) {
+  const { tripId } = await params;
+
+  try {
+    const [githubData, latestFlightResult] = await Promise.all([
+      fetchGitHubJobs(),
+      supabaseAdmin
+        .from("flights")
+        .select("scraped_at")
+        .eq("trip_id", tripId)
+        .order("scraped_at", { ascending: false })
+        .limit(1),
+    ]);
+
+    const lastFlightUpdate = latestFlightResult.data?.[0]?.scraped_at ?? null;
+
+    let scraperProgress: { completed: number; total: number; jobs: number } | null = null;
+    if (githubData?.allJobs) {
+      const activeRun = githubData.allJobs.find(({ jobs }) =>
+        jobs.some((j) => j.status === "in_progress" || j.status === "queued")
+      );
+      if (activeRun) {
+        const { data: progressRows } = await supabaseAdmin
+          .from("scrape_jobs")
+          .select("progress")
+          .eq("github_run_id", String(activeRun.run.id))
+          .eq("trip_id", tripId);
+
+        if (progressRows && progressRows.length > 0) {
+          let totalCompleted = 0;
+          let totalTasks = 0;
+          for (const row of progressRows) {
+            const p = row.progress as { completed?: number; total?: number } | null;
+            if (p && p.total && p.total > 0) {
+              totalCompleted += p.completed ?? 0;
+              totalTasks += p.total;
+            }
+          }
+          if (totalTasks > 0) {
+            scraperProgress = { completed: totalCompleted, total: totalTasks, jobs: progressRows.length };
+          }
+        }
+      }
+    }
+
+    if (!githubData) {
+      const { data, error } = await supabaseAdmin
+        .from("scrape_jobs")
+        .select("*")
+        .eq("trip_id", tripId)
+        .order("started_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      return NextResponse.json({
+        jobs: (data ?? []).map((j: Record<string, unknown>) => ({
+          id: j.id,
+          name: j.job_type,
+          status: j.status,
+          started_at: j.started_at,
+          completed_at: j.completed_at,
+          error_message: j.error_message,
+          run_id: j.github_run_id,
+        })),
+        runs: [],
+        lastFlightUpdate,
+      });
+    }
+
+    const runs = (githubData.allJobs ?? []).map(({ run, jobs }) => ({
+      run_id: run.id,
+      status: run.status === "completed" ? (run.conclusion ?? "completed") : run.status,
+      created_at: run.created_at,
+      updated_at: run.updated_at,
+      url: run.html_url,
+      jobs: jobs.map((j) => ({
+        id: j.id,
+        name: j.name,
+        status: mapStatus(j),
+        started_at: j.started_at,
+        completed_at: j.completed_at,
+      })),
+    }));
+
+    return NextResponse.json({ runs, lastFlightUpdate, scraperProgress });
+  } catch (error) {
+    console.error("Error fetching scrape status:", error);
+    return NextResponse.json({ error: "Failed to fetch scrape status" }, { status: 500 });
+  }
+}

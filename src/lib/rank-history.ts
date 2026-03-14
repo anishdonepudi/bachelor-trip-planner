@@ -1,7 +1,12 @@
 import { WeekendData } from "./types";
 
-const STORAGE_KEY = "tripsync_previous_weekend_data";
-const TIMESTAMP_KEY = "tripsync_previous_data_timestamp";
+function storageKey(tripId?: string) {
+  return tripId ? `tripsync_previous_weekend_data_${tripId}` : "tripsync_previous_weekend_data";
+}
+
+function timestampKey(tripId?: string) {
+  return tripId ? `tripsync_previous_data_timestamp_${tripId}` : "tripsync_previous_data_timestamp";
+}
 
 /**
  * Strip WeekendData down to only the fields needed by scoreAllWeekends,
@@ -61,20 +66,20 @@ export function minimizeForScoring(data: WeekendData): WeekendData {
   return { flights, flightOptions, airbnbListings } as WeekendData;
 }
 
-export function savePreviousWeekendData(data: WeekendData): void {
+export function savePreviousWeekendData(data: WeekendData, tripId?: string): void {
   try {
     const minimal = minimizeForScoring(data);
     const json = JSON.stringify(minimal);
-    localStorage.setItem(STORAGE_KEY, json);
-    localStorage.setItem(TIMESTAMP_KEY, new Date().toISOString());
+    localStorage.setItem(storageKey(tripId), json);
+    localStorage.setItem(timestampKey(tripId), new Date().toISOString());
   } catch (e) {
     console.warn("[rank-history] save failed:", e);
   }
 }
 
-export function loadPreviousWeekendData(): WeekendData | null {
+export function loadPreviousWeekendData(tripId?: string): WeekendData | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey(tripId));
     if (!raw) return null;
     return JSON.parse(raw) as WeekendData;
   } catch {
@@ -82,18 +87,18 @@ export function loadPreviousWeekendData(): WeekendData | null {
   }
 }
 
-export function getPreviousDataTimestamp(): string | null {
+export function getPreviousDataTimestamp(tripId?: string): string | null {
   try {
-    return localStorage.getItem(TIMESTAMP_KEY);
+    return localStorage.getItem(timestampKey(tripId));
   } catch {
     return null;
   }
 }
 
-export function clearPreviousWeekendData(): void {
+export function clearPreviousWeekendData(tripId?: string): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(TIMESTAMP_KEY);
+    localStorage.removeItem(storageKey(tripId));
+    localStorage.removeItem(timestampKey(tripId));
   } catch {
     // SSR — silently ignore
   }
@@ -133,12 +138,15 @@ export function isLocalStorageStale(
  * Fetch previous weekend data from the DB snapshot (fallback when localStorage is stale).
  * Returns the snapshot and its timestamp, or null if unavailable.
  */
-export async function fetchPreviousWeekendDataFromDB(): Promise<{
+export async function fetchPreviousWeekendDataFromDB(tripId?: string): Promise<{
   data: WeekendData;
   timestamp: string;
 } | null> {
   try {
-    const res = await fetch("/api/weekends/previous");
+    const url = tripId
+      ? `/api/trips/${tripId}/weekends/previous`
+      : "/api/weekends/previous";
+    const res = await fetch(url);
     if (!res.ok) return null;
 
     const json = await res.json();

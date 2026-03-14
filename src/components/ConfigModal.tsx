@@ -27,6 +27,7 @@ interface ConfigModalProps {
   onOpen?: () => void;
   onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, monthRange: MonthRange, tripDuration: TripDuration) => void;
   inlineMode?: boolean;
+  tripId?: string;
 }
 
 type Section = "trip" | "group" | "flights" | "schedule";
@@ -76,7 +77,7 @@ function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, c
   );
 }
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<Section>>(new Set(["trip"]));
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -337,7 +338,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setSaving(true);
     try {
       const total = cities.reduce((sum, c) => sum + c.people, 0);
-      const res = await fetch("/api/config", {
+      const saveUrl = tripId ? `/api/trips/${tripId}` : "/api/config";
+      const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, month_range: monthRange, trip_duration: tripDuration, skip_scrape: !citiesChanged }),
