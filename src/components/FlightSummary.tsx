@@ -43,23 +43,31 @@ function FlightLeg({ leg, fromAirport, toAirport, label }: {
   label: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2 min-w-0">
-        <span className="text-[10px] text-[var(--text-3)] w-6 shrink-0 uppercase font-medium">{label}</span>
-        <span className="text-xs font-mono font-medium text-[var(--text-1)]">{fromAirport}</span>
-        <svg className="w-3 h-3 text-[var(--text-3)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-        </svg>
-        <span className="text-xs font-mono font-medium text-[var(--text-1)]">{toAirport}</span>
-      </div>
-      <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-3)] shrink-0">
-        {leg.stops === 0 ? (
-          <span className="text-[var(--teal)] font-medium">Direct</span>
-        ) : (
-          <span className="text-[var(--orange)]">{leg.stops} stop</span>
-        )}
-        {leg.duration && <span>{leg.duration}</span>}
-      </div>
+    <div className="flex items-center gap-1.5 text-[11px] whitespace-nowrap overflow-hidden">
+      <span className="text-[10px] text-[var(--text-3)] uppercase font-medium shrink-0">{label}</span>
+      <span className="font-mono font-medium text-[var(--text-1)] shrink-0">{fromAirport}</span>
+      <svg className="w-3 h-3 text-[var(--text-3)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+      </svg>
+      <span className="font-mono font-medium text-[var(--text-1)] shrink-0">{toAirport}</span>
+      <span className="text-[var(--text-3)]">&middot;</span>
+      {leg.stops === 0 ? (
+        <span className="text-[var(--teal)] font-medium shrink-0">Direct</span>
+      ) : (
+        <span className="text-[var(--orange)] shrink-0">{leg.stops} stop</span>
+      )}
+      {leg.duration && (
+        <>
+          <span className="text-[var(--text-3)]">&middot;</span>
+          <span className="text-[var(--text-3)] shrink-0">{leg.duration}</span>
+        </>
+      )}
+      {leg.departTime && leg.arriveTime && (
+        <>
+          <span className="text-[var(--text-3)]">&middot;</span>
+          <span className="font-mono tabular-nums text-[var(--text-3)] shrink-0">{to12h(leg.departTime)}–{to12h(leg.arriveTime)}</span>
+        </>
+      )}
     </div>
   );
 }
@@ -145,21 +153,6 @@ function MobileCityFlightCard({ cost }: { cost: CostBreakdown }) {
               toAirport={apt}
               label="Ret"
             />
-          )}
-          {/* Times */}
-          {primaryOption.outbound_details?.departTime && primaryOption.outbound_details?.arriveTime && (
-            <div className="flex items-center gap-3 pt-1 border-t border-[var(--border-default)]">
-              <div className="flex items-center gap-1 text-[11px] text-[var(--text-3)]">
-                <span className="text-[10px] w-6 shrink-0 uppercase font-medium">Out</span>
-                <span className="font-mono tabular-nums">{to12h(primaryOption.outbound_details.departTime)} – {to12h(primaryOption.outbound_details.arriveTime)}</span>
-              </div>
-              {primaryOption.return_details?.departTime && primaryOption.return_details?.arriveTime && (
-                <div className="flex items-center gap-1 text-[11px] text-[var(--text-3)]">
-                  <span className="text-[10px] w-6 shrink-0 uppercase font-medium">Ret</span>
-                  <span className="font-mono tabular-nums">{to12h(primaryOption.return_details.departTime)} – {to12h(primaryOption.return_details.arriveTime)}</span>
-                </div>
-              )}
-            </div>
           )}
         </div>
       )}
