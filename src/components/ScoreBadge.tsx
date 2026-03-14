@@ -1,8 +1,91 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { CostBreakdown, CityStats, RankChangeInfo } from "@/lib/types";
 import { TOTAL_PEOPLE } from "@/lib/constants";
+
+const SWIPE_THRESHOLD = 60;
+
+function SwipeableTooltip({
+  open,
+  onClose,
+  flipUp,
+  className,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  flipUp: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const dragStartY = useRef(0);
+  const [dragOffset, setDragOffset] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
+  if (!open) return null;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    dragStartY.current = e.touches[0].clientY;
+    setIsDragging(true);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const dy = e.touches[0].clientY - dragStartY.current;
+    // Only allow dragging down
+    setDragOffset(Math.max(0, dy));
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    if (dragOffset > SWIPE_THRESHOLD) {
+      onClose();
+    }
+    setDragOffset(0);
+  };
+
+  const opacity = dragOffset > 0 ? Math.max(0, 1 - dragOffset / (SWIPE_THRESHOLD * 2)) : 1;
+
+  return (
+    <>
+      {/* Mobile: bottom sheet with backdrop */}
+      <div className="sm:hidden">
+        <div
+          className="fixed inset-0 z-50 bg-black/20"
+          style={{ opacity }}
+          onClick={onClose}
+        />
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-[var(--surface-2)] border-t border-[var(--border-hover)] shadow-2xl p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-xs max-h-[70vh] overflow-y-auto"
+          style={{
+            transform: `translateY(${dragOffset}px)`,
+            transition: isDragging ? "none" : "transform 200ms ease-out, opacity 200ms",
+            opacity,
+          }}
+          onClick={(e) => e.stopPropagation()}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Drag handle */}
+          <div className="flex justify-center mb-2">
+            <div className="w-8 h-1 rounded-full bg-[var(--surface-3)]" />
+          </div>
+          {children}
+        </div>
+      </div>
+
+      {/* Desktop: positioned tooltip */}
+      <div
+        className={`hidden sm:block absolute left-0 z-50 rounded-lg bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-2xl p-3 text-xs ${flipUp ? "bottom-full mb-2" : "top-full mt-2"} ${className ?? ""}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </div>
+    </>
+  );
+}
 
 interface ScoreBadgeProps {
   score: number;
@@ -53,6 +136,18 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
     setShowTooltip(true);
   }, []);
 
+  // Close on tap outside (mobile)
+  useEffect(() => {
+    if (!showTooltip) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
+        setShowTooltip(false);
+      }
+    };
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
+  }, [showTooltip]);
+
   return (
     <div
       ref={triggerRef}
@@ -85,11 +180,8 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
       </div>
 
       {/* Tooltip */}
-      {showTooltip && perCityCosts.length > 0 && (
-        <div
-          className={`absolute left-0 z-50 w-[calc(100vw-2rem)] sm:w-72 rounded-lg bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-2xl p-3 text-xs ${flipUp ? "bottom-full mb-2" : "top-full mt-2"}`}
-          onClick={(e) => e.stopPropagation()}
-        >
+      {perCityCosts.length > 0 && (
+        <SwipeableTooltip open={showTooltip} onClose={() => setShowTooltip(false)} flipUp={flipUp} className="w-72">
           <div className="flex items-center justify-between mb-2">
             <span className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
               Score Breakdown
@@ -151,7 +243,7 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
               <span className="font-mono tabular-nums">${avgPerPerson}</span>
             </div>
           )}
-        </div>
+        </SwipeableTooltip>
       )}
     </div>
   );
@@ -179,6 +271,18 @@ export function RankChangeIndicator({ info, sinceTimestamp }: { info: RankChange
     }
     setShowTooltip(true);
   }, []);
+
+  // Close on tap outside (mobile)
+  useEffect(() => {
+    if (!showTooltip) return;
+    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
+        setShowTooltip(false);
+      }
+    };
+    document.addEventListener("pointerdown", handleClickOutside);
+    return () => document.removeEventListener("pointerdown", handleClickOutside);
+  }, [showTooltip]);
 
   if (!info) return null;
 
@@ -225,11 +329,7 @@ export function RankChangeIndicator({ info, sinceTimestamp }: { info: RankChange
         </span>
       ) : null}
 
-      {showTooltip && (
-        <div
-          className={`absolute left-0 z-50 w-72 rounded-lg bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-2xl p-2.5 text-xs ${flipUp ? "bottom-full mb-1.5" : "top-full mt-1.5"}`}
-          onClick={(e) => e.stopPropagation()}
-        >
+      <SwipeableTooltip open={showTooltip} onClose={() => setShowTooltip(false)} flipUp={flipUp} className="w-72">
           <div className="mb-2">
             <div className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
               {isNew ? "New Weekend" : "Why did this change?"}
@@ -456,8 +556,7 @@ export function RankChangeIndicator({ info, sinceTimestamp }: { info: RankChange
               )}
             </>
           )}
-        </div>
-      )}
+      </SwipeableTooltip>
     </div>
   );
 }
