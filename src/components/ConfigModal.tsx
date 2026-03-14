@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS } from "@/lib/constants";
@@ -38,9 +38,14 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(initialTimeFilters);
   const [saving, setSaving] = useState(false);
 
-  // Sync local state when props update (e.g. after config refetch)
+  // Track whether user has started editing (prevents prop sync from overwriting changes)
+  const hasEdited = useRef(false);
+
+  // Sync local state when props update (e.g. after config refetch on open)
+  // but only if user hasn't started editing yet
   useEffect(() => {
-    if (!open && !inlineMode) return; // only sync when visible
+    if (!open && !inlineMode) return;
+    if (hasEdited.current) return;
     setCities(initialCities);
     setExcludedDates(initialExcluded);
     setDestinationAirport(initialDestination);
@@ -52,6 +57,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
+      hasEdited.current = false;
       onOpen?.();
       setCities(initialCities);
       setExcludedDates(initialExcluded);
@@ -82,14 +88,17 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     timeFiltersChanged;
 
   const addCity = () => {
+    hasEdited.current = true;
     setCities([...cities, { city: "", people: 1, primaryAirports: [], nearbyAirports: [] }]);
   };
 
   const removeCity = (index: number) => {
+    hasEdited.current = true;
     setCities(cities.filter((_, i) => i !== index));
   };
 
   const updateCity = (index: number, field: string, value: string | number) => {
+    hasEdited.current = true;
     const updated = [...cities];
     if (field === "city") {
       const cityName = value as string;
@@ -106,6 +115,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   };
 
   const toggleDate = (date: string) => {
+    hasEdited.current = true;
     setExcludedDates((prev) => prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]);
   };
 
@@ -135,6 +145,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
 
   // Flight category helpers
   const addFlightCategory = () => {
+    hasEdited.current = true;
     const combos: Array<{ stops: 0 | 1 | 2; bags: "carryon" | "none" }> = [
       { stops: 0, bags: "carryon" }, { stops: 0, bags: "none" },
       { stops: 1, bags: "carryon" }, { stops: 1, bags: "none" },
@@ -148,10 +159,12 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   };
 
   const removeFlightCategory = (index: number) => {
+    hasEdited.current = true;
     setFlightCategories(flightCategories.filter((_, i) => i !== index));
   };
 
   const updateFlightCategory = (index: number, field: "stops" | "bags", value: 0 | 1 | 2 | "carryon" | "none") => {
+    hasEdited.current = true;
     const updated = [...flightCategories];
     if (field === "stops") {
       updated[index] = { ...updated[index], stops: value as 0 | 1 | 2 };
@@ -174,6 +187,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     field: "time" | "plusMinus",
     value: string | number
   ) => {
+    hasEdited.current = true;
     setTimeFilters(prev => ({
       ...prev,
       [leg]: { ...prev[leg], [field]: value },
@@ -195,7 +209,15 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, skip_scrape: !citiesChanged }),
       });
-      if (res.ok) { onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters); setOpen(false); }
+      if (res.ok) {
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters);
+        hasEdited.current = false;
+        setOpen(false);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        console.error("Config save failed:", res.status, err);
+        alert(`Save failed: ${err.error || res.statusText}`);
+      }
     } finally { setSaving(false); }
   };
 
@@ -372,7 +394,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   <span className="w-1.5 h-1.5 rounded-full bg-[var(--red)]" />
                   <span className="text-xs text-[var(--red)]">{excludedDates.length} blocked</span>
                 </div>
-                <button onClick={() => setExcludedDates([])}
+                <button onClick={() => { hasEdited.current = true; setExcludedDates([]); }}
                   className="text-[11px] text-[var(--red)] opacity-70 hover:opacity-100 transition-opacity duration-150 font-medium">
                   Clear
                 </button>
@@ -401,7 +423,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   <div className="text-[11px] text-[var(--text-2)] mt-0.5">Flights longer than this are excluded</div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setTimeFilters(prev => ({ ...prev, maxDuration: Math.max(1, prev.maxDuration - 1) }))}
+                  <button onClick={() => { hasEdited.current = true; setTimeFilters(prev => ({ ...prev, maxDuration: Math.max(1, prev.maxDuration - 1) })); }}
                     className="w-8 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
@@ -410,7 +432,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   <div className="w-14 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
                     <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{timeFilters.maxDuration}hr</span>
                   </div>
-                  <button onClick={() => setTimeFilters(prev => ({ ...prev, maxDuration: Math.min(24, prev.maxDuration + 1) }))}
+                  <button onClick={() => { hasEdited.current = true; setTimeFilters(prev => ({ ...prev, maxDuration: Math.min(24, prev.maxDuration + 1) })); }}
                     className="w-8 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
