@@ -146,14 +146,17 @@ export function Dashboard() {
     }
   }, [scrapeData?.lastFlightUpdate, weekendData]);
 
-  const handleDataRefresh = useCallback(() => {
-    setShowUpdateModal(false);
+  const handleDataRefresh = useCallback(async () => {
     setConfigChanged(false);
     setScrapeTriggered(false);
     initialLastUpdated.current = scrapeData?.lastFlightUpdate ?? null;
     modalCooldownUntil.current = Date.now() + 60_000; // ignore changes for 60s after dismissing
-    mutateWeekends();
+    // Await the data fetch so the modal stays open until new data + rank changes are ready
+    await mutateWeekends();
     mutateScrape();
+    // Let React flush the re-render with new data + rank changes before closing modal
+    await new Promise((r) => requestAnimationFrame(r));
+    setShowUpdateModal(false);
   }, [scrapeData?.lastFlightUpdate, mutateWeekends, mutateScrape]);
 
   const { data: configData } = useSWR("/api/config", fetcher, { revalidateOnFocus: false });
