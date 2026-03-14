@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { WeekendScore, FlightCategory, BudgetTier, RankChangeInfo, CityStats } from "@/lib/types";
 import { FLIGHT_CATEGORIES, TOTAL_PEOPLE } from "@/lib/constants";
@@ -8,6 +8,108 @@ import { formatDateRangeDisplay } from "@/lib/date-ranges";
 import { ScoreBadge } from "./ScoreBadge";
 import { FlightSummary } from "./FlightSummary";
 import { FlightAllOptions } from "./FlightAllOptions";
+
+const SWIPE_THRESHOLD = 60;
+
+function MobileBottomSheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef(0);
+  const dragOffsetRef = useRef(0);
+  const isDragging = useRef(false);
+  const [dragOffset, setDragOffset] = useState(0);
+
+  // Lock body scroll
+  useEffect(() => {
+    if (!open) return;
+    const scrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      window.scrollTo(0, scrollY);
+    };
+  }, [open]);
+
+  // Swipe-to-dismiss via native touch events
+  useEffect(() => {
+    if (!open) return;
+    const el = sheetRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (el.scrollTop > 0) return;
+      dragStartY.current = e.touches[0].clientY;
+      isDragging.current = true;
+      dragOffsetRef.current = 0;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current) return;
+      const dy = e.touches[0].clientY - dragStartY.current;
+      if (dy > 0) {
+        e.preventDefault();
+        dragOffsetRef.current = dy;
+        setDragOffset(dy);
+      } else {
+        isDragging.current = false;
+        dragOffsetRef.current = 0;
+        setDragOffset(0);
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      if (dragOffsetRef.current > SWIPE_THRESHOLD) {
+        onClose();
+      }
+      dragOffsetRef.current = 0;
+      setDragOffset(0);
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  const opacity = dragOffset > 0 ? Math.max(0, 1 - dragOffset / (SWIPE_THRESHOLD * 2)) : 1;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[60] md:hidden" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/40" style={{ opacity }} />
+      <div
+        ref={sheetRef}
+        className="absolute bottom-0 left-0 right-0 bg-[var(--surface-0)] rounded-t-2xl border-t border-[var(--border-default)] max-h-[75vh] overflow-y-auto overscroll-none"
+        style={{
+          transform: `translateY(${dragOffset}px)`,
+          transition: isDragging.current ? "none" : "transform 200ms ease-out",
+          opacity,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex justify-center pt-3 pb-2">
+          <div className="w-10 h-1 rounded-full bg-[var(--text-3)] opacity-30" />
+        </div>
+        <div className="px-4 pb-6">
+          {children}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 import { AirbnbGrid } from "./AirbnbGrid";
 import { CostBreakdownTable } from "./CostBreakdown";
 
@@ -294,226 +396,200 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
       )}
 
       {/* Score breakdown bottom sheet (mobile only) */}
-      {showScoreSheet && createPortal(
-        <div className="fixed inset-0 z-[60] md:hidden" onClick={() => setShowScoreSheet(false)}>
-          <div className="absolute inset-0 bg-black/40" />
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-[var(--surface-0)] rounded-t-2xl border-t border-[var(--border-default)] animate-slide-up max-h-[75vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 rounded-full bg-[var(--text-3)] opacity-30" />
-            </div>
-            <div className="px-4 pb-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
-                  Score Breakdown
-                </span>
-                <span className="font-mono font-semibold text-sm" style={{ color: tierColor }}>
-                  {Math.round(score)} — {getTierLabel(score)}
-                </span>
-              </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-[var(--text-3)] text-[10px]">
-                    <th className="text-left pb-1 font-medium">City</th>
-                    <th className="text-right pb-1 font-medium">Cost</th>
-                    <th className="text-right pb-1 font-medium">Avg</th>
-                    <th className="text-right pb-1 font-medium">vs Avg</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border-default)]">
-                  {perCityCosts.map((c) => {
-                    const stats = cityAverages[c.city];
-                    const rating = c.perPersonTotal !== null && stats
-                      ? getRating(c.perPersonTotal, stats)
-                      : null;
-                    return (
-                      <tr key={c.city} className="text-[var(--text-1)]">
-                        <td className="py-1.5 text-[var(--text-2)]">
-                          {c.city}
-                          {c.people > 1 && <span className="text-[var(--text-3)] ml-0.5">x{c.people}</span>}
-                        </td>
-                        <td className="py-1.5 text-right font-mono tabular-nums">
-                          {c.perPersonTotal !== null ? `$${Math.round(c.perPersonTotal)}` : "-"}
-                        </td>
-                        <td className="py-1.5 text-right font-mono tabular-nums text-[var(--text-2)]">
-                          {stats ? `$${Math.round(stats.mean)}` : "-"}
-                        </td>
-                        <td className="py-1.5 text-right">
-                          {rating && <span className={`font-semibold ${rating.cls}`}>{rating.label}</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <div className="mt-2 pt-2 border-t border-[var(--border-hover)] flex justify-between text-xs text-[var(--text-1)]">
-                <span className="font-semibold">Total</span>
-                <span className="font-mono font-semibold tabular-nums">
-                  {totalGroupCost !== Infinity ? `$${totalGroupCost.toLocaleString()}` : "N/A"}
-                </span>
-              </div>
-              {avgPerPerson && (
-                <div className="flex justify-between text-xs text-[var(--text-2)] mt-0.5">
-                  <span>Avg per person</span>
-                  <span className="font-mono tabular-nums">${avgPerPerson}</span>
-                </div>
-              )}
-            </div>
+      <MobileBottomSheet open={showScoreSheet} onClose={() => setShowScoreSheet(false)}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
+            Score Breakdown
+          </span>
+          <span className="font-mono font-semibold text-sm" style={{ color: tierColor }}>
+            {Math.round(score)} — {getTierLabel(score)}
+          </span>
+        </div>
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-[var(--text-3)] text-[10px]">
+              <th className="text-left pb-1 font-medium">City</th>
+              <th className="text-right pb-1 font-medium">Cost</th>
+              <th className="text-right pb-1 font-medium">Avg</th>
+              <th className="text-right pb-1 font-medium">vs Avg</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[var(--border-default)]">
+            {perCityCosts.map((c) => {
+              const stats = cityAverages[c.city];
+              const rating = c.perPersonTotal !== null && stats
+                ? getRating(c.perPersonTotal, stats)
+                : null;
+              return (
+                <tr key={c.city} className="text-[var(--text-1)]">
+                  <td className="py-1.5 text-[var(--text-2)]">
+                    {c.city}
+                    {c.people > 1 && <span className="text-[var(--text-3)] ml-0.5">x{c.people}</span>}
+                  </td>
+                  <td className="py-1.5 text-right font-mono tabular-nums">
+                    {c.perPersonTotal !== null ? `$${Math.round(c.perPersonTotal)}` : "-"}
+                  </td>
+                  <td className="py-1.5 text-right font-mono tabular-nums text-[var(--text-2)]">
+                    {stats ? `$${Math.round(stats.mean)}` : "-"}
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {rating && <span className={`font-semibold ${rating.cls}`}>{rating.label}</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div className="mt-2 pt-2 border-t border-[var(--border-hover)] flex justify-between text-xs text-[var(--text-1)]">
+          <span className="font-semibold">Total</span>
+          <span className="font-mono font-semibold tabular-nums">
+            {totalGroupCost !== Infinity ? `$${totalGroupCost.toLocaleString()}` : "N/A"}
+          </span>
+        </div>
+        {avgPerPerson && (
+          <div className="flex justify-between text-xs text-[var(--text-2)] mt-0.5">
+            <span>Avg per person</span>
+            <span className="font-mono tabular-nums">${avgPerPerson}</span>
           </div>
-        </div>,
-        document.body
-      )}
+        )}
+      </MobileBottomSheet>
 
       {/* Rank change bottom sheet (mobile only) */}
-      {showRankChangeSheet && rankChangeInfo && rankChangeInfo.rankDelta !== 0 && createPortal(
-        <div className="fixed inset-0 z-[60] md:hidden" onClick={() => setShowRankChangeSheet(false)}>
-          <div className="absolute inset-0 bg-black/40" />
-          <div
-            className="absolute bottom-0 left-0 right-0 bg-[var(--surface-0)] rounded-t-2xl border-t border-[var(--border-default)] animate-slide-up max-h-[75vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 rounded-full bg-[var(--text-3)] opacity-30" />
-            </div>
-            <div className="px-4 pb-6">
-              {(() => {
-                const isNew = rankChangeInfo.rankDelta === null;
-                const scoreDelta = rankChangeInfo.previousScore !== null
-                  ? Math.round(rankChangeInfo.currentScore) - Math.round(rankChangeInfo.previousScore)
-                  : null;
-                const costDelta = rankChangeInfo.previousCost !== null && rankChangeInfo.previousCost !== Infinity && rankChangeInfo.currentCost !== Infinity
-                  ? rankChangeInfo.currentCost - rankChangeInfo.previousCost
-                  : null;
-                const algo = rankChangeInfo.scoringAlgorithm;
-                const showMarketAvg = algo === "zscore";
-                const showTotalCost = algo === "lowest_total" || algo === "lowest_per_person" || algo === "fairness";
+      {rankChangeInfo && rankChangeInfo.rankDelta !== 0 && (
+        <MobileBottomSheet open={showRankChangeSheet} onClose={() => setShowRankChangeSheet(false)}>
+          {(() => {
+            const isNew = rankChangeInfo.rankDelta === null;
+            const scoreDelta = rankChangeInfo.previousScore !== null
+              ? Math.round(rankChangeInfo.currentScore) - Math.round(rankChangeInfo.previousScore)
+              : null;
+            const costDelta = rankChangeInfo.previousCost !== null && rankChangeInfo.previousCost !== Infinity && rankChangeInfo.currentCost !== Infinity
+              ? rankChangeInfo.currentCost - rankChangeInfo.previousCost
+              : null;
+            const algo = rankChangeInfo.scoringAlgorithm;
+            const showMarketAvg = algo === "zscore";
+            const showTotalCost = algo === "lowest_total" || algo === "lowest_per_person" || algo === "fairness";
 
-                return (
-                  <>
-                    <div className="mb-3">
-                      <span className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
-                        {isNew ? "New Weekend" : "Why did this change?"}
-                      </span>
-                      {rankChangeSince && (
-                        <div className="text-[var(--text-3)] text-[10px]">
-                          Since last viewed {formatTimeAgo(rankChangeSince)}
-                        </div>
-                      )}
+            return (
+              <>
+                <div className="mb-3">
+                  <span className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
+                    {isNew ? "New Weekend" : "Why did this change?"}
+                  </span>
+                  {rankChangeSince && (
+                    <div className="text-[var(--text-3)] text-[10px]">
+                      Since last viewed {formatTimeAgo(rankChangeSince)}
                     </div>
+                  )}
+                </div>
 
-                    {!isNew && (
-                      <div className="space-y-1 mb-3 text-xs">
-                        {rankChangeInfo.previousRank !== null && (
-                          <div className="flex justify-between text-[var(--text-1)]">
-                            <span className="text-[var(--text-3)]">Rank</span>
-                            <span className="font-mono tabular-nums">
-                              #{rankChangeInfo.previousRank} → #{rankChangeInfo.currentRank}
-                            </span>
-                          </div>
-                        )}
-                        {scoreDelta !== null && (
-                          <div className="flex justify-between text-[var(--text-1)]">
-                            <span className="text-[var(--text-3)]">Score</span>
-                            <span className="font-mono tabular-nums">
-                              {Math.round(rankChangeInfo.previousScore!)} → {Math.round(rankChangeInfo.currentScore)}
-                              <DeltaSpan value={scoreDelta} />
-                            </span>
-                          </div>
-                        )}
-                        {showTotalCost && costDelta !== null && (
-                          <div className="flex justify-between text-[var(--text-1)]">
-                            <span className="text-[var(--text-3)]">Total</span>
-                            <span className="font-mono tabular-nums">
-                              ${Math.round(rankChangeInfo.previousCost!).toLocaleString()} → ${Math.round(rankChangeInfo.currentCost).toLocaleString()}
-                              <DeltaSpan value={Math.round(costDelta)} lowerIsBetter />
-                            </span>
-                          </div>
-                        )}
+                {!isNew && (
+                  <div className="space-y-1 mb-3 text-xs">
+                    {rankChangeInfo.previousRank !== null && (
+                      <div className="flex justify-between text-[var(--text-1)]">
+                        <span className="text-[var(--text-3)]">Rank</span>
+                        <span className="font-mono tabular-nums">
+                          #{rankChangeInfo.previousRank} → #{rankChangeInfo.currentRank}
+                        </span>
                       </div>
                     )}
+                    {scoreDelta !== null && (
+                      <div className="flex justify-between text-[var(--text-1)]">
+                        <span className="text-[var(--text-3)]">Score</span>
+                        <span className="font-mono tabular-nums">
+                          {Math.round(rankChangeInfo.previousScore!)} → {Math.round(rankChangeInfo.currentScore)}
+                          <DeltaSpan value={scoreDelta} />
+                        </span>
+                      </div>
+                    )}
+                    {showTotalCost && costDelta !== null && (
+                      <div className="flex justify-between text-[var(--text-1)]">
+                        <span className="text-[var(--text-3)]">Total</span>
+                        <span className="font-mono tabular-nums">
+                          ${Math.round(rankChangeInfo.previousCost!).toLocaleString()} → ${Math.round(rankChangeInfo.currentCost).toLocaleString()}
+                          <DeltaSpan value={Math.round(costDelta)} lowerIsBetter />
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                    {rankChangeInfo.cityChanges.length > 0 && !isNew && (
-                      <div className="border-t border-[var(--border-default)] pt-2">
-                        <div className="font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider text-[9px] mb-1">
-                          Per-city breakdown
-                        </div>
-                        <div className="space-y-2 text-xs">
-                          {rankChangeInfo.cityChanges.map((cc) => {
-                            const flightChanged = cc.previousFlightCost !== null && cc.currentFlightCost !== null && cc.previousFlightCost !== cc.currentFlightCost;
-                            const stayChanged = cc.previousStayCost !== null && cc.previousStayCost !== cc.currentStayCost;
-                            const flightNew = cc.previousFlightCost === null && cc.currentFlightCost !== null;
-                            const flightLost = cc.previousFlightCost !== null && cc.currentFlightCost === null;
-                            const ppChanged = cc.previousPerPerson !== null && cc.currentPerPerson !== null && Math.round(cc.previousPerPerson) !== Math.round(cc.currentPerPerson!);
-                            const avgChanged = cc.previousCityAvg !== null && cc.currentCityAvg !== null && Math.round(cc.previousCityAvg) !== Math.round(cc.currentCityAvg);
-                            const showAvg = showMarketAvg && avgChanged;
-                            const hasAnyChange = flightChanged || stayChanged || flightNew || flightLost || ppChanged || showAvg;
-                            if (!hasAnyChange) return null;
+                {rankChangeInfo.cityChanges.length > 0 && !isNew && (
+                  <div className="border-t border-[var(--border-default)] pt-2">
+                    <div className="font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider text-[9px] mb-1">
+                      Per-city breakdown
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      {rankChangeInfo.cityChanges.map((cc) => {
+                        const flightChanged = cc.previousFlightCost !== null && cc.currentFlightCost !== null && cc.previousFlightCost !== cc.currentFlightCost;
+                        const stayChanged = cc.previousStayCost !== null && cc.previousStayCost !== cc.currentStayCost;
+                        const flightNew = cc.previousFlightCost === null && cc.currentFlightCost !== null;
+                        const flightLost = cc.previousFlightCost !== null && cc.currentFlightCost === null;
+                        const ppChanged = cc.previousPerPerson !== null && cc.currentPerPerson !== null && Math.round(cc.previousPerPerson) !== Math.round(cc.currentPerPerson!);
+                        const avgChanged = cc.previousCityAvg !== null && cc.currentCityAvg !== null && Math.round(cc.previousCityAvg) !== Math.round(cc.currentCityAvg);
+                        const showAvg = showMarketAvg && avgChanged;
+                        const hasAnyChange = flightChanged || stayChanged || flightNew || flightLost || ppChanged || showAvg;
+                        if (!hasAnyChange) return null;
 
-                            return (
-                              <div key={cc.city}>
-                                <div className="text-[var(--text-2)] font-medium mb-0.5">{cc.city}</div>
-                                {flightNew && (
-                                  <div className="flex justify-between text-[var(--text-1)] ml-2">
-                                    <span className="text-[var(--text-3)]">Flight</span>
-                                    <span className="font-mono tabular-nums text-[var(--blue)]">new ${cc.currentFlightCost}</span>
-                                  </div>
-                                )}
-                                {flightLost && (
-                                  <div className="flex justify-between text-[var(--text-1)] ml-2">
-                                    <span className="text-[var(--text-3)]">Flight</span>
-                                    <span className="font-mono tabular-nums text-[var(--red)]">unavailable</span>
-                                  </div>
-                                )}
-                                {flightChanged && (
-                                  <div className="flex justify-between text-[var(--text-1)] ml-2">
-                                    <span className="text-[var(--text-3)]">Flight</span>
-                                    <span className="font-mono tabular-nums">
-                                      ${cc.previousFlightCost} → ${cc.currentFlightCost}
-                                      <DeltaSpan value={cc.currentFlightCost! - cc.previousFlightCost!} lowerIsBetter />
-                                    </span>
-                                  </div>
-                                )}
-                                {stayChanged && (
-                                  <div className="flex justify-between text-[var(--text-1)] ml-2">
-                                    <span className="text-[var(--text-3)]">Stay</span>
-                                    <span className="font-mono tabular-nums">
-                                      ${Math.round(cc.previousStayCost!)} → ${Math.round(cc.currentStayCost)}
-                                      <DeltaSpan value={Math.round(cc.currentStayCost - cc.previousStayCost!)} lowerIsBetter />
-                                    </span>
-                                  </div>
-                                )}
-                                {ppChanged && (
-                                  <div className="flex justify-between text-[var(--text-1)] ml-2">
-                                    <span className="text-[var(--text-3)]">Per person</span>
-                                    <span className="font-mono tabular-nums">
-                                      ${Math.round(cc.previousPerPerson!)} → ${Math.round(cc.currentPerPerson!)}
-                                      <DeltaSpan value={Math.round(cc.currentPerPerson! - cc.previousPerPerson!)} lowerIsBetter />
-                                    </span>
-                                  </div>
-                                )}
-                                {showAvg && (
-                                  <div className="flex justify-between text-[var(--text-1)] ml-2">
-                                    <span className="text-[var(--text-3)]">Market avg</span>
-                                    <span className="font-mono tabular-nums text-[var(--text-3)]">
-                                      ${Math.round(cc.previousCityAvg!)} → ${Math.round(cc.currentCityAvg!)}
-                                    </span>
-                                  </div>
-                                )}
+                        return (
+                          <div key={cc.city}>
+                            <div className="text-[var(--text-2)] font-medium mb-0.5">{cc.city}</div>
+                            {flightNew && (
+                              <div className="flex justify-between text-[var(--text-1)] ml-2">
+                                <span className="text-[var(--text-3)]">Flight</span>
+                                <span className="font-mono tabular-nums text-[var(--blue)]">new ${cc.currentFlightCost}</span>
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-        </div>,
-        document.body
+                            )}
+                            {flightLost && (
+                              <div className="flex justify-between text-[var(--text-1)] ml-2">
+                                <span className="text-[var(--text-3)]">Flight</span>
+                                <span className="font-mono tabular-nums text-[var(--red)]">unavailable</span>
+                              </div>
+                            )}
+                            {flightChanged && (
+                              <div className="flex justify-between text-[var(--text-1)] ml-2">
+                                <span className="text-[var(--text-3)]">Flight</span>
+                                <span className="font-mono tabular-nums">
+                                  ${cc.previousFlightCost} → ${cc.currentFlightCost}
+                                  <DeltaSpan value={cc.currentFlightCost! - cc.previousFlightCost!} lowerIsBetter />
+                                </span>
+                              </div>
+                            )}
+                            {stayChanged && (
+                              <div className="flex justify-between text-[var(--text-1)] ml-2">
+                                <span className="text-[var(--text-3)]">Stay</span>
+                                <span className="font-mono tabular-nums">
+                                  ${Math.round(cc.previousStayCost!)} → ${Math.round(cc.currentStayCost)}
+                                  <DeltaSpan value={Math.round(cc.currentStayCost - cc.previousStayCost!)} lowerIsBetter />
+                                </span>
+                              </div>
+                            )}
+                            {ppChanged && (
+                              <div className="flex justify-between text-[var(--text-1)] ml-2">
+                                <span className="text-[var(--text-3)]">Per person</span>
+                                <span className="font-mono tabular-nums">
+                                  ${Math.round(cc.previousPerPerson!)} → ${Math.round(cc.currentPerPerson!)}
+                                  <DeltaSpan value={Math.round(cc.currentPerPerson! - cc.previousPerPerson!)} lowerIsBetter />
+                                </span>
+                              </div>
+                            )}
+                            {showAvg && (
+                              <div className="flex justify-between text-[var(--text-1)] ml-2">
+                                <span className="text-[var(--text-3)]">Market avg</span>
+                                <span className="font-mono tabular-nums text-[var(--text-3)]">
+                                  ${Math.round(cc.previousCityAvg!)} → ${Math.round(cc.currentCityAvg!)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </MobileBottomSheet>
       )}
     </div>
   );

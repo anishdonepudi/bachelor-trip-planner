@@ -1,140 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { CostBreakdown, CityStats, RankChangeInfo } from "@/lib/types";
 import { TOTAL_PEOPLE } from "@/lib/constants";
-
-const SWIPE_THRESHOLD = 60;
-
-function SwipeableTooltip({
-  open,
-  onClose,
-  flipUp,
-  className,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  flipUp: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  const dragStartY = useRef(0);
-  const dragOffsetRef = useRef(0);
-  const [dragOffset, setDragOffset] = useState(0);
-  const isDragging = useRef(false);
-  const sheetRef = useRef<HTMLDivElement>(null);
-
-  // Lock body scroll while open on mobile
-  useEffect(() => {
-    if (!open) return;
-    const isMobile = window.innerWidth < 640;
-    if (!isMobile) return;
-    const scrollY = window.scrollY;
-    document.body.style.position = "fixed";
-    document.body.style.top = `-${scrollY}px`;
-    document.body.style.left = "0";
-    document.body.style.right = "0";
-    return () => {
-      document.body.style.position = "";
-      document.body.style.top = "";
-      document.body.style.left = "";
-      document.body.style.right = "";
-      window.scrollTo(0, scrollY);
-    };
-  }, [open]);
-
-  // Native touch listeners on the sheet for drag-to-dismiss
-  useEffect(() => {
-    if (!open) return;
-    const el = sheetRef.current;
-    if (!el) return;
-
-    const onTouchStart = (e: TouchEvent) => {
-      // Only start drag if sheet is scrolled to top
-      if (el.scrollTop > 0) return;
-      dragStartY.current = e.touches[0].clientY;
-      isDragging.current = true;
-      dragOffsetRef.current = 0;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!isDragging.current) return;
-      const dy = e.touches[0].clientY - dragStartY.current;
-      if (dy > 0) {
-        // Dragging down — prevent scroll, apply transform
-        e.preventDefault();
-        dragOffsetRef.current = dy;
-        setDragOffset(dy);
-      } else {
-        // Dragging up — cancel drag, let scroll happen
-        isDragging.current = false;
-        dragOffsetRef.current = 0;
-        setDragOffset(0);
-      }
-    };
-
-    const onTouchEnd = () => {
-      if (!isDragging.current) return;
-      isDragging.current = false;
-      if (dragOffsetRef.current > SWIPE_THRESHOLD) {
-        onClose();
-      }
-      dragOffsetRef.current = 0;
-      setDragOffset(0);
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove", onTouchMove, { passive: false });
-    el.addEventListener("touchend", onTouchEnd, { passive: true });
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove", onTouchMove);
-      el.removeEventListener("touchend", onTouchEnd);
-    };
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const opacity = dragOffset > 0 ? Math.max(0, 1 - dragOffset / (SWIPE_THRESHOLD * 2)) : 1;
-
-  return (
-    <>
-      {/* Mobile: bottom sheet with backdrop */}
-      <div className="sm:hidden">
-        <div
-          className="fixed inset-0 z-50 bg-black/20"
-          style={{ opacity }}
-          onClick={onClose}
-        />
-        <div
-          ref={sheetRef}
-          className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-[var(--surface-2)] border-t border-[var(--border-hover)] shadow-2xl p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-xs max-h-[70vh] overflow-y-auto overscroll-none"
-          style={{
-            transform: `translateY(${dragOffset}px)`,
-            transition: isDragging.current ? "none" : "transform 200ms ease-out, opacity 200ms",
-            opacity,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Drag handle */}
-          <div className="flex justify-center mb-2 py-1 -mt-1 cursor-grab">
-            <div className="w-8 h-1 rounded-full bg-[var(--surface-3)]" />
-          </div>
-          {children}
-        </div>
-      </div>
-
-      {/* Desktop: positioned tooltip */}
-      <div
-        className={`hidden sm:block absolute left-0 z-50 rounded-lg bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-2xl p-3 text-xs ${flipUp ? "bottom-full mb-2" : "top-full mt-2"} ${className ?? ""}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </>
-  );
-}
 
 interface ScoreBadgeProps {
   score: number;
@@ -185,25 +53,12 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
     setShowTooltip(true);
   }, []);
 
-  // Close on tap outside (mobile)
-  useEffect(() => {
-    if (!showTooltip) return;
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
-        setShowTooltip(false);
-      }
-    };
-    document.addEventListener("pointerdown", handleClickOutside);
-    return () => document.removeEventListener("pointerdown", handleClickOutside);
-  }, [showTooltip]);
-
   return (
     <div
       ref={triggerRef}
-      className="relative flex items-center gap-2.5"
+      className="relative hidden sm:flex items-center gap-2.5"
       onMouseEnter={handleShow}
       onMouseLeave={() => setShowTooltip(false)}
-      onClick={() => { handleShow(); setShowTooltip((p) => !p); }}
     >
       {/* Rank number */}
       <span className="text-xs font-mono font-semibold text-[var(--text-3)] tabular-nums w-5 text-right">
@@ -228,9 +83,12 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
         </div>
       </div>
 
-      {/* Tooltip */}
-      {perCityCosts.length > 0 && (
-        <SwipeableTooltip open={showTooltip} onClose={() => setShowTooltip(false)} flipUp={flipUp} className="w-72">
+      {/* Tooltip (desktop only — mobile uses bottom sheet in WeekendCard) */}
+      {showTooltip && perCityCosts.length > 0 && (
+        <div
+          className={`absolute left-0 z-50 w-72 rounded-lg bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-2xl p-3 text-xs ${flipUp ? "bottom-full mb-2" : "top-full mt-2"}`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="flex items-center justify-between mb-2">
             <span className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
               Score Breakdown
@@ -292,7 +150,7 @@ export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAver
               <span className="font-mono tabular-nums">${avgPerPerson}</span>
             </div>
           )}
-        </SwipeableTooltip>
+        </div>
       )}
     </div>
   );
@@ -320,18 +178,6 @@ export function RankChangeIndicator({ info, sinceTimestamp }: { info: RankChange
     }
     setShowTooltip(true);
   }, []);
-
-  // Close on tap outside (mobile)
-  useEffect(() => {
-    if (!showTooltip) return;
-    const handleClickOutside = (e: MouseEvent | TouchEvent) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) {
-        setShowTooltip(false);
-      }
-    };
-    document.addEventListener("pointerdown", handleClickOutside);
-    return () => document.removeEventListener("pointerdown", handleClickOutside);
-  }, [showTooltip]);
 
   if (!info) return null;
 
@@ -378,7 +224,12 @@ export function RankChangeIndicator({ info, sinceTimestamp }: { info: RankChange
         </span>
       ) : null}
 
-      <SwipeableTooltip open={showTooltip} onClose={() => setShowTooltip(false)} flipUp={flipUp} className="w-72">
+      {/* Tooltip (desktop only — mobile uses bottom sheet in WeekendCard) */}
+      {showTooltip && (
+        <div
+          className={`absolute left-0 z-50 w-72 rounded-lg bg-[var(--surface-2)] border border-[var(--border-hover)] shadow-2xl p-2.5 text-xs ${flipUp ? "bottom-full mb-1.5" : "top-full mt-1.5"}`}
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="mb-2">
             <div className="font-heading font-semibold text-[var(--text-2)] uppercase tracking-wider text-[10px]">
               {isNew ? "New Weekend" : "Why did this change?"}
@@ -605,7 +456,8 @@ export function RankChangeIndicator({ info, sinceTimestamp }: { info: RankChange
               )}
             </>
           )}
-      </SwipeableTooltip>
+        </div>
+      )}
     </div>
   );
 }
