@@ -43,14 +43,14 @@ function FlightLeg({ leg, fromAirport, toAirport, label }: {
   label: string;
 }) {
   return (
-    <div className="grid grid-cols-[auto_auto_12px_auto_1fr_auto] items-center gap-x-1.5 text-[11px] whitespace-nowrap">
+    <div className="grid grid-cols-[24px_36px_12px_36px_1fr_auto] items-center gap-x-1 text-[11px] whitespace-nowrap">
       <span className="text-[10px] text-[var(--text-3)] uppercase font-medium">{label}</span>
-      <span className="font-mono font-medium text-[var(--text-1)]">{fromAirport}</span>
+      <span className="font-mono font-medium text-[var(--text-1)] text-center">{fromAirport}</span>
       <svg className="w-3 h-3 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
       </svg>
-      <span className="font-mono font-medium text-[var(--text-1)]">{toAirport}</span>
-      <span className="truncate text-center">
+      <span className="font-mono font-medium text-[var(--text-1)] text-center">{toAirport}</span>
+      <span className="truncate">
         {leg.stops === 0 ? (
           <span className="text-[var(--teal)] font-medium">Direct</span>
         ) : (
