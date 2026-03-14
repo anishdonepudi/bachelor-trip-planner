@@ -263,6 +263,9 @@ function MobileCityCard({
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-[var(--text-1)]">{city}</span>
+          {cheapest?.airport_used && (
+            <span className="text-[11px] font-mono text-[var(--text-3)]">{cheapest.airport_used}</span>
+          )}
           {isSelected && (
             <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--teal-soft)] text-[var(--teal)] border border-[var(--teal-border)] font-medium">
               Active
@@ -308,7 +311,7 @@ function MobileCityCard({
       {expanded && alternates.map((alt, i) => (
         <div key={i} className="px-3 pb-2.5 pt-1.5 border-t border-[var(--border-default)]">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-[var(--text-3)]">Option {i + 2}</span>
+            <span className="text-[10px] text-[var(--text-3)]">Option {i + 2}{alt.airport_used ? ` · ${alt.airport_used}` : ""}</span>
             <a
               href={alt.google_flights_url ?? "#"}
               target="_blank"
