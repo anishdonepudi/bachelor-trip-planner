@@ -151,11 +151,10 @@ export function Dashboard() {
     setScrapeTriggered(false);
     initialLastUpdated.current = scrapeData?.lastFlightUpdate ?? null;
     modalCooldownUntil.current = Date.now() + 60_000; // ignore changes for 60s after dismissing
-    // Await the data fetch so the modal stays open until new data + rank changes are ready
+    // Await the data fetch so the modal stays open until new data is ready
+    // Rank changes compute synchronously via useMemo in the same render cycle
     await mutateWeekends();
     mutateScrape();
-    // Let React flush the re-render with new data + rank changes before closing modal
-    await new Promise((r) => requestAnimationFrame(r));
     setShowUpdateModal(false);
   }, [scrapeData?.lastFlightUpdate, mutateWeekends, mutateScrape]);
 
@@ -197,44 +196,52 @@ export function Dashboard() {
   }, [weekendData, dateRanges, flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm]);
 
   // Rank changes: load previous data and compute deltas
-  // First try localStorage; if stale (matches current data), fall back to DB snapshot.
-  const [previousWeekendData, setPreviousWeekendData] = useState<WeekendData | null>(null);
-  const [rankChangeSince, setRankChangeSince] = useState<string | null>(null);
+  // Synchronous path: localStorage (instant, same render cycle)
+  const localPreviousData = useMemo(() => {
+    void rankChangeVersion; // re-read when data is saved
+    if (!weekendData) return null;
+    const localData = loadPreviousWeekendData();
+    if (!localData) return null;
+    if (isLocalStorageStale(weekendData, localData)) return null;
+    return localData;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankChangeVersion, weekendData]);
+
+  const localRankChangeSince = useMemo(() => {
+    void rankChangeVersion;
+    if (!localPreviousData) return null;
+    return getPreviousDataTimestamp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rankChangeVersion, localPreviousData]);
+
+  // Async fallback: DB fetch only when localStorage is stale/missing
+  const [dbPreviousData, setDbPreviousData] = useState<{ data: WeekendData; timestamp: string } | null>(null);
   const dbFetchedRef = useRef(false);
 
   useEffect(() => {
-    if (!weekendData) return;
-
-    // Try localStorage first
-    const localData = loadPreviousWeekendData();
-    const localTimestamp = getPreviousDataTimestamp();
-
-    if (localData && !isLocalStorageStale(weekendData, localData)) {
-      // localStorage has genuinely different (previous) data
-      setPreviousWeekendData(localData);
-      setRankChangeSince(localTimestamp);
+    if (localPreviousData || !weekendData) return; // localStorage worked, skip DB
+    if (dbFetchedRef.current) {
+      // DB already fetched with no result — seed localStorage for next session
+      if (!loadPreviousWeekendData()) {
+        savePreviousWeekendData(weekendData);
+        setRankChangeVersion((v) => v + 1);
+      }
       return;
     }
+    dbFetchedRef.current = true;
+    fetchPreviousWeekendDataFromDB().then((result) => {
+      if (result && !isLocalStorageStale(weekendData, result.data)) {
+        setDbPreviousData(result);
+      } else if (!loadPreviousWeekendData()) {
+        savePreviousWeekendData(weekendData);
+        setRankChangeVersion((v) => v + 1);
+      }
+    });
+  }, [weekendData, localPreviousData]);
 
-    // localStorage is missing or stale — try DB fallback (once)
-    if (!dbFetchedRef.current) {
-      dbFetchedRef.current = true;
-      fetchPreviousWeekendDataFromDB().then((result) => {
-        if (result && !isLocalStorageStale(weekendData, result.data)) {
-          setPreviousWeekendData(result.data);
-          setRankChangeSince(result.timestamp);
-        } else if (!localData) {
-          // No previous data anywhere — seed localStorage for next session
-          savePreviousWeekendData(weekendData);
-          setRankChangeVersion((v) => v + 1);
-        }
-      });
-    } else if (!localData) {
-      // DB already fetched, no data — seed localStorage
-      savePreviousWeekendData(weekendData);
-      setRankChangeVersion((v) => v + 1);
-    }
-  }, [weekendData, rankChangeVersion]);
+  // Use whichever source has data (localStorage is preferred — instant)
+  const previousWeekendData = localPreviousData ?? dbPreviousData?.data ?? null;
+  const rankChangeSince = localRankChangeSince ?? dbPreviousData?.timestamp ?? null;
 
   const rankChangeMap: RankChangeMap = useMemo(() => {
     if (!previousWeekendData || !weekendScores.length) return {};
