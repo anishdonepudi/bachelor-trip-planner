@@ -1,4 +1,11 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, MonthRange } from "./types";
+
+export const DEFAULT_MONTH_RANGE: MonthRange = {
+  startMonth: 6,
+  startYear: 2026,
+  endMonth: 8,
+  endYear: 2026,
+};
 
 function stopDescription(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
   const stopPart = stops === 0 ? "Nonstop flight" : stops === 1 ? "One-stop flight" : "Two-stop flight";

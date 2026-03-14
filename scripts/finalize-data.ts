@@ -13,7 +13,8 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { FlightCategory } from "../src/lib/types";
+import type { FlightCategory, MonthRange } from "../src/lib/types";
+import { DEFAULT_MONTH_RANGE } from "../src/lib/constants";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
@@ -95,7 +96,11 @@ async function main() {
     console.log(`CAPTCHA gate passed: 0 CAPTCHAs across ${jobs?.length ?? 0} scrape jobs\n`);
   }
 
-  const dateRanges = generateDateRanges();
+  // Load month range from config
+  const { data: configRow } = await supabase.from("config").select("month_range").limit(1).single();
+  const monthRange: MonthRange = configRow?.month_range ?? DEFAULT_MONTH_RANGE;
+
+  const dateRanges = generateDateRanges(monthRange);
   const dateRangeMap = new Map(dateRanges.map((dr) => [dr.id, dr]));
 
   // =============================================

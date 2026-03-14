@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS } from "@/lib/constants";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE } from "@/lib/constants";
 import { CitySelect } from "./CitySelect";
 import {
   Dialog,
@@ -20,14 +20,15 @@ interface ConfigModalProps {
   destinationCity: string;
   flightCategories: FlightCategoryConfig[];
   flightTimeFilters: FlightTimeFilters;
+  monthRange: MonthRange;
   onOpen?: () => void;
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters) => void;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, monthRange: MonthRange) => void;
   inlineMode?: boolean;
 }
 
 type Tab = "group" | "dates" | "flights";
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, onOpen, onSave, inlineMode = false }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, onOpen, onSave, inlineMode = false }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("group");
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -36,6 +37,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [destinationCity, setDestinationCity] = useState(initialDestinationCity);
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(initialFlightCategories);
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(initialTimeFilters);
+  const [monthRange, setMonthRange] = useState<MonthRange>(initialMonthRange);
   const [saving, setSaving] = useState(false);
 
   // Track whether user has started editing (prevents prop sync from overwriting changes)
@@ -52,8 +54,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setDestinationCity(initialDestinationCity);
     setFlightCategories(initialFlightCategories);
     setTimeFilters(initialTimeFilters);
+    setMonthRange(initialMonthRange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters]);
+  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialMonthRange]);
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
@@ -65,6 +68,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setDestinationCity(initialDestinationCity);
       setFlightCategories(initialFlightCategories);
       setTimeFilters(initialTimeFilters);
+      setMonthRange(initialMonthRange);
       setActiveTab("group");
     }
     setOpen(isOpen);
@@ -73,19 +77,22 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const totalPeople = cities.reduce((sum, c) => sum + c.people, 0);
   const categoriesChanged = JSON.stringify(flightCategories) !== JSON.stringify(initialFlightCategories);
   const timeFiltersChanged = JSON.stringify(timeFilters) !== JSON.stringify(initialTimeFilters);
+  const monthRangeChanged = JSON.stringify(monthRange) !== JSON.stringify(initialMonthRange);
   const hasChanges =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     JSON.stringify(excludedDates.slice().sort()) !== JSON.stringify(initialExcluded.slice().sort()) ||
     destinationAirport !== initialDestination ||
     destinationCity !== initialDestinationCity ||
     categoriesChanged ||
-    timeFiltersChanged;
+    timeFiltersChanged ||
+    monthRangeChanged;
   const citiesChanged =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     destinationAirport !== initialDestination ||
     destinationCity !== initialDestinationCity ||
     categoriesChanged ||
-    timeFiltersChanged;
+    timeFiltersChanged ||
+    monthRangeChanged;
 
   const addCity = () => {
     hasEdited.current = true;
@@ -121,17 +128,26 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
 
   const seasonDates = useMemo(() => {
     const dates: { date: string; dayOfWeek: number; month: string }[] = [];
-    const current = new Date(2026, 5, 1);
-    const end = new Date(2026, 7, 31);
+    const current = new Date(monthRange.startYear, monthRange.startMonth - 1, 1);
+    const end = new Date(monthRange.endYear, monthRange.endMonth, 0); // last day of endMonth
     while (current <= end) {
       const y = current.getFullYear();
       const m = String(current.getMonth() + 1).padStart(2, "0");
       const d = String(current.getDate()).padStart(2, "0");
-      dates.push({ date: `${y}-${m}-${d}`, dayOfWeek: current.getDay(), month: current.toLocaleDateString("en-US", { month: "long" }) });
+      dates.push({ date: `${y}-${m}-${d}`, dayOfWeek: current.getDay(), month: current.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
       current.setDate(current.getDate() + 1);
     }
     return dates;
-  }, []);
+  }, [monthRange]);
+
+  // Prune excluded dates that fall outside the current month range
+  const seasonDateSet = useMemo(() => new Set(seasonDates.map(d => d.date)), [seasonDates]);
+  useEffect(() => {
+    setExcludedDates(prev => {
+      const filtered = prev.filter(d => seasonDateSet.has(d));
+      return filtered.length === prev.length ? prev : filtered;
+    });
+  }, [seasonDateSet]);
 
   const monthGroups = useMemo(() => {
     const groups: { month: string; dates: typeof seasonDates }[] = [];
@@ -194,6 +210,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     }));
   };
 
+  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i);
+
   const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
     const h = Math.floor(i / 2);
     const m = i % 2 === 0 ? "00" : "30";
@@ -207,10 +226,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, skip_scrape: !citiesChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, month_range: monthRange, skip_scrape: !citiesChanged }),
       });
       if (res.ok) {
-        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters);
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, monthRange);
         hasEdited.current = false;
         setOpen(false);
       } else {
@@ -349,6 +368,92 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
           </div>
         ) : activeTab === "dates" ? (
           <div className="space-y-3">
+            {/* Month Range Picker */}
+            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
+              <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2.5">Trip Window</div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-[var(--text-3)] block">From</label>
+                  <div className="flex gap-1">
+                    <select
+                      value={monthRange.startMonth}
+                      onChange={(e) => {
+                        hasEdited.current = true;
+                        const m = Number(e.target.value);
+                        const updated = { ...monthRange, startMonth: m };
+                        if (monthRange.startYear > monthRange.endYear || (monthRange.startYear === monthRange.endYear && m > monthRange.endMonth)) {
+                          updated.endMonth = m;
+                        }
+                        setMonthRange(updated);
+                      }}
+                      className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      {MONTH_NAMES.map((name, i) => (
+                        <option key={i} value={i + 1}>{name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={monthRange.startYear}
+                      onChange={(e) => {
+                        hasEdited.current = true;
+                        const y = Number(e.target.value);
+                        const updated = { ...monthRange, startYear: y };
+                        if (y > monthRange.endYear) {
+                          updated.endYear = y;
+                          updated.endMonth = monthRange.startMonth;
+                        }
+                        setMonthRange(updated);
+                      }}
+                      className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      {YEAR_OPTIONS.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <svg className="w-4 h-4 text-[var(--text-3)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                </svg>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] text-[var(--text-3)] block">To</label>
+                  <div className="flex gap-1">
+                    <select
+                      value={monthRange.endMonth}
+                      onChange={(e) => {
+                        hasEdited.current = true;
+                        setMonthRange(prev => ({ ...prev, endMonth: Number(e.target.value) }));
+                      }}
+                      className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      {MONTH_NAMES.map((name, i) => {
+                        const m = i + 1;
+                        const disabled = monthRange.endYear === monthRange.startYear && m < monthRange.startMonth;
+                        return <option key={i} value={m} disabled={disabled}>{name}</option>;
+                      })}
+                    </select>
+                    <select
+                      value={monthRange.endYear}
+                      onChange={(e) => {
+                        hasEdited.current = true;
+                        const y = Number(e.target.value);
+                        const updated = { ...monthRange, endYear: y };
+                        if (y === monthRange.startYear && monthRange.endMonth < monthRange.startMonth) {
+                          updated.endMonth = monthRange.startMonth;
+                        }
+                        setMonthRange(updated);
+                      }}
+                      className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      {YEAR_OPTIONS.filter(y => y >= monthRange.startYear).map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <p className="text-xs text-[var(--text-2)] leading-relaxed">
               Tap dates to block them. Overlapping weekends are excluded from results.
             </p>

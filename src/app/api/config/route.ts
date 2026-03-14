@@ -28,7 +28,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, skip_scrape } = body;
+    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, month_range, skip_scrape } = body;
 
     const { data: existing } = await supabase
       .from("config")
@@ -36,29 +36,57 @@ export async function PUT(request: Request) {
       .limit(1)
       .single();
 
+    // Build the payload — always include core fields
+    const payload: Record<string, unknown> = {
+      cities,
+      destination_airport,
+      destination_city: destination_city ?? null,
+      total_people,
+      excluded_dates: excluded_dates ?? [],
+    };
+
+    // Include optional JSONB fields if provided
+    if (flight_categories !== undefined) payload.flight_categories = flight_categories;
+    if (flight_time_filters !== undefined) payload.flight_time_filters = flight_time_filters;
+    if (month_range !== undefined) payload.month_range = month_range;
+
     let result;
     if (existing) {
+      payload.updated_at = new Date().toISOString();
       result = await supabase
         .from("config")
-        .update({
-          cities,
-          destination_airport,
-          destination_city: destination_city ?? null,
-          total_people,
-          excluded_dates: excluded_dates ?? [],
-          flight_categories: flight_categories ?? null,
-          flight_time_filters: flight_time_filters ?? null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq("id", existing.id)
         .select()
         .single();
+
+      // If it failed (e.g. optional columns don't exist yet), retry without them
+      if (result.error && (flight_categories !== undefined || flight_time_filters !== undefined || month_range !== undefined)) {
+        console.warn("Config update failed, retrying without optional columns:", result.error.message);
+        const { flight_categories: _fc, flight_time_filters: _ft, month_range: _mr, ...corePayload } = payload;
+        result = await supabase
+          .from("config")
+          .update(corePayload)
+          .eq("id", existing.id)
+          .select()
+          .single();
+      }
     } else {
       result = await supabase
         .from("config")
-        .insert({ cities, destination_airport, destination_city: destination_city ?? null, total_people, excluded_dates: excluded_dates ?? [], flight_categories: flight_categories ?? null, flight_time_filters: flight_time_filters ?? null })
+        .insert(payload)
         .select()
         .single();
+
+      if (result.error && (flight_categories !== undefined || flight_time_filters !== undefined || month_range !== undefined)) {
+        console.warn("Config insert failed, retrying without optional columns:", result.error.message);
+        const { flight_categories: _fc, flight_time_filters: _ft, month_range: _mr, ...corePayload } = payload;
+        result = await supabase
+          .from("config")
+          .insert(corePayload)
+          .select()
+          .single();
+      }
     }
 
     if (result.error) throw result.error;

@@ -1,14 +1,18 @@
-import { DateRange } from "./types";
+import { DateRange, MonthRange } from "./types";
 
 /**
  * Generate all valid weekend date ranges for the bachelor trip.
- * Season: June 1 – August 31, 2026
+ * Defaults to June–August 2026 if no range provided.
  * Formats: Thursday→Sunday (3 nights) OR Friday→Monday (3 nights)
  */
-export function generateDateRanges(): DateRange[] {
+export function generateDateRanges(monthRange?: MonthRange): DateRange[] {
   const ranges: DateRange[] = [];
-  const startDate = new Date(2026, 5, 1); // June 1, 2026
-  const endDate = new Date(2026, 7, 31); // August 31, 2026
+  const startDate = monthRange
+    ? new Date(monthRange.startYear, monthRange.startMonth - 1, 1)
+    : new Date(2026, 5, 1); // June 1, 2026
+  const endDate = monthRange
+    ? new Date(monthRange.endYear, monthRange.endMonth, 0) // last day of endMonth
+    : new Date(2026, 7, 31); // August 31, 2026
 
   const current = new Date(startDate);
 

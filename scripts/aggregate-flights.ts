@@ -14,7 +14,9 @@ import type {
   FlightCategory,
   FlightOptionRow,
   Flight,
+  MonthRange,
 } from "../src/lib/types";
+import { DEFAULT_MONTH_RANGE } from "../src/lib/constants";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
@@ -30,7 +32,11 @@ async function main() {
   console.log("=== Aggregate Best Flights ===");
   console.log(`Started at ${new Date().toISOString()}\n`);
 
-  const dateRanges = generateDateRanges();
+  // Load month range from config
+  const { data: configRow } = await supabase.from("config").select("month_range").limit(1).single();
+  const monthRange: MonthRange = configRow?.month_range ?? DEFAULT_MONTH_RANGE;
+
+  const dateRanges = generateDateRanges(monthRange);
   const dateRangeMap = new Map(dateRanges.map((dr) => [dr.id, dr]));
 
   // Fetch ALL flight_options in paginated batches (Supabase returns max 1000 per query)
