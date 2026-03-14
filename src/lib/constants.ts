@@ -1,4 +1,4 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, MonthRange } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, MonthRange, TripDuration } from "./types";
 
 export const DEFAULT_MONTH_RANGE: MonthRange = {
   startMonth: 6,
@@ -90,6 +90,11 @@ export const BUDGET_TIERS: {
     totalMax: 4029,
   },
 ];
+
+export const DEFAULT_TRIP_DURATION: TripDuration = {
+  nights: 3,
+  departDays: [4, 5], // Thursday, Friday
+};
 
 export const NIGHTS = 3;
 export const TOTAL_PEOPLE = 17;

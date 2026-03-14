@@ -86,6 +86,12 @@ export interface MonthRange {
   endYear: number;
 }
 
+/** Configurable trip duration and departure day choices */
+export interface TripDuration {
+  nights: number;      // number of nights (e.g. 3, 4, 5)
+  departDays: number[]; // day-of-week for departure (0=Sun..6=Sat), up to 2 choices
+}
+
 export type FlightCategory = string;
 
 export type BudgetTier = "budget" | "mid" | "premium";

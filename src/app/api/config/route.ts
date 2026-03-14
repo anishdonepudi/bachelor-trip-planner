@@ -28,7 +28,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, month_range, skip_scrape } = body;
+    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, month_range, trip_duration, skip_scrape } = body;
 
     const { data: existing } = await supabase
       .from("config")
@@ -49,6 +49,7 @@ export async function PUT(request: Request) {
     if (flight_categories !== undefined) payload.flight_categories = flight_categories;
     if (flight_time_filters !== undefined) payload.flight_time_filters = flight_time_filters;
     if (month_range !== undefined) payload.month_range = month_range;
+    if (trip_duration !== undefined) payload.trip_duration = trip_duration;
 
     let result;
     if (existing) {
@@ -61,9 +62,9 @@ export async function PUT(request: Request) {
         .single();
 
       // If it failed (e.g. optional columns don't exist yet), retry without them
-      if (result.error && (flight_categories !== undefined || flight_time_filters !== undefined || month_range !== undefined)) {
+      if (result.error && (flight_categories !== undefined || flight_time_filters !== undefined || month_range !== undefined || trip_duration !== undefined)) {
         console.warn("Config update failed, retrying without optional columns:", result.error.message);
-        const { flight_categories: _fc, flight_time_filters: _ft, month_range: _mr, ...corePayload } = payload;
+        const { flight_categories: _fc, flight_time_filters: _ft, month_range: _mr, trip_duration: _td, ...corePayload } = payload;
         result = await supabase
           .from("config")
           .update(corePayload)

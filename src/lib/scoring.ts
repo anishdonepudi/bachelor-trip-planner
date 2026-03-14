@@ -11,7 +11,7 @@ import {
   FlightOptionRow,
   FlightCategoryConfig,
 } from "./types";
-import { NIGHTS, DEFAULT_FLIGHT_CATEGORIES } from "./constants";
+import { DEFAULT_FLIGHT_CATEGORIES } from "./constants";
 
 /** Build category fallback hierarchy from configured categories, sorted by quality (nonstop+carryon first) */
 function buildCategoryHierarchy(categories?: FlightCategoryConfig[]): FlightCategory[] {
@@ -70,8 +70,11 @@ export function calculateWeekendScore(
     return { score: 0, totalGroupCost: Infinity, perCityCosts: [], selectedAirbnbUrl: null };
   }
 
+  const nights = Math.round(
+    (new Date(weekend.returnDate + "T00:00:00").getTime() - new Date(weekend.departDate + "T00:00:00").getTime()) / 86400000
+  );
   const stayPerPerson =
-    (topAirbnb.price_per_person_per_night ?? 0) * NIGHTS;
+    (topAirbnb.price_per_person_per_night ?? 0) * nights;
 
   // Build the fallback order starting from the selected category
   const hierarchy = buildCategoryHierarchy(flightCategories);

@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange, TripDuration } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE } from "@/lib/constants";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { CitySelect } from "./CitySelect";
 import {
   Dialog,
@@ -21,14 +21,15 @@ interface ConfigModalProps {
   flightCategories: FlightCategoryConfig[];
   flightTimeFilters: FlightTimeFilters;
   monthRange: MonthRange;
+  tripDuration: TripDuration;
   onOpen?: () => void;
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, monthRange: MonthRange) => void;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, monthRange: MonthRange, tripDuration: TripDuration) => void;
   inlineMode?: boolean;
 }
 
 type Tab = "group" | "dates" | "flights";
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, onOpen, onSave, inlineMode = false }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("group");
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -38,6 +39,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(initialFlightCategories);
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(initialTimeFilters);
   const [monthRange, setMonthRange] = useState<MonthRange>(initialMonthRange);
+  const [tripDuration, setTripDuration] = useState<TripDuration>(initialTripDuration);
   const [saving, setSaving] = useState(false);
 
   // Track whether user has started editing (prevents prop sync from overwriting changes)
@@ -55,8 +57,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setFlightCategories(initialFlightCategories);
     setTimeFilters(initialTimeFilters);
     setMonthRange(initialMonthRange);
+    setTripDuration(initialTripDuration);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialMonthRange]);
+  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialMonthRange, initialTripDuration]);
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
@@ -69,6 +72,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setFlightCategories(initialFlightCategories);
       setTimeFilters(initialTimeFilters);
       setMonthRange(initialMonthRange);
+      setTripDuration(initialTripDuration);
       setActiveTab("group");
     }
     setOpen(isOpen);
@@ -78,6 +82,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const categoriesChanged = JSON.stringify(flightCategories) !== JSON.stringify(initialFlightCategories);
   const timeFiltersChanged = JSON.stringify(timeFilters) !== JSON.stringify(initialTimeFilters);
   const monthRangeChanged = JSON.stringify(monthRange) !== JSON.stringify(initialMonthRange);
+  const tripDurationChanged = JSON.stringify(tripDuration) !== JSON.stringify(initialTripDuration);
   const hasChanges =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     JSON.stringify(excludedDates.slice().sort()) !== JSON.stringify(initialExcluded.slice().sort()) ||
@@ -85,14 +90,16 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     destinationCity !== initialDestinationCity ||
     categoriesChanged ||
     timeFiltersChanged ||
-    monthRangeChanged;
+    monthRangeChanged ||
+    tripDurationChanged;
   const citiesChanged =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     destinationAirport !== initialDestination ||
     destinationCity !== initialDestinationCity ||
     categoriesChanged ||
     timeFiltersChanged ||
-    monthRangeChanged;
+    monthRangeChanged ||
+    tripDurationChanged;
 
   const addCity = () => {
     hasEdited.current = true;
@@ -210,6 +217,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     }));
   };
 
+  const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i);
 
@@ -226,10 +234,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, month_range: monthRange, skip_scrape: !citiesChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, month_range: monthRange, trip_duration: tripDuration, skip_scrape: !citiesChanged }),
       });
       if (res.ok) {
-        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, monthRange);
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, monthRange, tripDuration);
         hasEdited.current = false;
         setOpen(false);
       } else {
@@ -319,6 +327,70 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   </span>
                 </div>
               )}
+            </div>
+
+            {/* Trip Duration */}
+            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] space-y-3">
+              <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Trip Duration</label>
+
+              {/* Nights stepper */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-[var(--text-2)]">Nights</span>
+                <div className="flex items-center">
+                  <button onClick={() => { hasEdited.current = true; setTripDuration(prev => ({ ...prev, nights: Math.max(1, prev.nights - 1) })); }}
+                    className="w-8 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                    </svg>
+                  </button>
+                  <div className="w-10 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
+                    <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{tripDuration.nights}</span>
+                  </div>
+                  <button onClick={() => { hasEdited.current = true; setTripDuration(prev => ({ ...prev, nights: Math.min(14, prev.nights + 1) })); }}
+                    className="w-8 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Departure days */}
+              <div className="space-y-1.5">
+                <span className="text-sm text-[var(--text-2)]">Departure days <span className="text-[10px] text-[var(--text-3)]">(up to 2)</span></span>
+                <div className="flex flex-wrap gap-1.5">
+                  {DAY_NAMES.map((name, dayIndex) => {
+                    const isSelected = tripDuration.departDays.includes(dayIndex);
+                    return (
+                      <button
+                        key={dayIndex}
+                        onClick={() => {
+                          hasEdited.current = true;
+                          setTripDuration(prev => {
+                            if (isSelected) {
+                              // Don't allow deselecting if it's the last one
+                              if (prev.departDays.length <= 1) return prev;
+                              return { ...prev, departDays: prev.departDays.filter(d => d !== dayIndex) };
+                            }
+                            // Don't allow more than 2
+                            if (prev.departDays.length >= 2) return prev;
+                            return { ...prev, departDays: [...prev.departDays, dayIndex].sort() };
+                          });
+                        }}
+                        className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150 border ${
+                          isSelected
+                            ? "bg-[var(--blue)] text-white border-[var(--blue)] shadow-sm"
+                            : tripDuration.departDays.length >= 2
+                              ? "bg-[var(--surface-2)] text-[var(--text-3)] border-[var(--border-default)] cursor-not-allowed opacity-50"
+                              : "bg-[var(--surface-2)] text-[var(--text-2)] border-[var(--border-default)] hover:border-[var(--border-hover)] hover:text-[var(--text-1)]"
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
 
             {/* Divider */}

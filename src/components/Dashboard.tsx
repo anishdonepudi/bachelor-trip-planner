@@ -12,6 +12,7 @@ import {
   FlightCategoryConfig,
   FlightTimeFilters,
   MonthRange,
+  TripDuration,
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
@@ -24,7 +25,7 @@ import {
 } from "@/lib/rank-history";
 import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
-import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE } from "@/lib/constants";
+import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { FilterBar } from "./FilterBar";
 import { FilterSheet } from "./FilterSheet";
 import { WeekendCard } from "./WeekendCard";
@@ -52,6 +53,7 @@ export function Dashboard() {
   const [destinationAirport, setDestinationAirport] = useState("CUN");
   const [destinationCity, setDestinationCity] = useState("Tulum, Quintana Roo, Mexico");
   const [monthRange, setMonthRange] = useState<MonthRange>(DEFAULT_MONTH_RANGE);
+  const [tripDuration, setTripDuration] = useState<TripDuration>(DEFAULT_TRIP_DURATION);
   const [configChanged, setConfigChanged] = useState(false);
   const [showComboView, setShowComboView] = useState(true);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -175,10 +177,11 @@ export function Dashboard() {
     if (configData?.flight_categories && Array.isArray(configData.flight_categories)) setFlightCategories(configData.flight_categories);
     if (configData?.flight_time_filters) setFlightTimeFilters(configData.flight_time_filters);
     if (configData?.month_range) setMonthRange(configData.month_range);
+    if (configData?.trip_duration) setTripDuration(configData.trip_duration);
   }, [configData]);
 
   // ── Derived data ──
-  const allDateRanges = useMemo(() => generateDateRanges(monthRange), [monthRange]);
+  const allDateRanges = useMemo(() => generateDateRanges(monthRange, tripDuration), [monthRange, tripDuration]);
   const dateRanges = useMemo(() => {
     if (excludedDates.length === 0) return allDateRanges;
     const excludedSet = new Set(excludedDates);
@@ -282,11 +285,12 @@ export function Dashboard() {
   const flightCatLabel = flightCategories.find((c) => c.id === flightCategory)?.label ?? FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
   const budgetLabel = BUDGET_TIERS.find((t) => t.value === budgetTier)?.label ?? budgetTier;
 
-  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[], newTimeFilters: FlightTimeFilters, newMonthRange: MonthRange) => {
+  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[], newTimeFilters: FlightTimeFilters, newMonthRange: MonthRange, newTripDuration: TripDuration) => {
     const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDest !== destinationAirport || newDestCity !== destinationCity;
     const categoriesChanged = JSON.stringify(newFlightCategories) !== JSON.stringify(flightCategories);
     const timeFiltersChanged = JSON.stringify(newTimeFilters) !== JSON.stringify(flightTimeFilters);
     const monthRangeChanged = JSON.stringify(newMonthRange) !== JSON.stringify(monthRange);
+    const tripDurationChanged = JSON.stringify(newTripDuration) !== JSON.stringify(tripDuration);
     setCities(newCities);
     setExcludedDates(newExcluded);
     setDestinationAirport(newDest);
@@ -294,12 +298,13 @@ export function Dashboard() {
     setFlightCategories(newFlightCategories);
     setFlightTimeFilters(newTimeFilters);
     setMonthRange(newMonthRange);
-    if (citiesChanged || categoriesChanged || timeFiltersChanged || monthRangeChanged) setConfigChanged(true);
+    setTripDuration(newTripDuration);
+    if (citiesChanged || categoriesChanged || timeFiltersChanged || monthRangeChanged || tripDurationChanged) setConfigChanged(true);
     // If the active flight category was removed, fall back to first available
     if (!newFlightCategories.some(fc => fc.id === flightCategory)) {
       setFlightCategory(newFlightCategories[0]?.id ?? "nonstop_carryon");
     }
-  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory, flightTimeFilters, monthRange]);
+  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory, flightTimeFilters, monthRange, tripDuration]);
 
   // ── Render ──
   return (
@@ -337,6 +342,7 @@ export function Dashboard() {
                 flightCategories={flightCategories}
                 flightTimeFilters={flightTimeFilters}
                 monthRange={monthRange}
+                tripDuration={tripDuration}
                 onOpen={() => mutateConfig()}
                 onSave={handleConfigSave}
               />
@@ -595,8 +601,9 @@ export function Dashboard() {
                 flightCategories={flightCategories}
                 flightTimeFilters={flightTimeFilters}
                 monthRange={monthRange}
-                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newMonthRange) => {
-                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newMonthRange);
+                tripDuration={tripDuration}
+                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newMonthRange, newTripDuration) => {
+                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newMonthRange, newTripDuration);
                   setShowMobileConfig(false);
                 }}
                 inlineMode

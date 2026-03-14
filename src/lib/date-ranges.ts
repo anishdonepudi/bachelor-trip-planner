@@ -1,12 +1,15 @@
-import { DateRange, MonthRange } from "./types";
+import { DateRange, MonthRange, TripDuration } from "./types";
+import { DEFAULT_TRIP_DURATION } from "./constants";
 
 /**
- * Generate all valid weekend date ranges for the bachelor trip.
- * Defaults to June–August 2026 if no range provided.
- * Formats: Thursday→Sunday (3 nights) OR Friday→Monday (3 nights)
+ * Generate all valid trip date ranges.
+ * Uses configured departure days and trip duration (nights).
+ * Defaults to Thu→Sun and Fri→Mon, 3 nights.
  */
-export function generateDateRanges(monthRange?: MonthRange): DateRange[] {
+export function generateDateRanges(monthRange?: MonthRange, tripDuration?: TripDuration): DateRange[] {
   const ranges: DateRange[] = [];
+  const { nights, departDays } = tripDuration ?? DEFAULT_TRIP_DURATION;
+
   const startDate = monthRange
     ? new Date(monthRange.startYear, monthRange.startMonth - 1, 1)
     : new Date(2026, 5, 1); // June 1, 2026
@@ -19,36 +22,19 @@ export function generateDateRanges(monthRange?: MonthRange): DateRange[] {
   while (current <= endDate) {
     const dayOfWeek = current.getDay();
 
-    // Thursday (4) → Sunday
-    if (dayOfWeek === 4) {
+    if (departDays.includes(dayOfWeek)) {
       const depart = new Date(current);
       const returnDate = new Date(current);
-      returnDate.setDate(returnDate.getDate() + 3); // Sunday
+      returnDate.setDate(returnDate.getDate() + nights);
 
       if (returnDate <= endDate) {
         const departStr = formatDate(depart);
+        const returnStr = formatDate(returnDate);
         ranges.push({
-          id: `${departStr}_${formatDate(returnDate)}`,
+          id: `${departStr}_${returnStr}`,
           departDate: departStr,
-          returnDate: formatDate(returnDate),
-          format: formatDateRangeDisplay(departStr, formatDate(returnDate)),
-        });
-      }
-    }
-
-    // Friday (5) → Monday
-    if (dayOfWeek === 5) {
-      const depart = new Date(current);
-      const returnDate = new Date(current);
-      returnDate.setDate(returnDate.getDate() + 3); // Monday
-
-      if (returnDate <= endDate) {
-        const departStr = formatDate(depart);
-        ranges.push({
-          id: `${departStr}_${formatDate(returnDate)}`,
-          departDate: departStr,
-          returnDate: formatDate(returnDate),
-          format: formatDateRangeDisplay(departStr, formatDate(returnDate)),
+          returnDate: returnStr,
+          format: formatDateRangeDisplay(departStr, returnStr),
         });
       }
     }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AirbnbListingRow, BudgetTier } from "@/lib/types";
-import { TOTAL_PEOPLE, NIGHTS } from "@/lib/constants";
+import { TOTAL_PEOPLE } from "@/lib/constants";
 
 interface AirbnbGridProps {
   listings: AirbnbListingRow[];
@@ -184,7 +184,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                   <span className="text-[11px] text-[var(--text-3)]">/pp/night</span>
                 </div>
                 <div className="text-[11px] text-[var(--text-3)] mt-0.5 font-mono tabular-nums">
-                  ${listing.total_stay_cost?.toFixed(0) ?? "?"} total &middot; {NIGHTS} nights
+                  ${listing.total_stay_cost?.toFixed(0) ?? "?"} total &middot; {Math.round((new Date(returnDate + "T00:00:00").getTime() - new Date(departDate + "T00:00:00").getTime()) / 86400000)} nights
                 </div>
               </div>
             </a>
