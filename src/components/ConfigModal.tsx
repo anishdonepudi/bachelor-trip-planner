@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS } from "@/lib/constants";
@@ -20,13 +20,14 @@ interface ConfigModalProps {
   destinationCity: string;
   flightCategories: FlightCategoryConfig[];
   flightTimeFilters: FlightTimeFilters;
+  onOpen?: () => void;
   onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters) => void;
   inlineMode?: boolean;
 }
 
 type Tab = "group" | "dates" | "flights";
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, onSave, inlineMode = false }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, onOpen, onSave, inlineMode = false }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("group");
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -37,8 +38,21 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(initialTimeFilters);
   const [saving, setSaving] = useState(false);
 
+  // Sync local state when props update (e.g. after config refetch)
+  useEffect(() => {
+    if (!open && !inlineMode) return; // only sync when visible
+    setCities(initialCities);
+    setExcludedDates(initialExcluded);
+    setDestinationAirport(initialDestination);
+    setDestinationCity(initialDestinationCity);
+    setFlightCategories(initialFlightCategories);
+    setTimeFilters(initialTimeFilters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters]);
+
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
+      onOpen?.();
       setCities(initialCities);
       setExcludedDates(initialExcluded);
       setDestinationAirport(initialDestination);

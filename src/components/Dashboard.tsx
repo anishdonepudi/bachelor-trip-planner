@@ -163,7 +163,7 @@ export function Dashboard() {
     // and calls onDismissed when the transition completes
   }, [scrapeData?.lastFlightUpdate, mutateWeekends, mutateScrape]);
 
-  const { data: configData } = useSWR("/api/config", fetcher, { revalidateOnFocus: false });
+  const { data: configData, mutate: mutateConfig } = useSWR("/api/config", fetcher, { revalidateOnFocus: false });
 
   useEffect(() => {
     if (configData?.cities && Array.isArray(configData.cities)) setCities(configData.cities);
@@ -268,6 +268,7 @@ export function Dashboard() {
 
   const handleMobileTab = (tab: "overview" | "ranked" | "configure") => {
     if (tab === "configure") {
+      mutateConfig();
       setShowMobileConfig(true);
     } else {
       setMobileTab(tab);
@@ -330,6 +331,7 @@ export function Dashboard() {
                 destinationCity={destinationCity}
                 flightCategories={flightCategories}
                 flightTimeFilters={flightTimeFilters}
+                onOpen={() => mutateConfig()}
                 onSave={handleConfigSave}
               />
             </div>
