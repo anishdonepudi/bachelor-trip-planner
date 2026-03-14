@@ -50,10 +50,9 @@ export function Dashboard() {
   const [showComboView, setShowComboView] = useState(true);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [scrapeTriggered, setScrapeTriggered] = useState(false);
-  const [mobileTab, setMobileTab] = useState<"weekends" | "filters" | "settings" | "jobs">("weekends");
+  const [mobileTab, setMobileTab] = useState<"overview" | "ranked" | "configure">("overview");
   const [showFilterSheet, setShowFilterSheet] = useState(false);
   const [showMobileConfig, setShowMobileConfig] = useState(false);
-  const [showMobileJobs, setShowMobileJobs] = useState(false);
   const [rankChangeVersion, setRankChangeVersion] = useState(0);
   const [collapsedCardHeight, setCollapsedCardHeight] = useState(0);
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
@@ -250,19 +249,13 @@ export function Dashboard() {
 
   const hasData = weekendData && ((weekendData.flights?.length ?? 0) > 0 || (weekendData.airbnbListings?.length ?? 0) > 0);
 
-  const activeFilterCount = [
-    flightCategory !== "nonstop_carryon",
-    budgetTier !== "budget",
-    priorityCity !== "all",
-    scoringAlgorithm !== "zscore",
-  ].filter(Boolean).length;
-
-  const handleMobileTab = (tab: "weekends" | "filters" | "settings" | "jobs") => {
-    setMobileTab(tab);
-    if (tab === "filters") setShowFilterSheet(true);
-    else if (tab === "settings") setShowMobileConfig(true);
-    else if (tab === "jobs") setShowMobileJobs(true);
-    if (tab !== "weekends") setTimeout(() => setMobileTab("weekends"), 100);
+  const handleMobileTab = (tab: "overview" | "ranked" | "configure") => {
+    if (tab === "configure") {
+      setShowMobileConfig(true);
+    } else {
+      setMobileTab(tab);
+      setShowComboView(tab === "overview");
+    }
   };
 
   const flightCatLabel = FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
@@ -361,27 +354,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── Mobile filter chips ── */}
-      {hasData && !weekendsLoading && (
-        <div className="md:hidden border-b border-[var(--border-default)] bg-[var(--surface-0)]">
-          <div className="flex overflow-x-auto gap-2 px-4 py-2.5 whitespace-nowrap scrollbar-thin">
-            <button onClick={() => setShowFilterSheet(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] shrink-0 min-h-[36px]">
-              {flightCatLabel}
-            </button>
-            <button onClick={() => setShowFilterSheet(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium bg-[var(--gold-soft)] text-[var(--gold)] border border-[var(--gold-border)] shrink-0 min-h-[36px]">
-              {budgetLabel}
-            </button>
-            {priorityCity !== "all" && (
-              <button onClick={() => setShowFilterSheet(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium bg-[var(--teal-soft)] text-[var(--teal)] border border-[var(--teal-border)] shrink-0 min-h-[36px]">
-                {priorityCity}
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* ── Mobile filter chips (hidden on desktop) ── */}
 
       {/* ── Main content ── */}
       <main className="max-w-5xl mx-auto px-4 pt-5 pb-20 md:pb-8 space-y-5">
@@ -392,11 +365,11 @@ export function Dashboard() {
             {/* View toggle + desktop filters */}
             {hasData && (
               <div className="space-y-4">
-                {/* View toggle */}
-                <div className="flex items-center gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] w-fit">
+                {/* View toggle (desktop only — mobile uses bottom nav) */}
+                <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] w-fit">
                   <button
                     onClick={() => setShowComboView(true)}
-                    className={`px-3 py-1.5 md:py-1.5 min-h-[40px] md:min-h-0 rounded text-sm md:text-xs font-medium transition-all duration-150 ${
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
                       showComboView
                         ? "bg-[var(--blue)] text-white shadow-sm"
                         : "text-[var(--text-2)] hover:text-[var(--text-1)]"
@@ -406,7 +379,7 @@ export function Dashboard() {
                   </button>
                   <button
                     onClick={() => setShowComboView(false)}
-                    className={`px-3 py-1.5 md:py-1.5 min-h-[40px] md:min-h-0 rounded text-sm md:text-xs font-medium transition-all duration-150 ${
+                    className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
                       !showComboView
                         ? "bg-[var(--blue)] text-white shadow-sm"
                         : "text-[var(--text-2)] hover:text-[var(--text-1)]"
@@ -452,6 +425,7 @@ export function Dashboard() {
                 </p>
               </div>
             ) : showComboView ? (
+              <div key="overview" className="animate-fade-in-up" style={{ animationDuration: "200ms" }}>
               <ComboSummary
                 weekendData={weekendData}
                 dateRanges={dateRanges}
@@ -466,10 +440,12 @@ export function Dashboard() {
                   setFlightCategory(fc);
                   setBudgetTier(bt);
                   setShowComboView(false);
+                  setMobileTab("ranked");
                 }}
               />
+              </div>
             ) : (
-              <div className="space-y-2">
+              <div key="ranked" className="space-y-2 animate-fade-in-up" style={{ animationDuration: "200ms" }}>
                 <div className="text-xs text-[var(--text-2)] font-mono">
                   {weekendScores.length} weekends &middot; {SCORING_ALGORITHMS.find(a => a.value === scoringAlgorithm)?.label ?? scoringAlgorithm}
                   {priorityCity !== "all" ? ` &middot; ${priorityCity}` : ""}
@@ -509,7 +485,32 @@ export function Dashboard() {
       {/* ── Modals & overlays ── */}
       <DataUpdateModal open={showUpdateModal} onRefresh={handleDataRefresh} />
 
-      <MobileNav activeTab={mobileTab} onTabChange={handleMobileTab} activeFilterCount={activeFilterCount} />
+      {/* Mobile filter badge — floating above bottom nav */}
+      {hasData && !weekendsLoading && (
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 md:hidden pointer-events-none">
+          <div className="flex justify-center pb-2 pointer-events-auto">
+            <button
+              onClick={() => setShowFilterSheet(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-[var(--surface-0)] text-[var(--text-1)] border border-[var(--border-hover)] shadow-lg backdrop-blur-sm min-h-[40px] transition-all duration-200 active:scale-95"
+            >
+              <svg className="w-4 h-4 text-[var(--text-2)]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+              </svg>
+              <span>{flightCatLabel}</span>
+              <span className="text-[var(--text-3)]">&middot;</span>
+              <span>{budgetLabel}</span>
+              {priorityCity !== "all" && (
+                <>
+                  <span className="text-[var(--text-3)]">&middot;</span>
+                  <span>{priorityCity}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <MobileNav activeTab={mobileTab} onTabChange={handleMobileTab} />
 
       <FilterSheet
         open={showFilterSheet}
@@ -525,21 +526,28 @@ export function Dashboard() {
         onScoringAlgorithmChange={setScoringAlgorithm}
       />
 
-      {/* Mobile config */}
+      {/* Mobile configure — bottom sheet style */}
       {showMobileConfig && (
         <div className="fixed inset-0 z-[100] md:hidden">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMobileConfig(false)} />
-          <div className="absolute inset-0 bg-[var(--surface-0)] overflow-y-auto scrollbar-thin">
-            <div className="sticky top-0 z-10 flex items-center justify-between px-4 h-12 glass border-b border-[var(--border-default)]">
-              <h2 className="text-sm font-heading font-semibold text-[var(--text-1)]">Settings</h2>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setShowMobileConfig(false)} />
+          <div className="absolute bottom-0 left-0 right-0 rounded-t-xl bg-[var(--surface-0)] border-t border-[var(--border-default)] shadow-2xl max-h-[90vh] flex flex-col animate-slide-up">
+            {/* Handle */}
+            <div className="flex justify-center pt-2.5 pb-1 shrink-0">
+              <div className="w-8 h-1 rounded-full bg-[var(--surface-3)]" />
+            </div>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 pb-2.5 border-b border-[var(--border-default)] shrink-0">
+              <h2 className="text-sm font-heading font-semibold text-[var(--text-1)]">Configure</h2>
               <button onClick={() => setShowMobileConfig(false)}
-                className="p-2 -mr-2 text-[var(--text-3)] hover:text-[var(--text-1)] min-w-[44px] min-h-[44px] flex items-center justify-center">
+                className="w-8 h-8 flex items-center justify-center rounded-md text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--surface-2)] transition-colors duration-150"
+                aria-label="Close configure">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="p-4 pb-20">
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] scrollbar-thin">
               <ConfigModal
                 cities={cities}
                 excludedDates={excludedDates}
@@ -551,27 +559,6 @@ export function Dashboard() {
                 }}
                 inlineMode
               />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Mobile jobs */}
-      {showMobileJobs && (
-        <div className="fixed inset-0 z-[100] md:hidden">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowMobileJobs(false)} />
-          <div className="absolute inset-0 bg-[var(--surface-0)] overflow-y-auto scrollbar-thin">
-            <div className="sticky top-0 z-10 flex items-center justify-between px-4 h-12 glass border-b border-[var(--border-default)]">
-              <h2 className="text-sm font-heading font-semibold text-[var(--text-1)]">Job History</h2>
-              <button onClick={() => setShowMobileJobs(false)}
-                className="p-2 -mr-2 text-[var(--text-3)] hover:text-[var(--text-1)] min-w-[44px] min-h-[44px] flex items-center justify-center">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-4 pb-20">
-              <JobsPanel runs={scrapeData?.runs ?? []} inlineMode />
             </div>
           </div>
         </div>
