@@ -562,7 +562,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
             {citiesChanged && <span className="text-[var(--text-3)]">- triggers refresh</span>}
           </div>
         )}
-        <button onClick={handleSave} disabled={saving || !hasChanges || hasDuplicateCategories}
+        <button onClick={handleSave} disabled={saving || !hasChanges || (categoriesChanged && hasDuplicateCategories)}
           className="w-full h-11 rounded-md text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150">
           {saving ? (
             <span className="flex items-center justify-center gap-1.5">
