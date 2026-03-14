@@ -12,7 +12,13 @@ import {
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
-import { savePreviousWeekendData, loadPreviousWeekendData, getPreviousDataTimestamp } from "@/lib/rank-history";
+import {
+  savePreviousWeekendData,
+  loadPreviousWeekendData,
+  getPreviousDataTimestamp,
+  isLocalStorageStale,
+  fetchPreviousWeekendDataFromDB,
+} from "@/lib/rank-history";
 import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
 import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
@@ -189,25 +195,44 @@ export function Dashboard() {
   }, [weekendData, dateRanges, flightCategory, budgetTier, cities, priorityCity, scoringAlgorithm]);
 
   // Rank changes: load previous data and compute deltas
-  const previousWeekendData = useMemo(() => {
-    void rankChangeVersion; // trigger re-read when data is saved
-    return loadPreviousWeekendData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rankChangeVersion]);
+  // First try localStorage; if stale (matches current data), fall back to DB snapshot.
+  const [previousWeekendData, setPreviousWeekendData] = useState<WeekendData | null>(null);
+  const [rankChangeSince, setRankChangeSince] = useState<string | null>(null);
+  const dbFetchedRef = useRef(false);
 
-  const rankChangeSince = useMemo(() => {
-    void rankChangeVersion;
-    return getPreviousDataTimestamp();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rankChangeVersion]);
-
-  // Seed localStorage on first visit so next session has a baseline
   useEffect(() => {
-    if (!previousWeekendData && weekendData) {
+    if (!weekendData) return;
+
+    // Try localStorage first
+    const localData = loadPreviousWeekendData();
+    const localTimestamp = getPreviousDataTimestamp();
+
+    if (localData && !isLocalStorageStale(weekendData, localData)) {
+      // localStorage has genuinely different (previous) data
+      setPreviousWeekendData(localData);
+      setRankChangeSince(localTimestamp);
+      return;
+    }
+
+    // localStorage is missing or stale — try DB fallback (once)
+    if (!dbFetchedRef.current) {
+      dbFetchedRef.current = true;
+      fetchPreviousWeekendDataFromDB().then((result) => {
+        if (result && !isLocalStorageStale(weekendData, result.data)) {
+          setPreviousWeekendData(result.data);
+          setRankChangeSince(result.timestamp);
+        } else if (!localData) {
+          // No previous data anywhere — seed localStorage for next session
+          savePreviousWeekendData(weekendData);
+          setRankChangeVersion((v) => v + 1);
+        }
+      });
+    } else if (!localData) {
+      // DB already fetched, no data — seed localStorage
       savePreviousWeekendData(weekendData);
       setRankChangeVersion((v) => v + 1);
     }
-  }, [previousWeekendData, weekendData]);
+  }, [weekendData, rankChangeVersion]);
 
   const rankChangeMap: RankChangeMap = useMemo(() => {
     if (!previousWeekendData || !weekendScores.length) return {};

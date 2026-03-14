@@ -99,6 +99,95 @@ async function main() {
   const dateRangeMap = new Map(dateRanges.map((dr) => [dr.id, dr]));
 
   // =============================================
+  // PHASE 0.5: Snapshot current production data
+  // Captures what production looks like BEFORE the new data overwrites it,
+  // so the frontend can show rank changes even without localStorage.
+  // =============================================
+
+  console.log("--- Phase 0.5: Snapshot current production data ---\n");
+
+  try {
+    const [prodFlights, prodFlightOptions, prodAirbnb] = await Promise.all([
+      fetchAll("flights", null),
+      fetchAll("flight_options", null),
+      fetchAll("airbnb_listings", null),
+    ]);
+
+    if (prodFlights.length > 0 || prodFlightOptions.length > 0 || prodAirbnb.length > 0) {
+      // Minimize the snapshot to only fields needed for scoring (mirrors minimizeForScoring in rank-history.ts)
+      const minFlights = prodFlights.map((f) => ({
+        date_range_id: f.date_range_id,
+        trip_format: f.trip_format,
+        depart_date: f.depart_date,
+        return_date: f.return_date,
+        origin_city: f.origin_city,
+        category: f.category,
+        airport_used: f.airport_used,
+        price: f.price,
+        airline: f.airline,
+        outbound_details: f.outbound_details ? { stops: (f.outbound_details as Record<string, unknown>).stops } : null,
+        return_details: f.return_details ? { stops: (f.return_details as Record<string, unknown>).stops } : null,
+        google_flights_url: null,
+        scraped_at: "",
+      }));
+
+      const minFlightOptions = prodFlightOptions.map((f) => ({
+        date_range_id: f.date_range_id,
+        origin_city: f.origin_city,
+        category: f.category,
+        airport_used: f.airport_used,
+        price: f.price,
+        airline: f.airline,
+        outbound_details: f.outbound_details ? { stops: (f.outbound_details as Record<string, unknown>).stops } : null,
+        return_details: f.return_details ? { stops: (f.return_details as Record<string, unknown>).stops } : null,
+        google_flights_url: null,
+        is_best: f.is_best,
+        scraped_at: "",
+      }));
+
+      const minAirbnb = prodAirbnb.map((a) => ({
+        date_range_id: a.date_range_id,
+        listing_name: a.listing_name,
+        price_per_night: a.price_per_night,
+        price_per_person_per_night: a.price_per_person_per_night,
+        total_stay_cost: a.total_stay_cost,
+        rating: a.rating,
+        review_count: a.review_count,
+        bedrooms: null,
+        bathrooms: null,
+        max_guests: null,
+        amenities: null,
+        image_url: null,
+        airbnb_url: a.airbnb_url,
+        superhost: a.superhost,
+        budget_tier: a.budget_tier,
+        scraped_at: "",
+      }));
+
+      const snapshot = {
+        flights: minFlights,
+        flightOptions: minFlightOptions,
+        airbnbListings: minAirbnb,
+      };
+
+      const { error: snapshotError } = await supabase
+        .from("previous_weekend_snapshot")
+        .upsert({ id: 1, snapshot, created_at: new Date().toISOString() });
+
+      if (snapshotError) {
+        console.error(`   Snapshot upsert error: ${snapshotError.message}`);
+      } else {
+        console.log(`   Snapshot saved (${minFlights.length} flights, ${minFlightOptions.length} options, ${minAirbnb.length} airbnb)`);
+      }
+    } else {
+      console.log("   No current production data to snapshot — skipping.");
+    }
+  } catch (snapshotErr) {
+    // Non-fatal: if snapshotting fails, we still want to promote data
+    console.error("   Snapshot failed (non-fatal):", snapshotErr);
+  }
+
+  // =============================================
   // PHASE 1: Aggregate in staging
   // =============================================
 

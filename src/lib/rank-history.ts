@@ -6,8 +6,9 @@ const TIMESTAMP_KEY = "tripsync_previous_data_timestamp";
 /**
  * Strip WeekendData down to only the fields needed by scoreAllWeekends,
  * reducing storage size dramatically.
+ * Exported so the DB snapshot logic can reuse it if needed.
  */
-function minimizeForScoring(data: WeekendData): WeekendData {
+export function minimizeForScoring(data: WeekendData): WeekendData {
   const flights = data.flights.map((f) => ({
     date_range_id: f.date_range_id,
     trip_format: f.trip_format,
@@ -95,5 +96,59 @@ export function clearPreviousWeekendData(): void {
     localStorage.removeItem(TIMESTAMP_KEY);
   } catch {
     // SSR — silently ignore
+  }
+}
+
+/**
+ * Check if localStorage data is stale (identical to current data).
+ * When localStorage matches current data, it means localStorage was seeded
+ * from the current session and has no useful "previous" information.
+ */
+export function isLocalStorageStale(
+  currentData: WeekendData,
+  localData: WeekendData
+): boolean {
+  // Quick check: compare flight count and a sample of prices
+  if (
+    currentData.flights.length !== localData.flights.length ||
+    currentData.airbnbListings.length !== localData.airbnbListings.length
+  ) {
+    return false; // Different lengths → not stale
+  }
+
+  // Compare a fingerprint of flights by (date_range_id, price) tuples
+  const currentFingerprint = currentData.flights
+    .map((f) => `${f.date_range_id}:${f.price}`)
+    .sort()
+    .join("|");
+  const localFingerprint = localData.flights
+    .map((f) => `${f.date_range_id}:${f.price}`)
+    .sort()
+    .join("|");
+
+  return currentFingerprint === localFingerprint;
+}
+
+/**
+ * Fetch previous weekend data from the DB snapshot (fallback when localStorage is stale).
+ * Returns the snapshot and its timestamp, or null if unavailable.
+ */
+export async function fetchPreviousWeekendDataFromDB(): Promise<{
+  data: WeekendData;
+  timestamp: string;
+} | null> {
+  try {
+    const res = await fetch("/api/weekends/previous");
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    if (!json.snapshot) return null;
+
+    return {
+      data: json.snapshot as WeekendData,
+      timestamp: json.created_at as string,
+    };
+  } catch {
+    return null;
   }
 }
