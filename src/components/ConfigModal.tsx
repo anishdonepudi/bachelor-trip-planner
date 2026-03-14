@@ -29,11 +29,56 @@ interface ConfigModalProps {
   inlineMode?: boolean;
 }
 
-type Tab = "group" | "dates" | "flights";
+type Section = "trip" | "group" | "flights" | "schedule";
+
+// ── Collapsible section wrapper ──
+function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, children }: {
+  id: Section;
+  title: string;
+  subtitle?: string;
+  icon: React.ReactNode;
+  expanded: boolean;
+  onToggle: (id: Section) => void;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--border-default)] overflow-hidden">
+      <button
+        onClick={() => onToggle(id)}
+        className="w-full flex items-center gap-3 px-4 py-3 bg-[var(--surface-1)] hover:bg-[var(--surface-2)] transition-colors duration-150 text-left"
+      >
+        <div className="w-8 h-8 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center shrink-0 text-[var(--text-2)]">
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-heading font-semibold text-[var(--text-1)]">{title}</span>
+            {badge}
+          </div>
+          {subtitle && <p className="text-[11px] text-[var(--text-3)] mt-0.5 truncate">{subtitle}</p>}
+        </div>
+        <svg
+          className={`w-4 h-4 text-[var(--text-3)] transition-transform duration-200 shrink-0 ${expanded ? "rotate-180" : ""}`}
+          fill="none" stroke="currentColor" viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      <div
+        className={`transition-all duration-200 ease-in-out overflow-hidden ${expanded ? "max-h-[2000px] opacity-100" : "max-h-0 opacity-0"}`}
+      >
+        <div className="px-4 py-3 space-y-3 border-t border-[var(--border-default)] bg-[var(--surface-0)]">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("group");
+  const [expandedSections, setExpandedSections] = useState<Set<Section>>(new Set(["trip"]));
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
   const [excludedDates, setExcludedDates] = useState<string[]>(initialExcluded);
   const [destinationAirport, setDestinationAirport] = useState(initialDestination);
@@ -44,11 +89,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [tripDuration, setTripDuration] = useState<TripDuration>(initialTripDuration);
   const [saving, setSaving] = useState(false);
 
-  // Track whether user has started editing (prevents prop sync from overwriting changes)
   const hasEdited = useRef(false);
 
-  // Sync local state when props update (e.g. after config refetch on open)
-  // but only if user hasn't started editing yet
   useEffect(() => {
     if (!open && !inlineMode) return;
     if (hasEdited.current) return;
@@ -75,9 +117,18 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setTimeFilters(initialTimeFilters);
       setMonthRange(initialMonthRange);
       setTripDuration(initialTripDuration);
-      setActiveTab("group");
+      setExpandedSections(new Set(["trip"]));
     }
     setOpen(isOpen);
+  };
+
+  const toggleSection = (id: Section) => {
+    setExpandedSections(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const totalPeople = cities.reduce((sum, c) => sum + c.people, 0);
@@ -103,6 +154,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     monthRangeChanged ||
     tripDurationChanged;
 
+  // ── City helpers ──
   const addCity = () => {
     hasEdited.current = true;
     setCities([...cities, { city: "", people: 1, primaryAirports: [], nearbyAirports: [] }]);
@@ -130,6 +182,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setCities(updated);
   };
 
+  // ── Date helpers ──
   const toggleDate = (date: string) => {
     hasEdited.current = true;
     setExcludedDates((prev) => prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]);
@@ -138,7 +191,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const seasonDates = useMemo(() => {
     const dates: { date: string; dayOfWeek: number; month: string }[] = [];
     const current = new Date(monthRange.startYear, monthRange.startMonth - 1, 1);
-    const end = new Date(monthRange.endYear, monthRange.endMonth, 0); // last day of endMonth
+    const end = new Date(monthRange.endYear, monthRange.endMonth, 0);
     while (current <= end) {
       const y = current.getFullYear();
       const m = String(current.getMonth() + 1).padStart(2, "0");
@@ -159,7 +212,6 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     return groups;
   }, [seasonDates]);
 
-  // Compute which dates fall within potential trips
   const potentialTrips = useMemo(() => generateDateRanges(monthRange, tripDuration), [monthRange, tripDuration]);
   const tripDateSet = useMemo(() => {
     const set = new Set<string>();
@@ -177,7 +229,6 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     return set;
   }, [potentialTrips]);
 
-  // Map each date to its trip(s) for visual grouping — track start/end/middle
   const tripPositionMap = useMemo(() => {
     const map = new Map<string, { isStart: boolean; isEnd: boolean }>();
     for (const trip of potentialTrips) {
@@ -201,8 +252,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     return map;
   }, [potentialTrips]);
 
-  // Estimate refresh time based on current config
-  const estimatedRefreshMinutes = useMemo(() => {
+  const estimatedMinutes = useMemo(() => {
     if (!citiesChanged) return 0;
     const uniqueAirports = new Set<string>();
     for (const c of cities) {
@@ -215,7 +265,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     });
   }, [citiesChanged, cities, potentialTrips.length, flightCategories.length]);
 
-  // Prune excluded dates that fall outside potential trip windows
+  // Prune excluded dates outside trip windows
   useEffect(() => {
     setExcludedDates(prev => {
       const filtered = prev.filter(d => tripDateSet.has(d));
@@ -223,7 +273,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     });
   }, [tripDateSet]);
 
-  // Flight category helpers
+  // ── Flight category helpers ──
   const addFlightCategory = () => {
     hasEdited.current = true;
     const combos: Array<{ stops: 0 | 1 | 2; bags: "carryon" | "none" }> = [
@@ -251,7 +301,6 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     } else {
       updated[index] = { ...updated[index], bags: value as "carryon" | "none" };
     }
-    // Regenerate id and label
     updated[index].id = generateCategoryId(updated[index].stops, updated[index].bags);
     updated[index].label = generateCategoryLabel(updated[index].stops, updated[index].bags);
     setFlightCategories(updated);
@@ -261,7 +310,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     flightCategories.some((other, j) => j !== i && other.stops === cat.stops && other.bags === cat.bags)
   );
 
-  // Time filter helpers
+  // ── Time filter helpers ──
   const updateTimeFilter = (
     leg: "outboundDeparture" | "outboundArrival" | "returnDeparture" | "returnArrival",
     field: "time" | "plusMinus",
@@ -307,157 +356,143 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
 
   const selectedCityNames = cities.map((c) => c.city).filter(Boolean);
 
-  // Shared content used in both inline and dialog modes
+  // ── Section subtitles ──
+  const tripSubtitle = [
+    destinationCity || "No destination",
+    `${tripDuration.nights} nights`,
+    tripDuration.departDays.map(d => DAY_NAMES[d]).join("/"),
+  ].join(" \u00b7 ");
+
+  const groupSubtitle = `${cities.filter(c => c.city).length} cities \u00b7 ${totalPeople} travelers`;
+
+  const flightSubtitle = `${flightCategories.length} ${flightCategories.length === 1 ? "category" : "categories"} \u00b7 ${timeFilters.maxDuration}hr max`;
+
+  const scheduleSubtitle = [
+    `${MONTH_NAMES[monthRange.startMonth - 1]} ${monthRange.startYear} \u2013 ${MONTH_NAMES[monthRange.endMonth - 1]} ${monthRange.endYear}`,
+    `${potentialTrips.length} trips`,
+    excludedDates.length > 0 ? `${excludedDates.length} blocked` : null,
+  ].filter(Boolean).join(" \u00b7 ");
+
+  // ── Shared config content ──
   const configContent = (
     <>
-      {/* Tabs */}
-      <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] shrink-0">
-        <button
-          onClick={() => setActiveTab("group")}
-          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded text-sm font-medium transition-all duration-150 ${
-            activeTab === "group"
-              ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm"
-              : "text-[var(--text-2)] hover:text-[var(--text-1)]"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-          </svg>
-          Travel Group
-        </button>
-        <button
-          onClick={() => setActiveTab("dates")}
-          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded text-sm font-medium transition-all duration-150 ${
-            activeTab === "dates"
-              ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm"
-              : "text-[var(--text-2)] hover:text-[var(--text-1)]"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-          </svg>
-          Blocked Dates
-          {excludedDates.length > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-[var(--red-soft)] text-[var(--red)] text-[10px] font-bold">{excludedDates.length}</span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("flights")}
-          className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded text-sm font-medium transition-all duration-150 ${
-            activeTab === "flights"
-              ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm"
-              : "text-[var(--text-2)] hover:text-[var(--text-1)]"
-          }`}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-          </svg>
-          Flights
-        </button>
-      </div>
+      <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin space-y-2 mt-3">
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto mt-3 min-h-0 scrollbar-thin">
-        {activeTab === "group" ? (
+        {/* Section 1: Trip Setup */}
+        <ConfigSection
+          id="trip"
+          title="Trip Setup"
+          subtitle={tripSubtitle}
+          expanded={expandedSections.has("trip")}
+          onToggle={toggleSection}
+          icon={
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
+            </svg>
+          }
+        >
+          {/* Destination */}
+          <div>
+            <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1.5 block">Destination</label>
+            <CitySelect
+              value={destinationCity}
+              onChange={(name, airports) => {
+                hasEdited.current = true;
+                setDestinationCity(name);
+                if (airports?.primary?.[0]) {
+                  setDestinationAirport(airports.primary[0]);
+                }
+              }}
+              placeholder="Search destination..."
+            />
+            {destinationAirport && (
+              <div className="flex items-center gap-1.5 mt-1.5">
+                <span className="text-[10px] text-[var(--text-3)]">Airport:</span>
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] font-mono font-medium">
+                  {destinationAirport}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Trip Duration — Nights + Departure Days side by side on desktop, stacked on mobile */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Nights */}
+            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+              <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2 block">Nights</label>
+              <div className="flex items-center justify-center">
+                <button onClick={() => { hasEdited.current = true; setTripDuration(prev => ({ ...prev, nights: Math.max(1, prev.nights - 1) })); }}
+                  className="w-9 h-9 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                  </svg>
+                </button>
+                <div className="w-12 h-9 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
+                  <span className="text-base font-semibold font-mono tabular-nums text-[var(--text-1)]">{tripDuration.nights}</span>
+                </div>
+                <button onClick={() => { hasEdited.current = true; setTripDuration(prev => ({ ...prev, nights: Math.min(14, prev.nights + 1) })); }}
+                  className="w-9 h-9 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Departure Days */}
+            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+              <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2 block">
+                Depart on <span className="normal-case font-normal text-[var(--text-3)]">(up to 2)</span>
+              </label>
+              <div className="flex flex-wrap gap-1">
+                {DAY_NAMES.map((name, dayIndex) => {
+                  const isSelected = tripDuration.departDays.includes(dayIndex);
+                  return (
+                    <button
+                      key={dayIndex}
+                      onClick={() => {
+                        hasEdited.current = true;
+                        setTripDuration(prev => {
+                          if (isSelected) {
+                            if (prev.departDays.length <= 1) return prev;
+                            return { ...prev, departDays: prev.departDays.filter(d => d !== dayIndex) };
+                          }
+                          if (prev.departDays.length >= 2) return prev;
+                          return { ...prev, departDays: [...prev.departDays, dayIndex].sort() };
+                        });
+                      }}
+                      className={`px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-150 border ${
+                        isSelected
+                          ? "bg-[var(--blue)] text-white border-[var(--blue)] shadow-sm"
+                          : tripDuration.departDays.length >= 2
+                            ? "bg-[var(--surface-2)] text-[var(--text-3)] border-[var(--border-default)] cursor-not-allowed opacity-50"
+                            : "bg-[var(--surface-2)] text-[var(--text-2)] border-[var(--border-default)] hover:border-[var(--border-hover)] hover:text-[var(--text-1)]"
+                      }`}
+                    >
+                      {name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </ConfigSection>
+
+        {/* Section 2: Travel Group */}
+        <ConfigSection
+          id="group"
+          title="Travel Group"
+          subtitle={groupSubtitle}
+          expanded={expandedSections.has("group")}
+          onToggle={toggleSection}
+          icon={
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+            </svg>
+          }
+        >
           <div className="space-y-2">
-            {/* Destination */}
-            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] space-y-2">
-              <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Destination</label>
-              <div className="mt-1">
-                <CitySelect
-                  value={destinationCity}
-                  onChange={(name, airports) => {
-                    hasEdited.current = true;
-                    setDestinationCity(name);
-                    if (airports?.primary?.[0]) {
-                      setDestinationAirport(airports.primary[0]);
-                    }
-                  }}
-                  placeholder="Search destination..."
-                />
-              </div>
-              {destinationAirport && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-[var(--text-3)]">Airport:</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] font-mono font-medium">
-                    {destinationAirport}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Trip Duration */}
-            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] space-y-3">
-              <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Trip Duration</label>
-
-              {/* Nights stepper */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-[var(--text-2)]">Nights</span>
-                <div className="flex items-center">
-                  <button onClick={() => { hasEdited.current = true; setTripDuration(prev => ({ ...prev, nights: Math.max(1, prev.nights - 1) })); }}
-                    className="w-8 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                    </svg>
-                  </button>
-                  <div className="w-10 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
-                    <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{tripDuration.nights}</span>
-                  </div>
-                  <button onClick={() => { hasEdited.current = true; setTripDuration(prev => ({ ...prev, nights: Math.min(14, prev.nights + 1) })); }}
-                    className="w-8 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-
-              {/* Departure days */}
-              <div className="space-y-1.5">
-                <span className="text-sm text-[var(--text-2)]">Departure days <span className="text-[10px] text-[var(--text-3)]">(up to 2)</span></span>
-                <div className="flex flex-wrap gap-1.5">
-                  {DAY_NAMES.map((name, dayIndex) => {
-                    const isSelected = tripDuration.departDays.includes(dayIndex);
-                    return (
-                      <button
-                        key={dayIndex}
-                        onClick={() => {
-                          hasEdited.current = true;
-                          setTripDuration(prev => {
-                            if (isSelected) {
-                              // Don't allow deselecting if it's the last one
-                              if (prev.departDays.length <= 1) return prev;
-                              return { ...prev, departDays: prev.departDays.filter(d => d !== dayIndex) };
-                            }
-                            // Don't allow more than 2
-                            if (prev.departDays.length >= 2) return prev;
-                            return { ...prev, departDays: [...prev.departDays, dayIndex].sort() };
-                          });
-                        }}
-                        className={`px-2.5 py-1.5 rounded-md text-xs font-medium transition-all duration-150 border ${
-                          isSelected
-                            ? "bg-[var(--blue)] text-white border-[var(--blue)] shadow-sm"
-                            : tripDuration.departDays.length >= 2
-                              ? "bg-[var(--surface-2)] text-[var(--text-3)] border-[var(--border-default)] cursor-not-allowed opacity-50"
-                              : "bg-[var(--surface-2)] text-[var(--text-2)] border-[var(--border-default)] hover:border-[var(--border-hover)] hover:text-[var(--text-1)]"
-                        }`}
-                      >
-                        {name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="flex items-center gap-2 py-1">
-              <div className="flex-1 h-px bg-[var(--border-default)]" />
-              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Cities</span>
-              <div className="flex-1 h-px bg-[var(--border-default)]" />
-            </div>
-
-            {/* City rows */}
             {cities.map((city, i) => (
               <div key={i} className="group relative p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
                 <div className="flex items-start gap-2.5">
@@ -508,313 +543,144 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
               Add City
             </button>
           </div>
-        ) : activeTab === "dates" ? (
-          <div className="space-y-3">
-            {/* Month Range Picker */}
-            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
-              <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2.5">Trip Window</div>
-              <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-[var(--text-3)] block">From</label>
-                  <div className="flex gap-1">
-                    <select
-                      value={monthRange.startMonth}
-                      onChange={(e) => {
-                        hasEdited.current = true;
-                        const m = Number(e.target.value);
-                        const updated = { ...monthRange, startMonth: m };
-                        if (monthRange.startYear > monthRange.endYear || (monthRange.startYear === monthRange.endYear && m > monthRange.endMonth)) {
-                          updated.endMonth = m;
-                        }
-                        setMonthRange(updated);
-                      }}
-                      className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                    >
-                      {MONTH_NAMES.map((name, i) => (
-                        <option key={i} value={i + 1}>{name}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={monthRange.startYear}
-                      onChange={(e) => {
-                        hasEdited.current = true;
-                        const y = Number(e.target.value);
-                        const updated = { ...monthRange, startYear: y };
-                        if (y > monthRange.endYear) {
-                          updated.endYear = y;
-                          updated.endMonth = monthRange.startMonth;
-                        }
-                        setMonthRange(updated);
-                      }}
-                      className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                    >
-                      {YEAR_OPTIONS.map(y => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <svg className="w-4 h-4 text-[var(--text-3)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                </svg>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] text-[var(--text-3)] block">To</label>
-                  <div className="flex gap-1">
-                    <select
-                      value={monthRange.endMonth}
-                      onChange={(e) => {
-                        hasEdited.current = true;
-                        setMonthRange(prev => ({ ...prev, endMonth: Number(e.target.value) }));
-                      }}
-                      className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                    >
-                      {MONTH_NAMES.map((name, i) => {
-                        const m = i + 1;
-                        const disabled = monthRange.endYear === monthRange.startYear && m < monthRange.startMonth;
-                        return <option key={i} value={m} disabled={disabled}>{name}</option>;
-                      })}
-                    </select>
-                    <select
-                      value={monthRange.endYear}
-                      onChange={(e) => {
-                        hasEdited.current = true;
-                        const y = Number(e.target.value);
-                        const updated = { ...monthRange, endYear: y };
-                        if (y === monthRange.startYear && monthRange.endMonth < monthRange.startMonth) {
-                          updated.endMonth = monthRange.startMonth;
-                        }
-                        setMonthRange(updated);
-                      }}
-                      className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                    >
-                      {YEAR_OPTIONS.filter(y => y >= monthRange.startYear).map(y => (
-                        <option key={y} value={y}>{y}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
+        </ConfigSection>
 
+        {/* Section 3: Flight Preferences */}
+        <ConfigSection
+          id="flights"
+          title="Flight Preferences"
+          subtitle={flightSubtitle}
+          expanded={expandedSections.has("flights")}
+          onToggle={toggleSection}
+          badge={hasDuplicateCategories ? (
+            <span className="px-1.5 py-0.5 rounded bg-[var(--red-soft)] text-[var(--red)] text-[10px] font-bold">Duplicate</span>
+          ) : undefined}
+          icon={
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+          }
+        >
+          {/* Max Duration */}
+          <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
             <div className="flex items-center justify-between">
-              <p className="text-xs text-[var(--text-2)] leading-relaxed">
-                Tap highlighted dates to block them. Trips overlapping blocked dates are excluded.
-              </p>
-              <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">
-                {potentialTrips.length} trips
-              </span>
-            </div>
-            <div className="space-y-4">
-              {monthGroups.map((group) => {
-                const firstDow = group.dates[0].dayOfWeek;
-                return (
-                  <div key={group.month}>
-                    <div className="text-sm font-heading font-semibold text-[var(--text-1)] mb-1.5">{group.month}</div>
-                    <div className="grid grid-cols-7 gap-0.5">
-                      {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                        <div key={i} className="text-center text-[10px] text-[var(--text-3)] font-medium py-1">{d}</div>
-                      ))}
-                      {Array.from({ length: firstDow }).map((_, i) => <div key={`pad-${i}`} />)}
-                      {group.dates.map((d) => {
-                        const excluded = excludedDates.includes(d.date);
-                        const dayNum = new Date(d.date + "T00:00:00").getDate();
-                        const inTrip = tripDateSet.has(d.date);
-                        const pos = tripPositionMap.get(d.date);
-
-                        if (!inTrip) {
-                          return (
-                            <div
-                              key={d.date}
-                              className="py-2 flex items-center justify-center rounded text-sm min-h-[36px] text-[var(--text-3)] opacity-30"
-                            >
-                              {dayNum}
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <button
-                            key={d.date}
-                            onClick={() => toggleDate(d.date)}
-                            className={`py-2 flex items-center justify-center text-sm transition-all duration-100 min-h-[36px] relative ${
-                              pos?.isStart && pos?.isEnd ? "rounded" :
-                              pos?.isStart ? "rounded-l" :
-                              pos?.isEnd ? "rounded-r" : ""
-                            } ${
-                              excluded
-                                ? "bg-[var(--red-soft)] text-[var(--red)] font-semibold ring-1 ring-[var(--red-border)] rounded"
-                                : "bg-[var(--blue-soft)] text-[var(--text-1)] hover:bg-[var(--blue-soft)] hover:brightness-95"
-                            }`}
-                          >
-                            {dayNum}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {excludedDates.length > 0 && (
-              <div className="flex items-center justify-between px-3 py-2.5 rounded-md bg-[var(--red-soft)] border border-[var(--red-border)]">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--red)]" />
-                  <span className="text-xs text-[var(--red)]">{excludedDates.length} blocked</span>
+              <div>
+                <div className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Max Duration</div>
+                <div className="text-[11px] text-[var(--text-3)] mt-0.5">Flights longer than this are excluded</div>
+              </div>
+              <div className="flex items-center">
+                <button onClick={() => { hasEdited.current = true; setTimeFilters(prev => ({ ...prev, maxDuration: Math.max(1, prev.maxDuration - 1) })); }}
+                  className="w-8 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                  </svg>
+                </button>
+                <div className="w-14 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
+                  <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{timeFilters.maxDuration}hr</span>
                 </div>
-                <button onClick={() => { hasEdited.current = true; setExcludedDates([]); }}
-                  className="text-[11px] text-[var(--red)] opacity-70 hover:opacity-100 transition-opacity duration-150 font-medium">
-                  Clear
+                <button onClick={() => { hasEdited.current = true; setTimeFilters(prev => ({ ...prev, maxDuration: Math.min(24, prev.maxDuration + 1) })); }}
+                  className="w-8 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
                 </button>
               </div>
+            </div>
+          </div>
+
+          {/* Categories header */}
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Categories ({flightCategories.length}/4)</span>
+            {flightCategories.length < 4 && (
+              <button onClick={addFlightCategory}
+                className="text-[11px] text-[var(--blue)] hover:text-[var(--text-1)] transition-colors duration-150 font-medium flex items-center gap-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add
+              </button>
             )}
           </div>
-        ) : activeTab === "flights" ? (
-          <div className="space-y-2">
-            {/* Info box */}
-            <div className="p-3 rounded-md bg-[var(--blue-soft)] border border-[var(--blue-border)]">
-              <div className="flex items-start gap-2">
-                <svg className="w-4 h-4 text-[var(--blue)] mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div className="text-xs text-[var(--blue)] leading-relaxed">
-                  Configure max duration, stops and bags per category, and time windows per leg below.
-                </div>
-              </div>
-            </div>
 
-            {/* Max Duration */}
-            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Max Duration</div>
-                  <div className="text-[11px] text-[var(--text-2)] mt-0.5">Flights longer than this are excluded</div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => { hasEdited.current = true; setTimeFilters(prev => ({ ...prev, maxDuration: Math.max(1, prev.maxDuration - 1) })); }}
-                    className="w-8 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                    </svg>
-                  </button>
-                  <div className="w-14 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
-                    <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{timeFilters.maxDuration}hr</span>
-                  </div>
-                  <button onClick={() => { hasEdited.current = true; setTimeFilters(prev => ({ ...prev, maxDuration: Math.min(24, prev.maxDuration + 1) })); }}
-                    className="w-8 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Divider */}
-            <div className="flex items-center gap-2 py-1">
-              <div className="flex-1 h-px bg-[var(--border-default)]" />
-              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Categories ({flightCategories.length}/4)</span>
-              <div className="flex-1 h-px bg-[var(--border-default)]" />
-            </div>
-
-            {/* Category cards */}
+          {/* Category cards — compact grid on desktop */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {flightCategories.map((cat, i) => {
               const isDuplicate = flightCategories.some((other, j) => j !== i && other.stops === cat.stops && other.bags === cat.bags);
               return (
-                <div key={i} className={`group relative p-3 rounded-md bg-[var(--surface-1)] border ${isDuplicate ? "border-[var(--red-border)]" : "border-[var(--border-default)] hover:border-[var(--border-hover)]"} transition-colors duration-150`}>
-                  <div className="flex items-start gap-2.5">
-                    <span className="text-[11px] font-mono font-semibold text-[var(--text-3)] w-4 text-right mt-2.5 shrink-0">{i + 1}</span>
-                    <div className="flex-1 min-w-0 space-y-2.5">
-                      {/* Stops */}
-                      <div>
-                        <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1">Stops</div>
-                        <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)] w-fit">
-                          {([0, 1, 2] as const).map(s => (
-                            <button key={s} onClick={() => updateFlightCategory(i, "stops", s)}
-                              className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
-                                cat.stops === s ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text-1)]"
-                              }`}>
-                              {s === 0 ? "Nonstop" : s === 1 ? "1 Stop" : "2 Stops"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Bags */}
-                      <div>
-                        <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1">Bags</div>
-                        <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)] w-fit">
-                          {(["carryon", "none"] as const).map(b => (
-                            <button key={b} onClick={() => updateFlightCategory(i, "bags", b)}
-                              className={`px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 ${
-                                cat.bags === b ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text-1)]"
-                              }`}>
-                              {b === "carryon" ? "Carry-on" : "None"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Generated label */}
-                      <div className="text-xs text-[var(--text-2)] font-mono">{cat.label}</div>
-                      {isDuplicate && (
-                        <div className="text-[11px] text-[var(--red)] flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                          </svg>
-                          Duplicate category
-                        </div>
-                      )}
+                <div key={i} className={`relative p-3 rounded-md bg-[var(--surface-1)] border ${isDuplicate ? "border-[var(--red-border)]" : "border-[var(--border-default)]"} transition-colors duration-150`}>
+                  <div className="space-y-2">
+                    {/* Stops */}
+                    <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)]">
+                      {([0, 1, 2] as const).map(s => (
+                        <button key={s} onClick={() => updateFlightCategory(i, "stops", s)}
+                          className={`flex-1 px-1.5 py-1.5 rounded text-[11px] font-medium transition-all duration-150 ${
+                            cat.stops === s ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text-1)]"
+                          }`}>
+                          {s === 0 ? "Nonstop" : s === 1 ? "1 Stop" : "2 Stops"}
+                        </button>
+                      ))}
                     </div>
 
-                    {flightCategories.length > 1 && (
-                      <button onClick={() => removeFlightCategory(i)}
-                        className="p-1.5 rounded-md text-[var(--text-3)] hover:text-[var(--red)] hover:bg-[var(--red-soft)] transition-colors duration-150 shrink-0">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    {/* Bags */}
+                    <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)]">
+                      {(["carryon", "none"] as const).map(b => (
+                        <button key={b} onClick={() => updateFlightCategory(i, "bags", b)}
+                          className={`flex-1 px-2 py-1.5 rounded text-[11px] font-medium transition-all duration-150 ${
+                            cat.bags === b ? "bg-[var(--surface-3)] text-[var(--text-1)] shadow-sm" : "text-[var(--text-2)] hover:text-[var(--text-1)]"
+                          }`}>
+                          {b === "carryon" ? "Carry-on" : "None"}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-[var(--text-3)] font-mono">{cat.label}</span>
+                      {flightCategories.length > 1 && (
+                        <button onClick={() => removeFlightCategory(i)}
+                          className="p-1 rounded text-[var(--text-3)] hover:text-[var(--red)] hover:bg-[var(--red-soft)] transition-colors duration-150">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    {isDuplicate && (
+                      <div className="text-[10px] text-[var(--red)] flex items-center gap-1">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
                         </svg>
-                      </button>
+                        Duplicate
+                      </div>
                     )}
                   </div>
                 </div>
               );
             })}
+          </div>
 
-            {flightCategories.length < 4 && (
-              <button onClick={addFlightCategory}
-                className="w-full py-3 rounded-md border border-dashed border-[var(--border-default)] text-[var(--text-2)] hover:text-[var(--text-1)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-1)] transition-all duration-150 text-sm font-medium flex items-center justify-center gap-1.5">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                Add Category
-              </button>
-            )}
+          {/* Time Filters */}
+          <div className="mt-1">
+            <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Time Filters</span>
+          </div>
 
-            {/* Time Filters Divider */}
-            <div className="flex items-center gap-2 py-1 mt-2">
-              <div className="flex-1 h-px bg-[var(--border-default)]" />
-              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Time Filters</span>
-              <div className="flex-1 h-px bg-[var(--border-default)]" />
-            </div>
-
-            {/* Time filter cards */}
+          {/* Time filter grid — 2 cols on desktop for outbound/return pairing */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {([
-              { key: "outboundDeparture" as const, label: "Outbound Departure" },
-              { key: "outboundArrival" as const, label: "Outbound Arrival" },
-              { key: "returnDeparture" as const, label: "Return Departure" },
-              { key: "returnArrival" as const, label: "Return Arrival" },
+              { key: "outboundDeparture" as const, label: "Outbound Depart" },
+              { key: "outboundArrival" as const, label: "Outbound Arrive" },
+              { key: "returnDeparture" as const, label: "Return Depart" },
+              { key: "returnArrival" as const, label: "Return Arrive" },
             ]).map(({ key, label }) => {
               const filter = timeFilters[key];
-              // Compute the effective window for display
               const centerMin = parseInt(filter.time.split(":")[0], 10) * 60 + parseInt(filter.time.split(":")[1], 10);
               const earliest = Math.max(0, centerMin - filter.plusMinus * 60);
               const latest = Math.min(24 * 60 - 1, centerMin + filter.plusMinus * 60);
               const fmtTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
               return (
-                <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
+                <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
                   <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1">
-                      <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">Target Time</label>
                       <select
                         value={filter.time}
                         onChange={(e) => updateTimeFilter(key, "time", e.target.value)}
@@ -826,7 +692,6 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                       </select>
                     </div>
                     <div className="shrink-0">
-                      <label className="text-[10px] text-[var(--text-3)] mb-0.5 block text-center">&plusmn; Hours</label>
                       <div className="flex items-center">
                         <button onClick={() => updateTimeFilter(key, "plusMinus", Math.max(1, filter.plusMinus - 1))}
                           className="w-7 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
@@ -834,8 +699,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
                           </svg>
                         </button>
-                        <div className="w-8 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
-                          <span className="text-xs font-semibold font-mono tabular-nums text-[var(--text-1)]">{filter.plusMinus}</span>
+                        <div className="w-10 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
+                          <span className="text-[11px] font-semibold font-mono tabular-nums text-[var(--text-1)]">&plusmn;{filter.plusMinus}h</span>
                         </div>
                         <button onClick={() => updateTimeFilter(key, "plusMinus", Math.min(12, filter.plusMinus + 1))}
                           className="w-7 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition-colors duration-150">
@@ -846,14 +711,190 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                       </div>
                     </div>
                   </div>
-                  <div className="text-[10px] text-[var(--text-3)] mt-1.5 font-mono tabular-nums">
-                    Window: {fmtTime(earliest)} - {fmtTime(latest)}
+                  <div className="text-[10px] text-[var(--text-3)] mt-1 font-mono tabular-nums">
+                    {fmtTime(earliest)} – {fmtTime(latest)}
                   </div>
                 </div>
               );
             })}
           </div>
-        ) : null}
+        </ConfigSection>
+
+        {/* Section 4: Schedule */}
+        <ConfigSection
+          id="schedule"
+          title="Schedule"
+          subtitle={scheduleSubtitle}
+          expanded={expandedSections.has("schedule")}
+          onToggle={toggleSection}
+          badge={excludedDates.length > 0 ? (
+            <span className="px-1.5 py-0.5 rounded bg-[var(--red-soft)] text-[var(--red)] text-[10px] font-bold">{excludedDates.length} blocked</span>
+          ) : undefined}
+          icon={
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
+            </svg>
+          }
+        >
+          {/* Month Range Picker */}
+          <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+            <div className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2.5">Trip Window</div>
+            <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-[var(--text-3)] block">From</label>
+                <div className="flex gap-1">
+                  <select
+                    value={monthRange.startMonth}
+                    onChange={(e) => {
+                      hasEdited.current = true;
+                      const m = Number(e.target.value);
+                      const updated = { ...monthRange, startMonth: m };
+                      if (monthRange.startYear > monthRange.endYear || (monthRange.startYear === monthRange.endYear && m > monthRange.endMonth)) {
+                        updated.endMonth = m;
+                      }
+                      setMonthRange(updated);
+                    }}
+                    className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                  >
+                    {MONTH_NAMES.map((name, i) => (
+                      <option key={i} value={i + 1}>{name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={monthRange.startYear}
+                    onChange={(e) => {
+                      hasEdited.current = true;
+                      const y = Number(e.target.value);
+                      const updated = { ...monthRange, startYear: y };
+                      if (y > monthRange.endYear) {
+                        updated.endYear = y;
+                        updated.endMonth = monthRange.startMonth;
+                      }
+                      setMonthRange(updated);
+                    }}
+                    className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                  >
+                    {YEAR_OPTIONS.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <svg className="w-4 h-4 text-[var(--text-3)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+              </svg>
+              <div className="space-y-1.5">
+                <label className="text-[10px] text-[var(--text-3)] block">To</label>
+                <div className="flex gap-1">
+                  <select
+                    value={monthRange.endMonth}
+                    onChange={(e) => {
+                      hasEdited.current = true;
+                      setMonthRange(prev => ({ ...prev, endMonth: Number(e.target.value) }));
+                    }}
+                    className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                  >
+                    {MONTH_NAMES.map((name, i) => {
+                      const m = i + 1;
+                      const disabled = monthRange.endYear === monthRange.startYear && m < monthRange.startMonth;
+                      return <option key={i} value={m} disabled={disabled}>{name}</option>;
+                    })}
+                  </select>
+                  <select
+                    value={monthRange.endYear}
+                    onChange={(e) => {
+                      hasEdited.current = true;
+                      const y = Number(e.target.value);
+                      const updated = { ...monthRange, endYear: y };
+                      if (y === monthRange.startYear && monthRange.endMonth < monthRange.startMonth) {
+                        updated.endMonth = monthRange.startMonth;
+                      }
+                      setMonthRange(updated);
+                    }}
+                    className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                  >
+                    {YEAR_OPTIONS.filter(y => y >= monthRange.startYear).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Calendar */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-[var(--text-2)] leading-relaxed">
+              Tap highlighted dates to block them.
+            </p>
+            <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">
+              {potentialTrips.length} trips
+            </span>
+          </div>
+          <div className="space-y-4">
+            {monthGroups.map((group) => {
+              const firstDow = group.dates[0].dayOfWeek;
+              return (
+                <div key={group.month}>
+                  <div className="text-sm font-heading font-semibold text-[var(--text-1)] mb-1.5">{group.month}</div>
+                  <div className="grid grid-cols-7 gap-0.5">
+                    {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+                      <div key={i} className="text-center text-[10px] text-[var(--text-3)] font-medium py-1">{d}</div>
+                    ))}
+                    {Array.from({ length: firstDow }).map((_, i) => <div key={`pad-${i}`} />)}
+                    {group.dates.map((d) => {
+                      const excluded = excludedDates.includes(d.date);
+                      const dayNum = new Date(d.date + "T00:00:00").getDate();
+                      const inTrip = tripDateSet.has(d.date);
+                      const pos = tripPositionMap.get(d.date);
+
+                      if (!inTrip) {
+                        return (
+                          <div
+                            key={d.date}
+                            className="py-2 flex items-center justify-center rounded text-sm min-h-[36px] text-[var(--text-3)] opacity-30"
+                          >
+                            {dayNum}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={d.date}
+                          onClick={() => toggleDate(d.date)}
+                          className={`py-2 flex items-center justify-center text-sm transition-all duration-100 min-h-[36px] relative ${
+                            pos?.isStart && pos?.isEnd ? "rounded" :
+                            pos?.isStart ? "rounded-l" :
+                            pos?.isEnd ? "rounded-r" : ""
+                          } ${
+                            excluded
+                              ? "bg-[var(--red-soft)] text-[var(--red)] font-semibold ring-1 ring-[var(--red-border)] rounded"
+                              : "bg-[var(--blue-soft)] text-[var(--text-1)] hover:bg-[var(--blue-soft)] hover:brightness-95"
+                          }`}
+                        >
+                          {dayNum}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {excludedDates.length > 0 && (
+            <div className="flex items-center justify-between px-3 py-2.5 rounded-md bg-[var(--red-soft)] border border-[var(--red-border)]">
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--red)]" />
+                <span className="text-xs text-[var(--red)]">{excludedDates.length} blocked</span>
+              </div>
+              <button onClick={() => { hasEdited.current = true; setExcludedDates([]); }}
+                className="text-[11px] text-[var(--red)] opacity-70 hover:opacity-100 transition-opacity duration-150 font-medium">
+                Clear
+              </button>
+            </div>
+          )}
+        </ConfigSection>
       </div>
 
       {/* Footer */}
@@ -864,7 +905,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
             <span className="text-[var(--gold)]">Unsaved changes</span>
             {citiesChanged && (
               <span className="text-[var(--text-3)]">
-                - triggers refresh{estimatedRefreshMinutes > 0 && <> (~{estimatedRefreshMinutes} min)</>}
+                — triggers refresh{estimatedMinutes > 0 && <> (~{estimatedMinutes} min)</>}
               </span>
             )}
           </div>
