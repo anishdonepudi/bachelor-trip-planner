@@ -20,30 +20,81 @@ function SwipeableTooltip({
   children: React.ReactNode;
 }) {
   const dragStartY = useRef(0);
+  const dragOffsetRef = useRef(0);
   const [dragOffset, setDragOffset] = useState(0);
-  const [isDragging, setIsDragging] = useState(false);
+  const isDragging = useRef(false);
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  // Lock body scroll while open on mobile
+  useEffect(() => {
+    if (!open) return;
+    const isMobile = window.innerWidth < 640;
+    if (!isMobile) return;
+    const scrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      window.scrollTo(0, scrollY);
+    };
+  }, [open]);
+
+  // Native touch listeners on the sheet for drag-to-dismiss
+  useEffect(() => {
+    if (!open) return;
+    const el = sheetRef.current;
+    if (!el) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      // Only start drag if sheet is scrolled to top
+      if (el.scrollTop > 0) return;
+      dragStartY.current = e.touches[0].clientY;
+      isDragging.current = true;
+      dragOffsetRef.current = 0;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current) return;
+      const dy = e.touches[0].clientY - dragStartY.current;
+      if (dy > 0) {
+        // Dragging down — prevent scroll, apply transform
+        e.preventDefault();
+        dragOffsetRef.current = dy;
+        setDragOffset(dy);
+      } else {
+        // Dragging up — cancel drag, let scroll happen
+        isDragging.current = false;
+        dragOffsetRef.current = 0;
+        setDragOffset(0);
+      }
+    };
+
+    const onTouchEnd = () => {
+      if (!isDragging.current) return;
+      isDragging.current = false;
+      if (dragOffsetRef.current > SWIPE_THRESHOLD) {
+        onClose();
+      }
+      dragOffsetRef.current = 0;
+      setDragOffset(0);
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [open, onClose]);
 
   if (!open) return null;
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    dragStartY.current = e.touches[0].clientY;
-    setIsDragging(true);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging) return;
-    const dy = e.touches[0].clientY - dragStartY.current;
-    // Only allow dragging down
-    setDragOffset(Math.max(0, dy));
-  };
-
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-    if (dragOffset > SWIPE_THRESHOLD) {
-      onClose();
-    }
-    setDragOffset(0);
-  };
 
   const opacity = dragOffset > 0 ? Math.max(0, 1 - dragOffset / (SWIPE_THRESHOLD * 2)) : 1;
 
@@ -57,19 +108,17 @@ function SwipeableTooltip({
           onClick={onClose}
         />
         <div
-          className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-[var(--surface-2)] border-t border-[var(--border-hover)] shadow-2xl p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-xs max-h-[70vh] overflow-y-auto"
+          ref={sheetRef}
+          className="fixed bottom-0 left-0 right-0 z-50 rounded-t-xl bg-[var(--surface-2)] border-t border-[var(--border-hover)] shadow-2xl p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-xs max-h-[70vh] overflow-y-auto overscroll-none"
           style={{
             transform: `translateY(${dragOffset}px)`,
-            transition: isDragging ? "none" : "transform 200ms ease-out, opacity 200ms",
+            transition: isDragging.current ? "none" : "transform 200ms ease-out, opacity 200ms",
             opacity,
           }}
           onClick={(e) => e.stopPropagation()}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
           {/* Drag handle */}
-          <div className="flex justify-center mb-2">
+          <div className="flex justify-center mb-2 py-1 -mt-1 cursor-grab">
             <div className="w-8 h-1 rounded-full bg-[var(--surface-3)]" />
           </div>
           {children}
