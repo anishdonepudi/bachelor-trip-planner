@@ -43,25 +43,23 @@ function FlightLeg({ leg, fromAirport, toAirport, label }: {
   label: string;
 }) {
   return (
-    <div className="flex items-center gap-1.5 text-[11px] whitespace-nowrap overflow-hidden">
-      <span className="text-[10px] text-[var(--text-3)] uppercase font-medium shrink-0">{label}</span>
-      <span className="font-mono font-medium text-[var(--text-1)] shrink-0">{fromAirport}</span>
-      <svg className="w-3 h-3 text-[var(--text-3)] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div className="grid grid-cols-[auto_auto_12px_auto_1fr_auto] items-center gap-x-1.5 text-[11px] whitespace-nowrap">
+      <span className="text-[10px] text-[var(--text-3)] uppercase font-medium">{label}</span>
+      <span className="font-mono font-medium text-[var(--text-1)]">{fromAirport}</span>
+      <svg className="w-3 h-3 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
       </svg>
-      <span className="font-mono font-medium text-[var(--text-1)] shrink-0">{toAirport}</span>
-      <span className="text-[var(--text-3)]">&middot;</span>
-      {leg.stops === 0 ? (
-        <span className="text-[var(--teal)] font-medium shrink-0">Direct</span>
-      ) : (
-        <span className="text-[var(--orange)] shrink-0">{leg.stops} stop{leg.layoverAirport && ` ${leg.layoverAirport}`}{leg.layoverDuration && ` (${leg.layoverDuration})`}</span>
-      )}
-      {leg.duration && (
-        <>
-          <span className="text-[var(--text-3)]">&middot;</span>
-          <span className="text-[var(--text-3)] shrink-0">{leg.duration}</span>
-        </>
-      )}
+      <span className="font-mono font-medium text-[var(--text-1)]">{toAirport}</span>
+      <span className="truncate">
+        {leg.stops === 0 ? (
+          <span className="text-[var(--teal)] font-medium">Direct</span>
+        ) : (
+          <span className="text-[var(--orange)]">{leg.stops} stop{leg.layoverAirport && ` ${leg.layoverAirport}`}{leg.layoverDuration && ` (${leg.layoverDuration})`}</span>
+        )}
+      </span>
+      {leg.duration ? (
+        <span className="text-[var(--text-3)] text-right">{leg.duration}</span>
+      ) : <span />}
     </div>
   );
 }
