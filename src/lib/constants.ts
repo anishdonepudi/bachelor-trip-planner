@@ -1,4 +1,4 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters } from "./types";
 
 export const DEFAULT_FLIGHT_CATEGORIES: FlightCategoryConfig[] = [
   { id: "nonstop_carryon", stops: 0, bags: "carryon", label: "Nonstop + Carry-on" },
@@ -38,6 +38,13 @@ export function generateCategoryLabel(stops: 0 | 1, bags: "carryon" | "none"): s
   const bagLabel = bags === "carryon" ? "+ Carry-on" : "Basic";
   return `${stopLabel} ${bagLabel}`;
 }
+
+export const DEFAULT_TIME_FILTERS: FlightTimeFilters = {
+  outboundDeparture: { earliest: "00:00", latest: "23:59" },
+  outboundArrival: { earliest: "00:00", latest: "23:59" },
+  returnDeparture: { earliest: "00:00", latest: "23:59" },
+  returnArrival: { earliest: "00:00", latest: "23:59" },
+};
 
 export const BUDGET_TIERS: {
   value: BudgetTier;

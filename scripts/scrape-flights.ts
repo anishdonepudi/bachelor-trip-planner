@@ -30,8 +30,9 @@ import type {
   FlightCategory,
   FlightLeg,
   FlightCategoryConfig,
+  FlightTimeFilters,
 } from "../src/lib/types";
-import { DEFAULT_FLIGHT_CATEGORIES } from "../src/lib/constants";
+import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS } from "../src/lib/constants";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -53,6 +54,7 @@ let DESTINATION_AIRPORT = "CUN";
 
 let CATEGORIES_TO_SCRAPE_CONFIGS: FlightCategoryConfig[] = DEFAULT_FLIGHT_CATEGORIES;
 let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
+let TIME_FILTERS: FlightTimeFilters = DEFAULT_TIME_FILTERS;
 
 const TOP_N_PER_CATEGORY = 3;
 const MAX_DURATION_MINUTES = 10 * 60; // 10 hours
@@ -70,7 +72,7 @@ let AIRPORT_TO_CITIES: Record<string, string[]> = {};
 async function loadAirportToCities(): Promise<void> {
   const { data, error } = await supabase
     .from("config")
-    .select("cities, destination_airport, flight_categories")
+    .select("cities, destination_airport, flight_categories, flight_time_filters")
     .limit(1)
     .single();
 
@@ -100,6 +102,10 @@ async function loadAirportToCities(): Promise<void> {
     CATEGORIES_TO_SCRAPE = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
   }
 
+  if (data.flight_time_filters) {
+    TIME_FILTERS = data.flight_time_filters;
+  }
+
   console.log(`Loaded config: ${Object.keys(map).length} airports, ${cities.length} cities, destination: ${DESTINATION_AIRPORT}`);
 }
 
@@ -123,6 +129,21 @@ function randomDelay(minMs = 2000, maxMs = 5000): Promise<void> {
 
 function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
+}
+
+/** Convert "H:MM" or "HH:MM" to minutes since midnight for comparison */
+function timeToMinutes(time: string): number {
+  const parts = time.split(":");
+  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+}
+
+/** Check if a flight time (e.g. "14:30") is within a range (e.g. "06:00"-"23:00") */
+function isTimeInRange(time: string, earliest: string, latest: string): boolean {
+  if (time === "?" || !time) return true; // can't filter unknown times
+  const t = timeToMinutes(time);
+  const e = timeToMinutes(earliest);
+  const l = timeToMinutes(latest);
+  return t >= e && t <= l;
 }
 
 function buildFlightsUrl(
@@ -260,7 +281,7 @@ function extractInner(parts: unknown[]): any[] {
  * Filters: duration ≤ MAX_DURATION_MINUTES, stops 0 or 1.
  * Sorts by price ascending.
  */
-function parseFlightsFromApi(inner: any[]): { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } {
+function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outbound"): { nonstop: ApiParsedFlight[]; onestop: ApiParsedFlight[] } {
   const nonstop: ApiParsedFlight[] = [];
   const onestop: ApiParsedFlight[] = [];
 
@@ -327,6 +348,12 @@ function parseFlightsFromApi(inner: any[]): { nonstop: ApiParsedFlight[]; onesto
       };
 
       if (flight.duration > MAX_DURATION_MINUTES) continue;
+
+      // Apply time filters based on leg
+      const depFilter = leg === "outbound" ? TIME_FILTERS.outboundDeparture : TIME_FILTERS.returnDeparture;
+      const arrFilter = leg === "outbound" ? TIME_FILTERS.outboundArrival : TIME_FILTERS.returnArrival;
+      if (!isTimeInRange(flight.departTime, depFilter.earliest, depFilter.latest)) continue;
+      if (!isTimeInRange(flight.arriveTime, arrFilter.earliest, arrFilter.latest)) continue;
 
       if (stops === 0) nonstop.push(flight);
       else if (stops === 1) onestop.push(flight);
@@ -411,7 +438,7 @@ async function fetchReturnViaPost(
   const parts = parseMultiPart(result);
   const inners = extractInner(parts);
   for (const inner of inners) {
-    const parsed = parseFlightsFromApi(inner);
+    const parsed = parseFlightsFromApi(inner, "return");
     if (parsed.nonstop.length > 0 || parsed.onestop.length > 0) return parsed;
   }
   return null;

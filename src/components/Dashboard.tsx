@@ -10,6 +10,7 @@ import {
   WeekendData,
   RankChangeMap,
   FlightCategoryConfig,
+  FlightTimeFilters,
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
@@ -22,7 +23,7 @@ import {
 } from "@/lib/rank-history";
 import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
-import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES } from "@/lib/constants";
+import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS } from "@/lib/constants";
 import { FilterBar } from "./FilterBar";
 import { FilterSheet } from "./FilterSheet";
 import { WeekendCard } from "./WeekendCard";
@@ -41,6 +42,7 @@ export function Dashboard() {
   // ── State ──
   const [flightCategory, setFlightCategory] = useState<FlightCategory>(DEFAULT_FLIGHT_CATEGORIES[0].id);
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
+  const [flightTimeFilters, setFlightTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
   const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
   const [priorityCity, setPriorityCity] = useState("all");
@@ -169,6 +171,7 @@ export function Dashboard() {
     if (configData?.destination_airport) setDestinationAirport(configData.destination_airport);
     if (configData?.destination_city) setDestinationCity(configData.destination_city);
     if (configData?.flight_categories && Array.isArray(configData.flight_categories)) setFlightCategories(configData.flight_categories);
+    if (configData?.flight_time_filters) setFlightTimeFilters(configData.flight_time_filters);
   }, [configData]);
 
   // ── Derived data ──
@@ -275,20 +278,22 @@ export function Dashboard() {
   const flightCatLabel = flightCategories.find((c) => c.id === flightCategory)?.label ?? FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
   const budgetLabel = BUDGET_TIERS.find((t) => t.value === budgetTier)?.label ?? budgetTier;
 
-  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[]) => {
+  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[], newTimeFilters: FlightTimeFilters) => {
     const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDest !== destinationAirport || newDestCity !== destinationCity;
     const categoriesChanged = JSON.stringify(newFlightCategories) !== JSON.stringify(flightCategories);
+    const timeFiltersChanged = JSON.stringify(newTimeFilters) !== JSON.stringify(flightTimeFilters);
     setCities(newCities);
     setExcludedDates(newExcluded);
     setDestinationAirport(newDest);
     setDestinationCity(newDestCity);
     setFlightCategories(newFlightCategories);
-    if (citiesChanged || categoriesChanged) setConfigChanged(true);
+    setFlightTimeFilters(newTimeFilters);
+    if (citiesChanged || categoriesChanged || timeFiltersChanged) setConfigChanged(true);
     // If the active flight category was removed, fall back to first available
     if (!newFlightCategories.some(fc => fc.id === flightCategory)) {
       setFlightCategory(newFlightCategories[0]?.id ?? "nonstop_carryon");
     }
-  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory]);
+  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory, flightTimeFilters]);
 
   // ── Render ──
   return (
@@ -324,6 +329,7 @@ export function Dashboard() {
                 destinationAirport={destinationAirport}
                 destinationCity={destinationCity}
                 flightCategories={flightCategories}
+                flightTimeFilters={flightTimeFilters}
                 onSave={handleConfigSave}
               />
             </div>
@@ -579,8 +585,9 @@ export function Dashboard() {
                 destinationAirport={destinationAirport}
                 destinationCity={destinationCity}
                 flightCategories={flightCategories}
-                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories) => {
-                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories);
+                flightTimeFilters={flightTimeFilters}
+                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters) => {
+                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters);
                   setShowMobileConfig(false);
                 }}
                 inlineMode

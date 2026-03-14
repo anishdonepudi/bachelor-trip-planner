@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
-import { generateCategoryId, generateCategoryLabel } from "@/lib/constants";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS } from "@/lib/constants";
 import { CitySelect } from "./CitySelect";
 import {
   Dialog,
@@ -19,13 +19,14 @@ interface ConfigModalProps {
   destinationAirport: string;
   destinationCity: string;
   flightCategories: FlightCategoryConfig[];
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[]) => void;
+  flightTimeFilters: FlightTimeFilters;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters) => void;
   inlineMode?: boolean;
 }
 
 type Tab = "group" | "dates" | "flights";
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, onSave, inlineMode = false }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, onSave, inlineMode = false }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("group");
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -33,6 +34,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [destinationAirport, setDestinationAirport] = useState(initialDestination);
   const [destinationCity, setDestinationCity] = useState(initialDestinationCity);
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(initialFlightCategories);
+  const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(initialTimeFilters);
   const [saving, setSaving] = useState(false);
 
   const handleOpenChange = (isOpen: boolean) => {
@@ -42,6 +44,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setDestinationAirport(initialDestination);
       setDestinationCity(initialDestinationCity);
       setFlightCategories(initialFlightCategories);
+      setTimeFilters(initialTimeFilters);
       setActiveTab("group");
     }
     setOpen(isOpen);
@@ -49,17 +52,20 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
 
   const totalPeople = cities.reduce((sum, c) => sum + c.people, 0);
   const categoriesChanged = JSON.stringify(flightCategories) !== JSON.stringify(initialFlightCategories);
+  const timeFiltersChanged = JSON.stringify(timeFilters) !== JSON.stringify(initialTimeFilters);
   const hasChanges =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     JSON.stringify(excludedDates.slice().sort()) !== JSON.stringify(initialExcluded.slice().sort()) ||
     destinationAirport !== initialDestination ||
     destinationCity !== initialDestinationCity ||
-    categoriesChanged;
+    categoriesChanged ||
+    timeFiltersChanged;
   const citiesChanged =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     destinationAirport !== initialDestination ||
     destinationCity !== initialDestinationCity ||
-    categoriesChanged;
+    categoriesChanged ||
+    timeFiltersChanged;
 
   const addCity = () => {
     setCities([...cities, { city: "", people: 1, primaryAirports: [], nearbyAirports: [] }]);
@@ -147,6 +153,26 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     flightCategories.some((other, j) => j !== i && other.stops === cat.stops && other.bags === cat.bags)
   );
 
+  // Time filter helpers
+  const updateTimeFilter = (
+    leg: "outboundDeparture" | "outboundArrival" | "returnDeparture" | "returnArrival",
+    bound: "earliest" | "latest",
+    value: string
+  ) => {
+    setTimeFilters(prev => ({
+      ...prev,
+      [leg]: { ...prev[leg], [bound]: value },
+    }));
+  };
+
+  const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+    const h = Math.floor(i / 2);
+    const m = i % 2 === 0 ? "00" : "30";
+    return `${String(h).padStart(2, "0")}:${m}`;
+  });
+  // Add 23:59 as the final option for "latest"
+  const TIME_OPTIONS_LATEST = [...TIME_OPTIONS, "23:59"];
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -154,9 +180,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch("/api/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, skip_scrape: !citiesChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, skip_scrape: !citiesChanged }),
       });
-      if (res.ok) { onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories); setOpen(false); }
+      if (res.ok) { onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters); setOpen(false); }
     } finally { setSaving(false); }
   };
 
@@ -349,7 +375,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div className="text-xs text-[var(--blue)] leading-relaxed">
-                  <span className="font-semibold">Departure time, arrival time, and max duration (10hr)</span> are applied to every search automatically. Configure stops and bags per category below.
+                  <span className="font-semibold">Max duration (10hr)</span> is applied to every search automatically. Configure stops and bags per category, and time windows per leg below.
                 </div>
               </div>
             </div>
@@ -433,6 +459,52 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                 Add Category
               </button>
             )}
+
+            {/* Time Filters Divider */}
+            <div className="flex items-center gap-2 py-1 mt-2">
+              <div className="flex-1 h-px bg-[var(--border-default)]" />
+              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Time Filters</span>
+              <div className="flex-1 h-px bg-[var(--border-default)]" />
+            </div>
+
+            {/* Time filter cards */}
+            {([
+              { key: "outboundDeparture" as const, label: "Outbound Departure", icon: "M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" },
+              { key: "outboundArrival" as const, label: "Outbound Arrival", icon: "M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" },
+              { key: "returnDeparture" as const, label: "Return Departure", icon: "M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" },
+              { key: "returnArrival" as const, label: "Return Arrival", icon: "M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 00-3.7-3.7 48.678 48.678 0 00-7.324 0 4.006 4.006 0 00-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3l-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 003.7 3.7 48.656 48.656 0 007.324 0 4.006 4.006 0 003.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3l-3 3" },
+            ]).map(({ key, label }) => (
+              <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-colors duration-150">
+                <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">From</label>
+                    <select
+                      value={timeFilters[key].earliest}
+                      onChange={(e) => updateTimeFilter(key, "earliest", e.target.value)}
+                      className="w-full h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      {TIME_OPTIONS.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className="text-[var(--text-3)] text-xs mt-3.5">-</span>
+                  <div className="flex-1">
+                    <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">To</label>
+                    <select
+                      value={timeFilters[key].latest}
+                      onChange={(e) => updateTimeFilter(key, "latest", e.target.value)}
+                      className="w-full h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
+                    >
+                      {TIME_OPTIONS_LATEST.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : null}
       </div>

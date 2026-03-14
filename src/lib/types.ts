@@ -63,6 +63,20 @@ export interface FlightCategoryConfig {
   label: string;     // display name
 }
 
+/** Time range as [earliest, latest] in "HH:MM" 24-hour format */
+export interface TimeRange {
+  earliest: string;  // e.g. "06:00"
+  latest: string;    // e.g. "23:00"
+}
+
+/** Global time filters applied to every flight search */
+export interface FlightTimeFilters {
+  outboundDeparture: TimeRange;
+  outboundArrival: TimeRange;
+  returnDeparture: TimeRange;
+  returnArrival: TimeRange;
+}
+
 export type FlightCategory = string;
 
 export type BudgetTier = "budget" | "mid" | "premium";
