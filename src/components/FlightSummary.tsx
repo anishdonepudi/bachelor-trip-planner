@@ -50,7 +50,7 @@ function FlightLeg({ leg, fromAirport, toAirport, label }: {
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
       </svg>
       <span className="font-mono font-medium text-[var(--text-1)]">{toAirport}</span>
-      <span className="truncate">
+      <span className="truncate text-center">
         {leg.stops === 0 ? (
           <span className="text-[var(--teal)] font-medium">Direct</span>
         ) : (
