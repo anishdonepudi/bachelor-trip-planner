@@ -30,7 +30,23 @@ const TIER_BG: Record<PriceTier, string> = {
   none: "",
 };
 
-function CompactFlightInfo({ flight }: { flight: FlightOptionRow }) {
+function PriceTierPill({ tier }: { tier: PriceTier }) {
+  if (tier === "none" || tier === "mid") return null;
+  if (tier === "cheap") {
+    return (
+      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--teal-soft)] text-[var(--teal)] border border-[var(--teal-border)] font-semibold">
+        Low
+      </span>
+    );
+  }
+  return (
+    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--orange-soft)] text-[var(--orange)] border border-[var(--orange-border)] font-semibold">
+      High
+    </span>
+  );
+}
+
+export function CompactFlightInfo({ flight }: { flight: FlightOptionRow }) {
   const out = flight.outbound_details;
   const ret = flight.return_details;
 
@@ -48,26 +64,35 @@ function CompactFlightInfo({ flight }: { flight: FlightOptionRow }) {
   function LegLine({ leg, label }: { leg: typeof out; label: string }) {
     if (!leg) return null;
     return (
-      <div className="flex items-center gap-1 text-[10px] text-[var(--text-3)] leading-tight">
-        <span className="text-[var(--text-3)] w-6 shrink-0">{label}</span>
-        {leg.stops === 0 ? (
-          <span className="text-[var(--teal)]">Direct</span>
-        ) : (
-          <span className="text-[var(--orange)]">
-            {leg.stops} stop{leg.layoverAirport && ` ${leg.layoverAirport}`}{leg.layoverDuration && ` (${leg.layoverDuration})`}
-          </span>
-        )}
-        {leg.duration && (
-          <>
-            <span className="text-[var(--text-3)]">&middot;</span>
-            <span>{leg.duration}</span>
-          </>
-        )}
-        {leg.departTime && leg.arriveTime && (
-          <>
-            <span className="text-[var(--text-3)]">&middot;</span>
-            <span className="font-mono tabular-nums">{to12h(leg.departTime)}-{to12h(leg.arriveTime)}</span>
-          </>
+      <div className="text-[10px] text-[var(--text-3)] leading-tight">
+        <div className="flex items-center gap-1">
+          <span className="text-[var(--text-3)] w-6 shrink-0">{label}</span>
+          {leg.stops === 0 ? (
+            <span className="text-[var(--teal)]">Direct</span>
+          ) : (
+            <span className="text-[var(--orange)]">{leg.stops} stop</span>
+          )}
+          {leg.duration && (
+            <>
+              <span className="text-[var(--text-3)]">&middot;</span>
+              <span>{leg.duration}</span>
+            </>
+          )}
+          {leg.departTime && leg.arriveTime && (
+            <>
+              <span className="text-[var(--text-3)]">&middot;</span>
+              <span className="font-mono tabular-nums">{to12h(leg.departTime)}-{to12h(leg.arriveTime)}</span>
+            </>
+          )}
+        </div>
+        {leg.stops > 0 && (leg.layoverAirport || leg.layoverDuration) && (
+          <div className="flex items-center gap-1">
+            <span className="w-6 shrink-0" />
+            <span className="text-[var(--orange)]">
+              {leg.layoverAirport && <>Layover {leg.layoverAirport}</>}
+              {leg.layoverDuration && <> ({leg.layoverDuration})</>}
+            </span>
+          </div>
         )}
       </div>
     );
@@ -118,6 +143,7 @@ function FlightCell({
         {/* Price row */}
         <div className="flex items-center justify-between gap-1">
           <div className="flex items-center gap-1">
+            <PriceTierPill tier={priceTier} />
             {isCheapestInRow && (
               <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--teal-soft)] text-[var(--teal)] border border-[var(--teal-border)] font-semibold uppercase tracking-wide">
                 Best
@@ -134,9 +160,7 @@ function FlightCell({
               href={cheapest.google_flights_url ?? "#"}
               target="_blank"
               rel="noopener noreferrer"
-              className={`font-mono font-semibold text-sm tabular-nums transition-colors duration-150 hover:text-[var(--blue)] ${
-                isCheapestInRow ? "text-[var(--teal)]" : "text-[var(--gold)]"
-              }`}
+              className="font-mono font-semibold text-sm tabular-nums transition-colors duration-150 hover:text-[var(--blue)] text-[var(--gold)]"
               onClick={(e) => e.stopPropagation()}
             >
               ${cheapest.price}
@@ -274,28 +298,16 @@ function MobileCityCard({
         </div>
         {cheapest ? (
           <div className="flex items-center gap-1.5">
+            <PriceTierPill tier={tier} />
             <a
               href={cheapest.google_flights_url ?? "#"}
               target="_blank"
               rel="noopener noreferrer"
-              className={`font-mono font-semibold text-sm tabular-nums transition-colors duration-150 hover:text-[var(--blue)] ${
-                tier === "cheap" ? "text-[var(--teal)]" : tier === "expensive" ? "text-[var(--orange)]" : "text-[var(--gold)]"
-              }`}
+              className="font-mono font-semibold text-sm tabular-nums transition-colors duration-150 hover:text-[var(--blue)] text-[var(--gold)]"
               onClick={(e) => e.stopPropagation()}
             >
               ${cheapest.price}
             </a>
-            {hasAlternates && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors p-0.5"
-              >
-                <svg className={`w-3.5 h-3.5 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
-                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            )}
           </div>
         ) : (
           <span className="text-[11px] text-[var(--text-3)]">No flights</span>
@@ -306,6 +318,16 @@ function MobileCityCard({
         <div className="px-3 pb-2.5">
           <CompactFlightInfo flight={cheapest} />
         </div>
+      )}
+
+      {/* View more options */}
+      {hasAlternates && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full py-2 text-[11px] font-medium text-[var(--blue)] hover:bg-[var(--surface-1)] transition-colors duration-150 border-t border-[var(--border-default)]"
+        >
+          {expanded ? "Hide options" : `View ${alternates.length} more option${alternates.length > 1 ? "s" : ""}`}
+        </button>
       )}
 
       {expanded && alternates.map((alt, i) => (

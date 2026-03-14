@@ -357,14 +357,14 @@ export function Dashboard() {
       {/* ── Mobile filter chips (hidden on desktop) ── */}
 
       {/* ── Main content ── */}
-      <main className="max-w-5xl mx-auto px-4 pt-5 pb-20 md:pb-8 space-y-5">
+      <main className="max-w-5xl mx-auto px-4 pt-2 md:pt-5 pb-20 md:pb-8 space-y-2 md:space-y-5">
         {weekendsLoading ? (
           <LoadingSkeleton />
         ) : (
           <>
             {/* View toggle + desktop filters */}
             {hasData && (
-              <div className="space-y-4">
+              <div className="md:space-y-4">
                 {/* View toggle (desktop only — mobile uses bottom nav) */}
                 <div className="hidden md:flex items-center gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] w-fit">
                   <button
@@ -450,11 +450,11 @@ export function Dashboard() {
                   {weekendScores.length} weekends &middot; {SCORING_ALGORITHMS.find(a => a.value === scoringAlgorithm)?.label ?? scoringAlgorithm}
                   {priorityCity !== "all" ? ` &middot; ${priorityCity}` : ""}
                 </div>
-                <div className={`grid gap-y-1.5 ${hasRankChanges ? "grid-cols-[2rem_1fr] gap-x-1.5 -ml-[calc(2rem+0.375rem)]" : "grid-cols-1"}`}>
+                <div className={`grid gap-y-1.5 ${hasRankChanges ? "grid-cols-1 md:grid-cols-[2rem_1fr] md:gap-x-1.5 md:-ml-[calc(2rem+0.375rem)]" : "grid-cols-1"}`}>
                   {weekendScores.map((weekend, i) => (
                     <React.Fragment key={weekend.dateRange.id}>
                       {hasRankChanges && (
-                        <div className="relative self-stretch">
+                        <div className="relative self-stretch hidden md:block">
                           {collapsedCardHeight > 0 && (
                             <div
                               className="absolute inset-x-0 top-0 flex justify-end items-center"
@@ -471,6 +471,8 @@ export function Dashboard() {
                         flightCategory={flightCategory}
                         budgetTier={budgetTier}
                         priorityCity={priorityCity}
+                        rankChangeInfo={rankChangeMap[weekend.dateRange.id]}
+                        rankChangeSince={rankChangeSince}
                         onCollapsedHeight={i === 0 ? setCollapsedCardHeight : undefined}
                       />
                     </React.Fragment>
