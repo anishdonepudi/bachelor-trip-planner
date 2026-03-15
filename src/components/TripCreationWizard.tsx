@@ -39,6 +39,7 @@ export function TripCreationWizard() {
 
   // Step 3: Side panel hovered month
   const [hoveredInsightMonth, setHoveredInsightMonth] = useState<HoveredMonthData | null>(null);
+  const [isGridHovered, setIsGridHovered] = useState(false);
   const maxSelections = 3;
 
   // Step 4: Flight Preferences
@@ -582,6 +583,7 @@ export function TripCreationWizard() {
                   onMonthsChange={(months) => setSelectedMonths(months)}
                   detailMode="panel"
                   onHoveredMonthChange={setHoveredInsightMonth}
+                  onGridHover={setIsGridHovered}
                 />
               )}
 
@@ -748,24 +750,25 @@ export function TripCreationWizard() {
             {/* Right column: sticky side panel for month details (desktop only) */}
             <div className="hidden lg:block">
               <div className="sticky top-16">
-                {hoveredInsightMonth && destinationCoords ? (
-                  <MonthDetailPanel
-                    month={hoveredInsightMonth}
-                    hasWeatherData={insights.data?.hasWeatherData ?? false}
-                    unitSystem={unitSystem}
-                    lat={destinationCoords.lat}
-                    onMonthsChange={(months) => setSelectedMonths(months)}
-                    selectedMonths={selectedMonths}
-                    maxSelections={maxSelections}
-                  />
-                ) : (
-                  <div className="rounded-lg border border-[var(--border-default)] bg-[var(--surface-1)] p-6 text-center">
-                    <svg className="w-8 h-8 text-[var(--text-3)] mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-                    </svg>
-                    <p className="text-xs text-[var(--text-3)]">Hover over a month to see details</p>
-                  </div>
-                )}
+                <div
+                  className={`transition-all duration-200 ${
+                    isGridHovered && hoveredInsightMonth
+                      ? "opacity-100 translate-x-0"
+                      : "opacity-0 translate-x-2 pointer-events-none"
+                  }`}
+                >
+                  {hoveredInsightMonth && destinationCoords && (
+                    <MonthDetailPanel
+                      month={hoveredInsightMonth}
+                      hasWeatherData={insights.data?.hasWeatherData ?? false}
+                      unitSystem={unitSystem}
+                      lat={destinationCoords.lat}
+                      onMonthsChange={(months) => setSelectedMonths(months)}
+                      selectedMonths={selectedMonths}
+                      maxSelections={maxSelections}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>

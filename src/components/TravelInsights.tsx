@@ -31,6 +31,8 @@ interface TravelInsightsProps {
   detailMode?: "tooltip" | "panel" | "inline";
   /** Called when hovered month changes (used with detailMode="panel") */
   onHoveredMonthChange?: (month: HoveredMonthData | null) => void;
+  /** Called when the cursor enters/leaves the month grid area (used with detailMode="panel") */
+  onGridHover?: (isHovering: boolean) => void;
 }
 
 export interface MonthDetailPanelProps {
@@ -333,7 +335,7 @@ export function MonthDetailPanel({ month: m, hasWeatherData, unitSystem, lat, on
   );
 }
 
-export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelections = 3, data: externalData, loading: externalLoading, unitSystem = "imperial", detailMode = "tooltip", onHoveredMonthChange }: TravelInsightsProps) {
+export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelections = 3, data: externalData, loading: externalLoading, unitSystem = "imperial", detailMode = "tooltip", onHoveredMonthChange, onGridHover }: TravelInsightsProps) {
   const internal = useTravelInsights(
     externalData !== undefined ? null : lat,
     externalData !== undefined ? null : lng,
@@ -490,7 +492,15 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
       </div>
 
       {/* Month grid */}
-      <div className="p-3">
+      <div
+        className="p-3"
+        onMouseEnter={() => onGridHover?.(true)}
+        onMouseLeave={() => {
+          onGridHover?.(false);
+          onHoveredMonthChange?.(null);
+          setHoveredMonth(null);
+        }}
+      >
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
           {orderedMonths.map((m) => {
             const colors = RECOMMENDATION_COLORS[m.recommendation];
