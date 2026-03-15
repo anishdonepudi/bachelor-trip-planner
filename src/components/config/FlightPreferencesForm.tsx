@@ -55,12 +55,12 @@ export function FlightPreferencesForm({
   };
 
   const updateTimeFilter = (
-    leg: "outboundDeparture" | "outboundArrival" | "returnDeparture" | "returnArrival",
-    field: "time" | "plusMinus" | "includeNextDay",
-    value: string | number | boolean
+    window: "destinationArrival" | "destinationDeparture",
+    field: "from" | "to",
+    value: string
   ) => {
     onEdited?.();
-    onTimeFiltersChange({ ...timeFilters, [leg]: { ...timeFilters[leg], [field]: value } });
+    onTimeFiltersChange({ ...timeFilters, [window]: { ...timeFilters[window], [field]: value } });
   };
 
   const hasDuplicateCategories = flightCategories.some((cat, i) =>
@@ -161,91 +161,32 @@ export function FlightPreferencesForm({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {([
-          { key: "outboundDeparture" as const, label: "Outbound Depart", isArrival: false },
-          { key: "outboundArrival" as const, label: "Outbound Arrive", isArrival: true },
-          { key: "returnDeparture" as const, label: "Return Depart", isArrival: false },
-          { key: "returnArrival" as const, label: "Return Arrive", isArrival: true },
-        ]).map(({ key, label, isArrival }) => {
-          const filter = timeFilters[key];
-          const centerMin = parseInt(filter.time.split(":")[0], 10) * 60 + parseInt(filter.time.split(":")[1], 10);
-          const rawEarliest = centerMin - filter.plusMinus * 60;
-          const rawLatest = centerMin + filter.plusMinus * 60;
-          const fmtTime = (m: number) => {
-            const clamped = ((m % (24 * 60)) + 24 * 60) % (24 * 60);
-            return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
-          };
-
-          // Determine if the window extends past midnight
-          let earliest: number, latest: number;
-          let showNextDay = false;
-          let showPrevDay = false;
-
-          if (filter.includeNextDay) {
-            if (isArrival && rawLatest > 24 * 60 - 1) {
-              earliest = Math.max(0, rawEarliest);
-              latest = rawLatest % (24 * 60);
-              showNextDay = true;
-            } else if (!isArrival && rawEarliest < 0) {
-              earliest = (rawEarliest + 24 * 60) % (24 * 60);
-              latest = Math.min(24 * 60 - 1, rawLatest);
-              showPrevDay = true;
-            } else {
-              earliest = Math.max(0, rawEarliest);
-              latest = Math.min(24 * 60 - 1, rawLatest);
-            }
-          } else {
-            earliest = Math.max(0, rawEarliest);
-            latest = Math.min(24 * 60 - 1, rawLatest);
-          }
+          { key: "destinationArrival" as const, label: "Arrive at Destination", subtitle: "When should everyone arrive" },
+          { key: "destinationDeparture" as const, label: "Depart from Destination", subtitle: "When should everyone leave" },
+        ]).map(({ key, label, subtitle }) => {
+          const window = timeFilters[key];
+          const fromMin = parseInt(window.from.split(":")[0], 10) * 60 + parseInt(window.from.split(":")[1], 10);
+          const toMin = parseInt(window.to.split(":")[0], 10) * 60 + parseInt(window.to.split(":")[1], 10);
+          const wrapsOvernight = toMin < fromMin;
 
           return (
             <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
-              <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
-              <div className="flex items-center gap-2">
-                <select value={filter.time} onChange={(e) => updateTimeFilter(key, "time", e.target.value)}
+              <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-0.5">{label}</div>
+              <div className="text-[10px] text-[var(--text-3)] mb-2">{subtitle}</div>
+              <div className="flex items-center gap-1.5">
+                <select value={window.from} onChange={(e) => updateTimeFilter(key, "from", e.target.value)}
                   className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
                   {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
-                <div className="shrink-0 flex items-center">
-                  <button onClick={() => updateTimeFilter(key, "plusMinus", Math.max(1, filter.plusMinus - 1))}
-                    className="w-7 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)]">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
-                  </button>
-                  <div className="w-10 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
-                    <span className="text-[11px] font-semibold font-mono tabular-nums text-[var(--text-1)]">&plusmn;{filter.plusMinus}h</span>
-                  </div>
-                  <button onClick={() => updateTimeFilter(key, "plusMinus", Math.min(12, filter.plusMinus + 1))}
-                    className="w-7 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)]">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                  </button>
-                </div>
+                <span className="text-[10px] text-[var(--text-3)] shrink-0">to</span>
+                <select value={window.to} onChange={(e) => updateTimeFilter(key, "to", e.target.value)}
+                  className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
-              <div className="flex items-center justify-between mt-1.5">
-                <div className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">
-                  {showPrevDay && <span className="text-[var(--blue)]">-1d </span>}
-                  {fmtTime(earliest)} – {fmtTime(latest)}
-                  {showNextDay && <span className="text-[var(--blue)]"> +1d</span>}
-                </div>
-                <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                  <span className="text-[10px] text-[var(--text-3)]">
-                    {isArrival ? "+1 day" : "-1 day"}
-                  </span>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={!!filter.includeNextDay}
-                    onClick={() => updateTimeFilter(key, "includeNextDay", !filter.includeNextDay)}
-                    className={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
-                      filter.includeNextDay
-                        ? "bg-[var(--blue)]"
-                        : "bg-[var(--surface-3)] border border-[var(--border-default)]"
-                    }`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${
-                      filter.includeNextDay ? "translate-x-3" : "translate-x-0"
-                    }`} />
-                  </button>
-                </label>
+              <div className="mt-1.5 text-[10px] text-[var(--text-3)] font-mono tabular-nums">
+                {window.from} – {window.to}
+                {wrapsOvernight && <span className="text-[var(--blue)]"> (+1 day)</span>}
               </div>
             </div>
           );

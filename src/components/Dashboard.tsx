@@ -26,6 +26,7 @@ import {
 } from "@/lib/rank-history";
 import { computeRankChanges } from "@/lib/rank-changes";
 import { DEFAULT_CITIES } from "@/config/default-config";
+import { migrateTimeFilters } from "@/lib/migrate-time-filters";
 import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { useAuth } from "./auth/AuthProvider";
@@ -190,7 +191,7 @@ export function Dashboard({ tripId }: DashboardProps) {
     if (configData?.destination_airport) setDestinationAirport(configData.destination_airport);
     if (configData?.destination_city) setDestinationCity(configData.destination_city);
     if (configData?.flight_categories && Array.isArray(configData.flight_categories)) setFlightCategories(configData.flight_categories);
-    if (configData?.flight_time_filters) setFlightTimeFilters(configData.flight_time_filters);
+    if (configData?.flight_time_filters) setFlightTimeFilters(migrateTimeFilters(configData.flight_time_filters));
     if (configData?.month_range) setMonthRange(configData.month_range);
     if (configData?.selected_months && Array.isArray(configData.selected_months)) setSelectedMonths(configData.selected_months);
     if (configData?.trip_duration) setTripDuration(configData.trip_duration);

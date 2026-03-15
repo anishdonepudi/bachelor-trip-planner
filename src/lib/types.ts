@@ -63,20 +63,17 @@ export interface FlightCategoryConfig {
   label: string;     // display name
 }
 
-/** Time filter: a target time with +/- hours tolerance */
-export interface TimeRange {
-  time: string;     // target time in "HH:MM" 24-hour format, e.g. "14:00"
-  plusMinus: number; // hours tolerance, e.g. 3 means 11:00-17:00
-  includeNextDay?: boolean; // if true, time window extends past midnight for overnight flights
+/** Time window: a from→to range in "HH:MM" format. If to < from, wraps midnight. */
+export interface TimeWindow {
+  from: string;  // "HH:MM" 24-hour format
+  to: string;    // "HH:MM" 24-hour format
 }
 
 /** Global time filters applied to every flight search */
 export interface FlightTimeFilters {
-  outboundDeparture: TimeRange;
-  outboundArrival: TimeRange;
-  returnDeparture: TimeRange;
-  returnArrival: TimeRange;
-  maxDuration: number; // max flight duration in hours
+  destinationArrival: TimeWindow;   // when to arrive at destination (filters outbound arrival)
+  destinationDeparture: TimeWindow; // when to leave destination (filters return departure)
+  maxDuration: number;              // max flight duration in hours
 }
 
 /** Individual month selection */

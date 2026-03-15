@@ -35,6 +35,7 @@ import type {
   SelectedMonth,
 } from "../src/lib/types";
 import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE } from "../src/lib/constants";
+import { migrateTimeFilters } from "../src/lib/migrate-time-filters";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -106,7 +107,7 @@ async function loadAirportToCities(): Promise<void> {
   }
 
   if (data.flight_time_filters) {
-    TIME_FILTERS = data.flight_time_filters;
+    TIME_FILTERS = migrateTimeFilters(data.flight_time_filters);
   }
 
   if (data.month_range) {
@@ -148,31 +149,20 @@ function timeToMinutes(time: string): number {
   return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 }
 
-/** Check if a flight time is within a target +/- hours range.
- *  When includeNextDay is enabled and the flight crosses midnight,
- *  the time window extends past 24:00 for arrivals or before 00:00 for departures. */
-function isTimeInFilter(
-  time: string,
-  filter: { time: string; plusMinus: number; includeNextDay?: boolean },
-  crossesMidnight?: boolean
-): boolean {
+/** Check if a flight time falls within a from→to window.
+ *  If to < from, the window wraps midnight (e.g., 20:00→06:00). */
+function isTimeInWindow(time: string, window: { from: string; to: string }): boolean {
   if (time === "?" || !time) return true; // can't filter unknown times
-  let t = timeToMinutes(time);
-  const center = timeToMinutes(filter.time);
-  const tolerance = filter.plusMinus * 60;
-  const earliest = center - tolerance;
-  const latest = center + tolerance;
-
-  if (filter.includeNextDay && crossesMidnight) {
-    // Flight crosses midnight — add 24h to arrival time so e.g. 02:00 becomes 26:00,
-    // allowing a window like 18:00–26:00 to capture overnight arrivals.
-    // For departures, a prev-day departure at 22:00 is treated as -2h (22:00 prev day).
-    t += 24 * 60;
-    return t >= Math.max(0, earliest) && t <= latest;
+  const t = timeToMinutes(time);
+  const from = timeToMinutes(window.from);
+  const to = timeToMinutes(window.to);
+  if (to >= from) {
+    // Normal range
+    return t >= from && t <= to;
+  } else {
+    // Wraps midnight (e.g., 20:00 → 06:00)
+    return t >= from || t <= to;
   }
-
-  // Standard same-day check, clamped to 00:00–23:59
-  return t >= Math.max(0, earliest) && t <= Math.min(24 * 60 - 1, latest);
 }
 
 function buildFlightsUrl(
@@ -379,13 +369,14 @@ function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outboun
 
       if (flight.duration > TIME_FILTERS.maxDuration * 60) continue;
 
-      // Apply time filters based on leg
-      const depFilter = leg === "outbound" ? TIME_FILTERS.outboundDeparture : TIME_FILTERS.returnDeparture;
-      const arrFilter = leg === "outbound" ? TIME_FILTERS.outboundArrival : TIME_FILTERS.returnArrival;
-      // Detect overnight flights (arrival date differs from departure date)
-      const crossesMidnight = flight.departDate !== "?" && flight.arriveDate !== "?" && flight.departDate !== flight.arriveDate;
-      if (!isTimeInFilter(flight.departTime, depFilter)) continue;
-      if (!isTimeInFilter(flight.arriveTime, arrFilter, crossesMidnight)) continue;
+      // Apply destination-centric time filters
+      if (leg === "outbound") {
+        // Filter outbound by arrival time at destination
+        if (!isTimeInWindow(flight.arriveTime, TIME_FILTERS.destinationArrival)) continue;
+      } else {
+        // Filter return by departure time from destination
+        if (!isTimeInWindow(flight.departTime, TIME_FILTERS.destinationDeparture)) continue;
+      }
 
       if (stops === 0) nonstop.push(flight);
       else if (stops === 1) onestop.push(flight);
