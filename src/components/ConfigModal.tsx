@@ -853,6 +853,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
               data={insights.data}
               loading={insights.loading}
               unitSystem={unitSystem}
+              detailMode="inline"
               onMonthsChange={(months) => {
                 hasEdited.current = true;
                 setSelectedMonths(months);

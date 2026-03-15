@@ -13,6 +13,8 @@ export interface SelectedMonth {
 
 export type UnitSystem = "metric" | "imperial";
 
+export type HoveredMonthData = MonthInsight & { month: number; year: number };
+
 interface TravelInsightsProps {
   lat: number;
   lng: number;
@@ -25,6 +27,20 @@ interface TravelInsightsProps {
   loading?: boolean;
   /** Unit system for temperature and precipitation (default "imperial") */
   unitSystem?: UnitSystem;
+  /** How to display the month detail: tooltip (default), panel (external), or inline (below grid) */
+  detailMode?: "tooltip" | "panel" | "inline";
+  /** Called when hovered month changes (used with detailMode="panel") */
+  onHoveredMonthChange?: (month: HoveredMonthData | null) => void;
+}
+
+export interface MonthDetailPanelProps {
+  month: MonthInsight & { year: number };
+  hasWeatherData: boolean;
+  unitSystem: UnitSystem;
+  lat: number;
+  onMonthsChange?: (months: SelectedMonth[]) => void;
+  selectedMonths: SelectedMonth[];
+  maxSelections: number;
 }
 
 const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -178,7 +194,146 @@ function formatEventDate(date: string): string {
   return date;
 }
 
-export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelections = 3, data: externalData, loading: externalLoading, unitSystem = "imperial" }: TravelInsightsProps) {
+// ── MonthDetailPanel ──
+// Standalone component for displaying detailed month insight data.
+// Used by tooltip, side panel, and inline detail modes.
+export function MonthDetailPanel({ month: m, hasWeatherData, unitSystem, lat, onMonthsChange, selectedMonths, maxSelections }: MonthDetailPanelProps) {
+  const colors = RECOMMENDATION_COLORS[m.recommendation];
+
+  // Filter events to this tile's year
+  const tileEvents = m.events.filter(e => {
+    if (e.type === "holiday" && e.date && /^\d{4}-/.test(e.date)) {
+      return e.date.startsWith(String(m.year));
+    }
+    return true;
+  });
+
+  const holidays = tileEvents.filter(e => e.type === "holiday");
+  const festivals = tileEvents.filter(e => e.type !== "holiday");
+  const hasEvents = tileEvents.length > 0;
+  const reason = getRecommendationReason(m);
+
+  return (
+    <div className="rounded-lg border border-[var(--border-hover)] bg-[var(--surface-2)] p-3">
+      {/* Header row */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-heading font-semibold text-[var(--text-1)]">{m.label} {m.year}</span>
+          <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${colors.bg} ${colors.text} border ${colors.border}`}>
+            {m.recommendation}
+          </span>
+        </div>
+        {reason && (
+          <span className="text-[10px] text-[var(--text-3)] italic">{reason}</span>
+        )}
+      </div>
+
+      {/* Content sections — stacks vertically for narrow panels, horizontal for wide */}
+      <div className="space-y-3">
+        {/* Weather */}
+        {hasWeatherData ? (
+          <div>
+            <div className="text-[8px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1">Weather</div>
+            <div className="grid grid-cols-[36px_1fr_1fr_1fr] gap-x-1.5 gap-y-0.5">
+              <div />
+              <div className="text-[9px] text-[var(--text-3)]">High</div>
+              <div className="text-[9px] text-[var(--text-3)]">Low</div>
+              <div className="text-[9px] text-[var(--text-3)]">Rain</div>
+              {m.yearly && m.yearly.map((yw) => (
+                <Fragment key={yw.year}>
+                  <div className="text-[9px] font-mono text-[var(--text-3)]">{yw.year}</div>
+                  <div className="text-[10px] font-mono text-[var(--text-2)]">{formatTemp(yw.highC, unitSystem)}</div>
+                  <div className="text-[10px] font-mono text-[var(--text-2)]">{formatTemp(yw.lowC, unitSystem)}</div>
+                  <div className="text-[10px] font-mono text-[var(--text-2)]">{formatRain(yw.precipMm, unitSystem)}</div>
+                </Fragment>
+              ))}
+              <div className="col-span-4 border-t border-[var(--border-default)] my-0.5" />
+              <div className="text-[9px] font-mono font-semibold text-[var(--text-2)]">Avg</div>
+              <div className="text-[10px] font-mono font-semibold text-[var(--text-1)]">{formatTemp(m.avgHighC, unitSystem)}</div>
+              <div className="text-[10px] font-mono font-semibold text-[var(--text-1)]">{formatTemp(m.avgLowC, unitSystem)}</div>
+              <div className="text-[10px] font-mono font-semibold text-[var(--text-1)]">{formatRain(m.precipitationMm, unitSystem)}</div>
+            </div>
+            <div className="text-[8px] text-[var(--text-3)] mt-1 italic">Based on 3-year historical avg</div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-[8px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1">Weather</div>
+            <span className="text-[10px] text-[var(--text-3)]">No data</span>
+          </div>
+        )}
+
+        {/* Crowds + Season */}
+        <div className="border-t border-[var(--border-default)] pt-2">
+          <div className="flex items-start gap-6">
+            <div>
+              <div className="text-[8px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1">Crowds</div>
+              {m.crowd > 0 ? (
+                <CrowdBar level={m.crowd} showLabel size="md" />
+              ) : (
+                <span className="text-[10px] text-[var(--text-3)]">No data</span>
+              )}
+            </div>
+            <div>
+              <div className="text-[8px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-0.5">Season</div>
+              <span className="text-[10px] text-[var(--text-2)]">{getCalendarSeason(m.month, lat)}</span>
+              {m.season !== "unknown" && (
+                <span className="text-[9px] text-[var(--text-3)]"> · {TOURISM_SEASON_LABELS[m.season]}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Events */}
+        <div className="border-t border-[var(--border-default)] pt-2 space-y-1.5">
+          <div className="text-[8px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-0.5">Events</div>
+          {!hasEvents && (
+            <span className="text-[10px] text-[var(--text-3)]">None this month</span>
+          )}
+          {holidays.length > 0 && (
+            <div>
+              <div className="text-[8px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-0.5">Holidays</div>
+              {holidays.map((e, i) => (
+                <div key={`h-${i}`} className="flex items-start gap-1 text-[10px]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-0.5 shrink-0" />
+                  <span className="text-[var(--text-1)]">
+                    <strong>{e.name}</strong>
+                    {e.date && <span className="text-[var(--text-3)]"> — {formatEventDate(e.date)}</span>}
+                    {!e.date && e.description && <span className="text-[var(--text-3)]"> — {e.description}</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {festivals.length > 0 && (
+            <div>
+              <div className="text-[8px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-0.5">Festivals</div>
+              {festivals.map((e, i) => (
+                <div key={`f-${i}`} className="flex items-start gap-1 text-[10px]">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--blue)] mt-0.5 shrink-0" />
+                  <span className="text-[var(--text-1)]">
+                    <strong>{e.name}</strong>
+                    {e.date && <span className="text-[var(--text-3)]"> — {e.date}</span>}
+                    {e.description && <span className="text-[var(--text-3)]">{e.date ? " · " : " — "}{e.description}</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {onMonthsChange && (
+        <div className="mt-2 pt-1.5 border-t border-[var(--border-default)] text-center">
+          <span className="text-[9px] text-[var(--text-3)]">
+            Click to {selectedMonths.some(s => s.month === m.month && s.year === m.year) ? "deselect" : "select"} · {selectedMonths.length}/{maxSelections} chosen
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelections = 3, data: externalData, loading: externalLoading, unitSystem = "imperial", detailMode = "tooltip", onHoveredMonthChange }: TravelInsightsProps) {
   const internal = useTravelInsights(
     externalData !== undefined ? null : lat,
     externalData !== undefined ? null : lng,
@@ -216,18 +371,38 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
   }, [onMonthsChange, maxSelections]);
 
   const handleMouseEnter = useCallback((month: number, e: React.MouseEvent<HTMLButtonElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    buttonRectRef.current = rect;
-    const tooltipW = 480; // wide horizontal layout
-    let left = rect.left + rect.width / 2 - tooltipW / 2;
-    left = Math.max(8, Math.min(left, window.innerWidth - tooltipW - 8));
-    const arrowLeft = rect.left + rect.width / 2 - left;
-    setTooltipPos({ top: rect.bottom + 8, left, arrowLeft, flipped: false });
+    if (detailMode === "tooltip") {
+      const rect = e.currentTarget.getBoundingClientRect();
+      buttonRectRef.current = rect;
+      const tooltipW = 480; // wide horizontal layout
+      let left = rect.left + rect.width / 2 - tooltipW / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - tooltipW - 8));
+      const arrowLeft = rect.left + rect.width / 2 - left;
+      setTooltipPos({ top: rect.bottom + 8, left, arrowLeft, flipped: false });
+    }
     setHoveredMonth(month);
+  }, [detailMode]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoveredMonth(null);
   }, []);
+
+  // Notify parent of hovered month changes for panel mode
+  useEffect(() => {
+    if (detailMode !== "panel" || !onHoveredMonthChange) return;
+    if (hoveredMonth === null) {
+      onHoveredMonthChange(null);
+    } else {
+      const m = orderedMonthsRef.current.find(om => om.month === hoveredMonth);
+      if (m) onHoveredMonthChange(m);
+      else onHoveredMonthChange(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hoveredMonth, detailMode, onHoveredMonthChange]);
 
   // After tooltip renders, check if it overflows the viewport and flip above if needed
   useEffect(() => {
+    if (detailMode !== "tooltip") return;
     if (!tooltipRef.current || !buttonRectRef.current || !tooltipPos) return;
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
     const viewportH = window.innerHeight;
@@ -239,7 +414,7 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
         flipped: true,
       } : null);
     }
-  }, [hoveredMonth, tooltipPos?.flipped]);
+  }, [hoveredMonth, tooltipPos?.flipped, detailMode]);
 
   // Reorder months: start from current month, show 12 months rolling with year
   const orderedMonths = useMemo(() => {
@@ -256,6 +431,16 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
     }
     return result;
   }, [data]);
+
+  // Keep a ref for the effect to access without creating deps
+  const orderedMonthsRef = useRef(orderedMonths);
+  orderedMonthsRef.current = orderedMonths;
+
+  // Find the currently hovered month data for inline mode
+  const hoveredMonthData = useMemo(() => {
+    if (hoveredMonth === null) return null;
+    return orderedMonths.find(om => om.month === hoveredMonth) ?? null;
+  }, [hoveredMonth, orderedMonths]);
 
 
   if (loading) {
@@ -310,17 +495,20 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
           {orderedMonths.map((m) => {
             const colors = RECOMMENDATION_COLORS[m.recommendation];
             const isSelected = selectedMonths.some(s => s.month === m.month && s.year === m.year);
+            const isHovered = hoveredMonth === m.month;
 
             return (
               <button
                 key={m.month}
                 onMouseEnter={(e) => handleMouseEnter(m.month, e)}
-                onMouseLeave={() => setHoveredMonth(null)}
+                onMouseLeave={handleMouseLeave}
                 onClick={() => toggleMonth(m.month, m.year)}
                 className={`w-full relative rounded-lg border-2 p-2.5 text-left transition-all duration-150 flex flex-col ${
                   isSelected
                     ? "border-[var(--blue)] ring-1 ring-[var(--blue)] bg-[var(--blue)]/10"
-                    : `${colors.bg} ${colors.border}`
+                    : isHovered && detailMode !== "tooltip"
+                      ? `${colors.bg} border-[var(--text-3)] ring-1 ring-[var(--text-3)]`
+                      : `${colors.bg} ${colors.border}`
                 } hover:brightness-110 ${
                   onMonthsChange ? "cursor-pointer" : ""
                 }`}
@@ -377,8 +565,33 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
         </div>
       </div>
 
-      {/* Fixed-position tooltip — rendered outside the grid to avoid layout shift */}
-      {hoveredMonth !== null && tooltipPos && (() => {
+      {/* Inline detail panel — rendered below the month grid with expand/collapse animation */}
+      {detailMode === "inline" && (
+        <div
+          className="overflow-hidden transition-all duration-300 ease-in-out"
+          style={{
+            maxHeight: hoveredMonthData ? 500 : 0,
+            opacity: hoveredMonthData ? 1 : 0,
+          }}
+        >
+          <div className="px-3 pb-3">
+            {hoveredMonthData && (
+              <MonthDetailPanel
+                month={hoveredMonthData}
+                hasWeatherData={data.hasWeatherData}
+                unitSystem={unitSystem}
+                lat={lat}
+                onMonthsChange={onMonthsChange}
+                selectedMonths={selectedMonths}
+                maxSelections={maxSelections}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Tooltip mode — fixed-position portal */}
+      {detailMode === "tooltip" && hoveredMonth !== null && tooltipPos && (() => {
         const m = orderedMonths.find(om => om.month === hoveredMonth);
         if (!m) return null;
         const colors = RECOMMENDATION_COLORS[m.recommendation];
