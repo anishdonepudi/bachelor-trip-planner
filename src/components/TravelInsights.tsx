@@ -209,7 +209,8 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
       } else {
         next = [...prev, { month, year }];
       }
-      onMonthsChange(next);
+      // Defer parent callback to avoid setState-during-render warning
+      queueMicrotask(() => onMonthsChange(next));
       return next;
     });
   }, [onMonthsChange, maxSelections]);
