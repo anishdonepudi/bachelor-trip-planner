@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
@@ -17,6 +17,8 @@ export function TripCreationWizard() {
   const [step, setStep] = useState<Step>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showValidation, setShowValidation] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
 
   // Step 1: Basics
   const [tripName, setTripName] = useState("");
@@ -278,7 +280,26 @@ export function TripCreationWizard() {
     }
   };
 
+  const changeStep = useCallback((newStep: Step) => {
+    setShowValidation(false);
+    setStep(newStep);
+  }, []);
+
+  const handleContinue = useCallback(() => {
+    if (canProceed(step)) {
+      changeStep((step + 1) as Step);
+    } else {
+      setShowValidation(true);
+      setShakeKey(k => k + 1);
+    }
+  }, [step, canProceed, changeStep]);
+
   const handleSubmit = async () => {
+    if (!canProceed(4)) {
+      setShowValidation(true);
+      setShakeKey(k => k + 1);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -357,22 +378,30 @@ export function TripCreationWizard() {
                 type="text"
                 value={tripName}
                 onChange={(e) => setTripName(e.target.value)}
-                className="w-full h-10 px-3 rounded-md text-sm bg-[var(--surface-1)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 placeholder:text-[var(--text-3)]"
+                className={`w-full h-10 px-3 rounded-md text-sm bg-[var(--surface-1)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-colors duration-150 placeholder:text-[var(--text-3)] ${showValidation && !tripName.trim() ? "ring-1 ring-[var(--gold)]" : ""}`}
                 placeholder="e.g., Summer 2026 Barcelona Trip"
                 autoFocus
               />
+              {showValidation && !tripName.trim() && (
+                <p className="mt-1 text-xs text-[var(--gold)]">Enter a trip name</p>
+              )}
             </div>
             <div>
               <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1.5 block">Destination</label>
-              <CitySelect
-                value={destinationCity}
-                onChange={(name, airports) => {
-                  setDestinationCity(name);
-                  if (airports?.primary?.[0]) setDestinationAirport(airports.primary[0]);
-                }}
-                onCoordinates={(lat, lng, geo) => setDestinationCoords({ lat, lng, countryCode: geo?.countryCode, country: geo?.country, state: geo?.state })}
-                placeholder="Search destination..."
-              />
+              <div className={`rounded-md ${showValidation && !destinationAirport ? "ring-1 ring-[var(--gold)]" : ""}`}>
+                <CitySelect
+                  value={destinationCity}
+                  onChange={(name, airports) => {
+                    setDestinationCity(name);
+                    if (airports?.primary?.[0]) setDestinationAirport(airports.primary[0]);
+                  }}
+                  onCoordinates={(lat, lng, geo) => setDestinationCoords({ lat, lng, countryCode: geo?.countryCode, country: geo?.country, state: geo?.state })}
+                  placeholder="Search destination..."
+                />
+              </div>
+              {showValidation && !destinationAirport && (
+                <p className="mt-1 text-xs text-[var(--gold)]">Select a destination</p>
+              )}
               {destinationAirport && (
                 <div className="flex items-center gap-1.5 mt-1.5">
                   <span className="text-[10px] text-[var(--text-3)]">Airport:</span>
@@ -436,6 +465,9 @@ export function TripCreationWizard() {
               Add City
             </button>
             <p className="text-[11px] text-[var(--text-3)] font-mono">{totalPeople} travelers from {cities.filter(c => c.city).length} cities</p>
+            {showValidation && !cities.some(c => c.city) && (
+              <p className="text-xs text-[var(--gold)]">Add at least one departure city</p>
+            )}
           </div>
         )}
 
@@ -444,7 +476,7 @@ export function TripCreationWizard() {
           <div className="space-y-4">
             {/* Trip Duration — first */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+              <div className={`p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] ${showValidation && tripDuration.nights <= 0 ? "ring-1 ring-[var(--gold)]" : ""}`}>
                 <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2 block">Nights</label>
                 <div className="flex items-center justify-center">
                   <button onClick={() => setTripDuration(prev => ({ ...prev, nights: Math.max(0, prev.nights - 1) }))}
@@ -463,8 +495,11 @@ export function TripCreationWizard() {
                     </svg>
                   </button>
                 </div>
+                {showValidation && tripDuration.nights <= 0 && (
+                  <p className="mt-1.5 text-xs text-[var(--gold)] text-center">Set number of nights</p>
+                )}
               </div>
-              <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+              <div className={`p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)] ${showValidation && tripDuration.departDays.length === 0 ? "ring-1 ring-[var(--gold)]" : ""}`}>
                 <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2 block">
                   Depart on <span className="normal-case font-normal text-[var(--text-3)]">(up to 2)</span>
                 </label>
@@ -496,6 +531,9 @@ export function TripCreationWizard() {
                     );
                   })}
                 </div>
+                {showValidation && tripDuration.departDays.length === 0 && (
+                  <p className="mt-1.5 text-xs text-[var(--gold)]">Choose departure days</p>
+                )}
               </div>
             </div>
 
@@ -537,6 +575,10 @@ export function TripCreationWizard() {
                 unitSystem={unitSystem}
                 onMonthsChange={(months) => setSelectedMonths(months)}
               />
+            )}
+
+            {showValidation && selectedMonths.length === 0 && (
+              <p className="text-xs text-[var(--gold)]">Select at least one month</p>
             )}
 
             {/* Selected months display */}
@@ -769,6 +811,13 @@ export function TripCreationWizard() {
               })}
             </div>
 
+            {showValidation && flightCategories.length === 0 && (
+              <p className="text-xs text-[var(--gold)]">Add at least one flight category</p>
+            )}
+            {showValidation && hasDuplicateCategories && (
+              <p className="text-xs text-[var(--gold)]">Remove duplicate categories</p>
+            )}
+
             {/* Time Filters */}
             <div className="mt-1">
               <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Time Filters</span>
@@ -820,39 +869,63 @@ export function TripCreationWizard() {
         <div className="flex gap-3 pt-2">
           {step > 1 && (
             <button
-              onClick={() => setStep((step - 1) as Step)}
+              onClick={() => changeStep((step - 1) as Step)}
               className="flex-1 h-11 rounded-md text-sm font-semibold bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:bg-[var(--surface-3)] transition-all duration-150"
             >
               Back
             </button>
           )}
           {step < 4 ? (
-            <button
-              onClick={() => setStep((step + 1) as Step)}
-              disabled={!canProceed(step)}
-              className="flex-1 h-11 rounded-md text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-            >
-              Continue
-            </button>
+            <div key={shakeKey} className={`flex-1 ${shakeKey > 0 ? "animate-[shake_200ms_ease-in-out]" : ""}`}>
+              <button
+                onClick={handleContinue}
+                onMouseEnter={() => { if (!canProceed(step)) setShowValidation(true); }}
+                className={`w-full h-11 rounded-md text-sm font-semibold text-white transition-all duration-150 ${
+                  canProceed(step)
+                    ? "bg-[var(--blue)] hover:brightness-110"
+                    : "bg-[var(--blue)] opacity-60 cursor-default"
+                }`}
+              >
+                Continue
+              </button>
+            </div>
           ) : (
-            <button
-              onClick={handleSubmit}
-              disabled={saving || !canProceed(4)}
-              className="flex-1 h-11 rounded-md text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-            >
-              {saving ? (
-                <span className="flex items-center justify-center gap-1.5">
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  Creating...
-                </span>
-              ) : "Create Trip"}
-            </button>
+            <div key={shakeKey} className={`flex-1 ${shakeKey > 0 ? "animate-[shake_200ms_ease-in-out]" : ""}`}>
+              <button
+                onClick={handleSubmit}
+                onMouseEnter={() => { if (!canProceed(4)) setShowValidation(true); }}
+                disabled={saving}
+                className={`w-full h-11 rounded-md text-sm font-semibold text-white transition-all duration-150 ${
+                  saving
+                    ? "bg-[var(--blue)] opacity-40 cursor-not-allowed"
+                    : canProceed(4)
+                      ? "bg-[var(--blue)] hover:brightness-110"
+                      : "bg-[var(--blue)] opacity-60 cursor-default"
+                }`}
+              >
+                {saving ? (
+                  <span className="flex items-center justify-center gap-1.5">
+                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Creating...
+                  </span>
+                ) : "Create Trip"}
+              </button>
+            </div>
           )}
         </div>
       </main>
+
+      {/* Shake animation */}
+      <style jsx>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-4px); }
+          40%, 80% { transform: translateX(4px); }
+        }
+      `}</style>
     </div>
   );
 }
