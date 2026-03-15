@@ -474,7 +474,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
           .map(sm => `${MONTH_NAMES[sm.month - 1]} ${sm.year}`)
           .join(", ")
       : "No months selected",
-    `${remainingTrips} of ${potentialTrips.length} weekends`,
+    `${remainingTrips} of ${potentialTrips.length} options`,
     excludedDates.length > 0 ? `${excludedDates.length} blocked` : null,
   ].filter(Boolean).join(" \u00b7 ");
 
@@ -926,7 +926,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                 <span className="text-[10px] text-[var(--text-3)]">Holiday</span>
               </div>
               <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">
-                {remainingTrips} of {potentialTrips.length} weekends
+                {remainingTrips} of {potentialTrips.length} options
               </span>
             </div>
           </div>

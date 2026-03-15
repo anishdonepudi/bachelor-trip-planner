@@ -205,7 +205,7 @@ export function BlockedDatesForm({
       {/* Calendar */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-[var(--text-2)]">Tap highlighted dates to block them.</p>
-        <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">{remainingTrips} of {potentialTrips.length} weekends</span>
+        <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">{remainingTrips} of {potentialTrips.length} options</span>
       </div>
       <div className="space-y-4">
         {monthGroups.map((group) => {

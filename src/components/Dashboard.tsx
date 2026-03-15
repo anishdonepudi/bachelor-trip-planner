@@ -554,7 +554,7 @@ export function Dashboard({ tripId }: DashboardProps) {
                   Click &quot;Refresh&quot; to trigger the first data scrape, or wait for the scheduled run.
                 </p>
                 <p className="text-xs text-[var(--text-3)] font-mono tabular-nums">
-                  {dateRanges.length} available weekends
+                  {dateRanges.length} available options
                 </p>
               </div>
             ) : showComboView ? (
