@@ -57,6 +57,21 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
   };
 
   const selectCity = async (suggestion: CitySuggestion) => {
+    // Track selection (fire-and-forget, non-blocking)
+    fetch('/api/cities/track-selection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: suggestion.name,
+        countryCode: suggestion.countryCode ?? '',
+        lat: suggestion.lat,
+        lng: suggestion.lng,
+        state: suggestion.state,
+        country: suggestion.country,
+        population: suggestion.population,
+      }),
+    }).catch(() => {});
+
     const display = formatFullLocation(suggestion);
     displayCache.current[suggestion.name] = display;
     setQuery(display);
