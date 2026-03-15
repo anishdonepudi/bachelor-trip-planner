@@ -98,17 +98,17 @@ export async function POST(request: NextRequest) {
 
       const { data: existing } = await supabaseAdmin
         .from("popular_cities")
-        .select("id")
+        .select("id, popularity_score")
         .eq("name", city.city_name)
         .eq("country_code", city.country_code)
         .maybeSingle();
 
       if (existing) {
-        // Update existing entry
+        // Update existing entry — preserve seed baseline if higher
         await supabaseAdmin
           .from("popular_cities")
           .update({
-            popularity_score: popularityScore,
+            popularity_score: Math.max(existing.popularity_score, popularityScore),
             selection_count_30d: city.selection_count_30d,
             selection_count_all: city.selection_count_all,
             updated_at: new Date().toISOString(),
