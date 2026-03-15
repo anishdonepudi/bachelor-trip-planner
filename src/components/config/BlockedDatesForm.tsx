@@ -68,6 +68,24 @@ export function BlockedDatesForm({
     return set;
   }, [potentialTrips]);
 
+  const remainingTrips = useMemo(() => {
+    if (excludedDates.length === 0) return potentialTrips.length;
+    const excludedSet = new Set(excludedDates);
+    return potentialTrips.filter((trip) => {
+      const start = new Date(trip.departDate + "T00:00:00");
+      const end = new Date(trip.returnDate + "T00:00:00");
+      const current = new Date(start);
+      while (current <= end) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, "0");
+        const d = String(current.getDate()).padStart(2, "0");
+        if (excludedSet.has(`${y}-${m}-${d}`)) return false;
+        current.setDate(current.getDate() + 1);
+      }
+      return true;
+    }).length;
+  }, [potentialTrips, excludedDates]);
+
   const tripPositionMap = useMemo(() => {
     const map = new Map<string, { isStart: boolean; isEnd: boolean }>();
     for (const trip of potentialTrips) {
@@ -187,7 +205,7 @@ export function BlockedDatesForm({
       {/* Calendar */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-[var(--text-2)]">Tap highlighted dates to block them.</p>
-        <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">{potentialTrips.length} trips</span>
+        <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">{remainingTrips} of {potentialTrips.length} trips</span>
       </div>
       <div className="space-y-4">
         {monthGroups.map((group) => {
