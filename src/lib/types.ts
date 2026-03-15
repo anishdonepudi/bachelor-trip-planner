@@ -67,6 +67,7 @@ export interface FlightCategoryConfig {
 export interface TimeRange {
   time: string;     // target time in "HH:MM" 24-hour format, e.g. "14:00"
   plusMinus: number; // hours tolerance, e.g. 3 means 11:00-17:00
+  includeNextDay?: boolean; // if true, time window extends past midnight for overnight flights
 }
 
 /** Global time filters applied to every flight search */

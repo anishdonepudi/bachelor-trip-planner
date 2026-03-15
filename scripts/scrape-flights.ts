@@ -148,15 +148,30 @@ function timeToMinutes(time: string): number {
   return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 }
 
-/** Check if a flight time is within a target +/- hours range */
-function isTimeInFilter(time: string, filter: { time: string; plusMinus: number }): boolean {
+/** Check if a flight time is within a target +/- hours range.
+ *  When includeNextDay is enabled and the flight crosses midnight,
+ *  the time window extends past 24:00 for arrivals or before 00:00 for departures. */
+function isTimeInFilter(
+  time: string,
+  filter: { time: string; plusMinus: number; includeNextDay?: boolean },
+  crossesMidnight?: boolean
+): boolean {
   if (time === "?" || !time) return true; // can't filter unknown times
-  const t = timeToMinutes(time);
+  let t = timeToMinutes(time);
   const center = timeToMinutes(filter.time);
   const tolerance = filter.plusMinus * 60;
   const earliest = center - tolerance;
   const latest = center + tolerance;
-  // Clamp to valid day range
+
+  if (filter.includeNextDay && crossesMidnight) {
+    // Flight crosses midnight — add 24h to arrival time so e.g. 02:00 becomes 26:00,
+    // allowing a window like 18:00–26:00 to capture overnight arrivals.
+    // For departures, a prev-day departure at 22:00 is treated as -2h (22:00 prev day).
+    t += 24 * 60;
+    return t >= Math.max(0, earliest) && t <= latest;
+  }
+
+  // Standard same-day check, clamped to 00:00–23:59
   return t >= Math.max(0, earliest) && t <= Math.min(24 * 60 - 1, latest);
 }
 
@@ -367,8 +382,10 @@ function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outboun
       // Apply time filters based on leg
       const depFilter = leg === "outbound" ? TIME_FILTERS.outboundDeparture : TIME_FILTERS.returnDeparture;
       const arrFilter = leg === "outbound" ? TIME_FILTERS.outboundArrival : TIME_FILTERS.returnArrival;
+      // Detect overnight flights (arrival date differs from departure date)
+      const crossesMidnight = flight.departDate !== "?" && flight.arriveDate !== "?" && flight.departDate !== flight.arriveDate;
       if (!isTimeInFilter(flight.departTime, depFilter)) continue;
-      if (!isTimeInFilter(flight.arriveTime, arrFilter)) continue;
+      if (!isTimeInFilter(flight.arriveTime, arrFilter, crossesMidnight)) continue;
 
       if (stops === 0) nonstop.push(flight);
       else if (stops === 1) onestop.push(flight);

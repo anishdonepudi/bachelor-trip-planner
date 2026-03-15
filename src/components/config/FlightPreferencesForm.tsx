@@ -56,8 +56,8 @@ export function FlightPreferencesForm({
 
   const updateTimeFilter = (
     leg: "outboundDeparture" | "outboundArrival" | "returnDeparture" | "returnArrival",
-    field: "time" | "plusMinus",
-    value: string | number
+    field: "time" | "plusMinus" | "includeNextDay",
+    value: string | number | boolean
   ) => {
     onEdited?.();
     onTimeFiltersChange({ ...timeFilters, [leg]: { ...timeFilters[leg], [field]: value } });
@@ -161,16 +161,43 @@ export function FlightPreferencesForm({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {([
-          { key: "outboundDeparture" as const, label: "Outbound Depart" },
-          { key: "outboundArrival" as const, label: "Outbound Arrive" },
-          { key: "returnDeparture" as const, label: "Return Depart" },
-          { key: "returnArrival" as const, label: "Return Arrive" },
-        ]).map(({ key, label }) => {
+          { key: "outboundDeparture" as const, label: "Outbound Depart", isArrival: false },
+          { key: "outboundArrival" as const, label: "Outbound Arrive", isArrival: true },
+          { key: "returnDeparture" as const, label: "Return Depart", isArrival: false },
+          { key: "returnArrival" as const, label: "Return Arrive", isArrival: true },
+        ]).map(({ key, label, isArrival }) => {
           const filter = timeFilters[key];
           const centerMin = parseInt(filter.time.split(":")[0], 10) * 60 + parseInt(filter.time.split(":")[1], 10);
-          const earliest = Math.max(0, centerMin - filter.plusMinus * 60);
-          const latest = Math.min(24 * 60 - 1, centerMin + filter.plusMinus * 60);
-          const fmtTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+          const rawEarliest = centerMin - filter.plusMinus * 60;
+          const rawLatest = centerMin + filter.plusMinus * 60;
+          const fmtTime = (m: number) => {
+            const clamped = ((m % (24 * 60)) + 24 * 60) % (24 * 60);
+            return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+          };
+
+          // Determine if the window extends past midnight
+          let earliest: number, latest: number;
+          let showNextDay = false;
+          let showPrevDay = false;
+
+          if (filter.includeNextDay) {
+            if (isArrival && rawLatest > 24 * 60 - 1) {
+              earliest = Math.max(0, rawEarliest);
+              latest = rawLatest % (24 * 60);
+              showNextDay = true;
+            } else if (!isArrival && rawEarliest < 0) {
+              earliest = (rawEarliest + 24 * 60) % (24 * 60);
+              latest = Math.min(24 * 60 - 1, rawLatest);
+              showPrevDay = true;
+            } else {
+              earliest = Math.max(0, rawEarliest);
+              latest = Math.min(24 * 60 - 1, rawLatest);
+            }
+          } else {
+            earliest = Math.max(0, rawEarliest);
+            latest = Math.min(24 * 60 - 1, rawLatest);
+          }
+
           return (
             <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
               <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
@@ -193,7 +220,33 @@ export function FlightPreferencesForm({
                   </button>
                 </div>
               </div>
-              <div className="text-[10px] text-[var(--text-3)] mt-1 font-mono tabular-nums">{fmtTime(earliest)} – {fmtTime(latest)}</div>
+              <div className="flex items-center justify-between mt-1.5">
+                <div className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">
+                  {showPrevDay && <span className="text-[var(--blue)]">-1d </span>}
+                  {fmtTime(earliest)} – {fmtTime(latest)}
+                  {showNextDay && <span className="text-[var(--blue)]"> +1d</span>}
+                </div>
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <span className="text-[10px] text-[var(--text-3)]">
+                    {isArrival ? "+1 day" : "-1 day"}
+                  </span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={!!filter.includeNextDay}
+                    onClick={() => updateTimeFilter(key, "includeNextDay", !filter.includeNextDay)}
+                    className={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
+                      filter.includeNextDay
+                        ? "bg-[var(--blue)]"
+                        : "bg-[var(--surface-3)] border border-[var(--border-default)]"
+                    }`}
+                  >
+                    <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                      filter.includeNextDay ? "translate-x-3" : "translate-x-0"
+                    }`} />
+                  </button>
+                </label>
+              </div>
             </div>
           );
         })}
