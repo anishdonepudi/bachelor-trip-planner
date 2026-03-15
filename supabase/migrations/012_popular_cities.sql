@@ -17,7 +17,7 @@ CREATE INDEX idx_city_selections_date ON city_selections(selected_at);
 
 ALTER TABLE city_selections ENABLE ROW LEVEL SECURITY;
 -- Only service role can read/write
-CREATE POLICY "Service write city_selections" ON city_selections FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Service write city_selections" ON city_selections FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
 -- Popular cities table (dynamic, refreshed daily)
 CREATE TABLE popular_cities (
@@ -46,8 +46,8 @@ ALTER TABLE popular_cities ENABLE ROW LEVEL SECURITY;
 -- Anyone can read popular cities
 CREATE POLICY "Public read popular_cities" ON popular_cities FOR SELECT USING (true);
 -- Only service role can write
-CREATE POLICY "Service write popular_cities" ON popular_cities FOR INSERT USING (auth.role() = 'service_role');
-CREATE POLICY "Service update popular_cities" ON popular_cities FOR UPDATE USING (auth.role() = 'service_role');
+CREATE POLICY "Service insert popular_cities" ON popular_cities FOR INSERT WITH CHECK (auth.role() = 'service_role');
+CREATE POLICY "Service update popular_cities" ON popular_cities FOR UPDATE USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 CREATE POLICY "Service delete popular_cities" ON popular_cities FOR DELETE USING (auth.role() = 'service_role');
 
 -- Seed data from static popular-cities.json
