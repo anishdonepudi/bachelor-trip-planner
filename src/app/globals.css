@@ -197,6 +197,88 @@
 .scroll-reveal-delay-2 { transition-delay: 200ms; }
 .scroll-reveal-delay-3 { transition-delay: 300ms; }
 .scroll-reveal-delay-4 { transition-delay: 400ms; }
+.scroll-reveal-delay-5 { transition-delay: 500ms; }
+.scroll-reveal-delay-6 { transition-delay: 600ms; }
+
+/* ── Scroll reveal variants ── */
+
+/* Scale up from 0.92 */
+.scroll-reveal-scale {
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 0.8s ease, transform 0.8s var(--ease-out);
+}
+.scroll-reveal-scale.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Perspective tilt on entry — card flips in from slight angle */
+.scroll-reveal-tilt {
+  opacity: 0;
+  transform: perspective(800px) rotateX(8deg) translateY(20px);
+  transition: opacity 0.7s ease, transform 0.9s var(--ease-spring);
+}
+.scroll-reveal-tilt.visible {
+  opacity: 1;
+  transform: perspective(800px) rotateX(0deg) translateY(0);
+}
+
+/* Slide in from left */
+.scroll-reveal-left {
+  opacity: 0;
+  transform: translateX(-40px);
+  transition: opacity 0.7s ease, transform 0.8s var(--ease-out);
+}
+.scroll-reveal-left.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Slide in from right */
+.scroll-reveal-right {
+  opacity: 0;
+  transform: translateX(40px);
+  transition: opacity 0.7s ease, transform 0.8s var(--ease-out);
+}
+.scroll-reveal-right.visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Rise and rotate — for hero mockup */
+.scroll-reveal-hero-mockup {
+  opacity: 0;
+  transform: perspective(1000px) rotateY(-8deg) rotateX(4deg) translateY(30px) scale(0.95);
+  transition: opacity 0.9s ease, transform 1.2s var(--ease-spring);
+}
+.scroll-reveal-hero-mockup.visible {
+  opacity: 1;
+  transform: perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(0) scale(1);
+}
+
+/* Float up with elastic bounce */
+.scroll-reveal-bounce {
+  opacity: 0;
+  transform: translateY(40px) scale(0.95);
+  transition: opacity 0.6s ease, transform 0.9s var(--ease-spring);
+}
+.scroll-reveal-bounce.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* Stats counter bar grow */
+.scroll-reveal-grow {
+  opacity: 0;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: opacity 0.4s ease, transform 0.8s var(--ease-out);
+}
+.scroll-reveal-grow.visible {
+  opacity: 1;
+  transform: scaleX(1);
+}
 
 @supports (animation-timeline: view()) {
   .scroll-reveal {
@@ -208,11 +290,43 @@
     from { opacity: 0; transform: translateY(24px); }
     to   { opacity: 1; transform: none; }
   }
+  .scroll-reveal-tilt {
+    animation: scroll-reveal-tilt-anim linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 35%;
+  }
+  @keyframes scroll-reveal-tilt-anim {
+    from { opacity: 0; transform: perspective(800px) rotateX(8deg) translateY(20px); }
+    to   { opacity: 1; transform: perspective(800px) rotateX(0deg) translateY(0); }
+  }
+  .scroll-reveal-scale {
+    animation: scroll-reveal-scale-anim linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 35%;
+  }
+  @keyframes scroll-reveal-scale-anim {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .scroll-reveal,
-  .scroll-reveal.visible {
+  .scroll-reveal.visible,
+  .scroll-reveal-scale,
+  .scroll-reveal-scale.visible,
+  .scroll-reveal-tilt,
+  .scroll-reveal-tilt.visible,
+  .scroll-reveal-left,
+  .scroll-reveal-left.visible,
+  .scroll-reveal-right,
+  .scroll-reveal-right.visible,
+  .scroll-reveal-hero-mockup,
+  .scroll-reveal-hero-mockup.visible,
+  .scroll-reveal-bounce,
+  .scroll-reveal-bounce.visible,
+  .scroll-reveal-grow,
+  .scroll-reveal-grow.visible {
     opacity: 1;
     transform: none;
     transition: none;

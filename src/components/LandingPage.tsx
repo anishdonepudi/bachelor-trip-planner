@@ -53,6 +53,88 @@ function useScrollReveal() {
 }
 
 // ────────────────────────────────────────────
+// useParallax hook — offset elements based on scroll
+// ────────────────────────────────────────────
+function useParallax(speed = 0.3) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) return;
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        if (ref.current) {
+          const rect = ref.current.getBoundingClientRect();
+          const center = rect.top + rect.height / 2;
+          const viewCenter = window.innerHeight / 2;
+          const offset = (center - viewCenter) * speed;
+          ref.current.style.transform = `translateY(${offset}px)`;
+        }
+        ticking = false;
+      });
+    };
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [speed]);
+
+  return ref;
+}
+
+// ────────────────────────────────────────────
+// useCountUp hook — animate numbers on visibility
+// ────────────────────────────────────────────
+function useCountUp(target: number, duration = 1500) {
+  const [count, setCount] = useState(0);
+  const [started, setStarted] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started) {
+          setStarted(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [started]);
+
+  useEffect(() => {
+    if (!started) return;
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced) {
+      setCount(target);
+      return;
+    }
+
+    const startTime = performance.now();
+    const animate = (now: number) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(eased * target));
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, [started, target, duration]);
+
+  return { ref, count };
+}
+
+// ────────────────────────────────────────────
 // Icon components
 // ────────────────────────────────────────────
 function PlaneIcon({ className = "w-5 h-5" }: { className?: string }) {
@@ -202,42 +284,42 @@ export function LandingPage() {
     {
       icon: <PlaneIcon className="w-6 h-6" />,
       title: "Smart Flight Search",
-      desc: "Compare prices across all origin cities for every weekend in your travel window.",
+      desc: "Prices from every origin city, every weekend in your window — compared side by side automatically.",
       color: "var(--blue)",
       colorSoft: "var(--blue-soft)",
     },
     {
       icon: <HomeIcon className="w-6 h-6" />,
       title: "Airbnb Integration",
-      desc: "Automatically find and compare stays at your destination, matched to each weekend.",
+      desc: "Stays matched to each weekend with ratings, reviews, and per-person pricing built in.",
       color: "var(--teal)",
       colorSoft: "var(--teal-soft)",
     },
     {
       icon: <CurrencyIcon className="w-6 h-6" />,
       title: "Group Cost Splitting",
-      desc: "See per-person costs across cities. Everyone knows exactly what they pay.",
+      desc: "Everyone flying from different cities? See exactly what each person pays — flights and stay combined.",
       color: "var(--gold)",
       colorSoft: "var(--gold-soft)",
     },
     {
       icon: <TrophyIcon className="w-6 h-6" />,
       title: "Weekend Rankings",
-      desc: "Five scoring algorithms rank weekends from cheapest to fairest for your group.",
+      desc: "Five algorithms rank weekends by total cost, per-person cost, fairness, value, and more.",
       color: "var(--orange)",
       colorSoft: "var(--orange-soft)",
     },
     {
       icon: <BoltIcon className="w-6 h-6" />,
       title: "Real-time Scraping",
-      desc: "Live price data from Google Flights and Airbnb. Always up-to-date costs.",
+      desc: "Live data from Google Flights and Airbnb. Prices update so you always see what's current.",
       color: "var(--red)",
       colorSoft: "var(--red-soft)",
     },
     {
       icon: <SparklesIcon className="w-6 h-6" />,
       title: "Travel Insights",
-      desc: "AI-powered destination insights with weather, events, and tourism data.",
+      desc: "Weather forecasts, local events, and tourism data for your destination — all in one place.",
       color: "var(--rose)",
       colorSoft: "var(--rose-soft)",
     },
@@ -248,28 +330,26 @@ export function LandingPage() {
       num: "01",
       icon: <CalendarIcon className="w-7 h-7" />,
       title: "Configure Your Trip",
-      desc: "Set your destination, origin cities, travel dates, and group size. The wizard walks you through it.",
+      desc: "Pick your destination, add everyone's origin city, set your travel window, and let the wizard handle the rest.",
     },
     {
       num: "02",
       icon: <GlobeIcon className="w-7 h-7" />,
       title: "We Find the Best Deals",
-      desc: "Automated scraping pulls flight prices and Airbnb listings for every weekend in your window.",
+      desc: "Automated scraping compares flight prices and Airbnb listings for every weekend across all your cities.",
     },
     {
       num: "03",
       icon: <UsersIcon className="w-7 h-7" />,
-      title: "Vote & Book Together",
-      desc: "Share your trip with your group. Compare weekends, vote on the best one, and book together.",
+      title: "Pick the Best Weekend",
+      desc: "Share one link with your group. Everyone sees the same ranked weekends with per-person costs — no back-and-forth.",
     },
   ];
 
-  const stats = [
-    { value: "50+", label: "Destinations" },
-    { value: "Smart", label: "Algorithms" },
-    { value: "Real-time", label: "Prices" },
-    { value: "Group", label: "Coordination" },
-  ];
+  const destCounter = useCountUp(50, 1200);
+  const algoCounter = useCountUp(5, 1000);
+  const weekendCounter = useCountUp(24, 1400);
+  const cityCounter = useCountUp(100, 1600);
 
   return (
     <div className="min-h-screen bg-[var(--surface-0)] text-[var(--text-1)]">
@@ -340,30 +420,31 @@ export function LandingPage() {
           Section 2: Hero
           ═══════════════════════════════════════════ */}
       <section className="relative overflow-hidden">
-        {/* Background gradient orbs */}
+        {/* Background gradient orbs — parallax */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-[var(--blue)] opacity-[0.04] blur-3xl" />
-          <div className="absolute top-48 -left-24 w-72 h-72 rounded-full bg-[var(--teal)] opacity-[0.03] blur-3xl" />
+          <div ref={useParallax(0.15)} className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-[var(--blue)] opacity-[0.06] blur-3xl" />
+          <div ref={useParallax(-0.1)} className="absolute top-48 -left-24 w-72 h-72 rounded-full bg-[var(--teal)] opacity-[0.05] blur-3xl" />
+          <div ref={useParallax(0.2)} className="absolute top-1/2 left-1/2 w-48 h-48 rounded-full bg-[var(--gold)] opacity-[0.03] blur-3xl" />
         </div>
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24 lg:py-32">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             {/* Left: Copy */}
             <div>
-              <div ref={reveal} className="scroll-reveal">
+              <div ref={reveal} className="scroll-reveal-left">
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--blue-soft)] border border-[var(--blue-border)] mb-6">
                   <SparklesIcon className="w-3.5 h-3.5 text-[var(--blue)]" />
-                  <span className="text-xs font-medium text-[var(--blue)]">Smart Group Trip Planning</span>
+                  <span className="text-xs font-medium text-[var(--blue)]">The Smartest Way to Plan Group Trips</span>
                 </div>
                 <h1 className="text-3xl sm:text-4xl lg:text-5xl font-heading font-bold tracking-tight leading-[1.1] mb-5">
-                  Plan the Perfect{" "}
+                  Group Trips,{" "}
                   <span className="bg-gradient-to-r from-[var(--blue)] to-[var(--teal)] bg-clip-text text-transparent">
-                    Bachelor Trip
+                    Without the Chaos
                   </span>
                 </h1>
                 <p className="text-base sm:text-lg text-[var(--text-2)] leading-relaxed mb-8 max-w-lg">
                   Coordinate flights, stays, and costs across multiple cities. Find the cheapest weekend
-                  for your entire group in minutes, not hours.
+                  for your entire group in minutes — no more spreadsheets, no more endless group chats.
                 </p>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                   <a
@@ -382,13 +463,13 @@ export function LandingPage() {
                   </a>
                 </div>
                 <p className="mt-6 text-xs text-[var(--text-3)]">
-                  Join 1,000+ groups who planned their trips with us
+                  Bachelor parties, friend getaways, family reunions — any group, any destination
                 </p>
               </div>
             </div>
 
             {/* Right: Product mockup */}
-            <div ref={reveal} className="scroll-reveal scroll-reveal-delay-2 hidden lg:block">
+            <div ref={reveal} className="scroll-reveal-hero-mockup hidden lg:block">
               <div className="relative rounded-xl border border-[var(--border-default)] bg-[var(--surface-1)] p-1 shadow-2xl shadow-black/30">
                 {/* Fake browser chrome */}
                 <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[var(--border-default)]">
@@ -540,7 +621,7 @@ export function LandingPage() {
               How It Works
             </h2>
             <p className="text-sm sm:text-base text-[var(--text-2)] max-w-md mx-auto">
-              Three simple steps to the perfect group trip
+              From &ldquo;where should we go?&rdquo; to &ldquo;we&rsquo;re booked&rdquo; in three steps
             </p>
           </div>
 
@@ -549,7 +630,7 @@ export function LandingPage() {
               <div
                 key={step.num}
                 ref={reveal}
-                className={`scroll-reveal scroll-reveal-delay-${i + 1} relative`}
+                className={`scroll-reveal-tilt scroll-reveal-delay-${i + 1} relative`}
               >
                 {/* Connector line (hidden on mobile, hidden on last) */}
                 {i < steps.length - 1 && (
@@ -583,7 +664,7 @@ export function LandingPage() {
               Everything You Need
             </h2>
             <p className="text-sm sm:text-base text-[var(--text-2)] max-w-md mx-auto">
-              Powerful tools to plan, compare, and book the best trip for your group
+              The tools that replace your spreadsheet, your group chat, and hours of tab-switching
             </p>
           </div>
 
@@ -592,7 +673,7 @@ export function LandingPage() {
               <div
                 key={feature.title}
                 ref={reveal}
-                className={`scroll-reveal scroll-reveal-delay-${(i % 4) + 1} glow p-5 rounded-xl bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-all duration-200`}
+                className={`scroll-reveal-bounce scroll-reveal-delay-${(i % 3) + 1} glow p-5 rounded-xl bg-[var(--surface-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] transition-all duration-200 hover:scale-[1.03] hover:-translate-y-1`}
               >
                 <div
                   className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
@@ -619,14 +700,14 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
           <div ref={reveal} className="scroll-reveal text-center mb-12 sm:mb-16">
             <h2 className="text-2xl sm:text-3xl font-heading font-bold tracking-tight mb-3">
-              Your Trip Dashboard
+              One Dashboard for the Whole Group
             </h2>
             <p className="text-sm sm:text-base text-[var(--text-2)] max-w-md mx-auto">
-              A complete overview of flights, stays, and rankings at a glance
+              Flights, stays, per-person costs, and weekend rankings — everyone sees the same data
             </p>
           </div>
 
-          <div ref={reveal} className="scroll-reveal">
+          <div ref={reveal} className="scroll-reveal-scale">
             <div className="relative rounded-2xl border border-[var(--border-default)] bg-gradient-to-br from-[var(--surface-1)] to-[var(--surface-0)] p-6 sm:p-8 overflow-hidden">
               {/* Glow effects */}
               <div className="absolute top-0 left-1/4 w-64 h-64 bg-[var(--blue)] opacity-[0.03] blur-3xl pointer-events-none" />
@@ -709,9 +790,17 @@ export function LandingPage() {
           ═══════════════════════════════════════════ */}
       <section className="border-t border-[var(--border-default)] bg-[var(--surface-1)]/30">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-          <div ref={reveal} className="scroll-reveal grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-8">
-            {stats.map((stat, i) => (
-              <div key={stat.label} className={`scroll-reveal-delay-${i + 1} text-center`}>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-8">
+            {[
+              { ref: destCounter.ref, value: `${destCounter.count}+`, label: "Destinations", icon: <GlobeIcon className="w-5 h-5" /> },
+              { ref: algoCounter.ref, value: `${algoCounter.count}`, label: "Scoring Algorithms", icon: <SparklesIcon className="w-5 h-5" /> },
+              { ref: weekendCounter.ref, value: `${weekendCounter.count}+`, label: "Weekends Analyzed", icon: <CalendarIcon className="w-5 h-5" /> },
+              { ref: cityCounter.ref, value: `${cityCounter.count}+`, label: "Cities Supported", icon: <PlaneIcon className="w-5 h-5" /> },
+            ].map((stat) => (
+              <div key={stat.label} ref={stat.ref} className="text-center">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] mb-3">
+                  {stat.icon}
+                </div>
                 <div className="text-2xl sm:text-3xl font-heading font-bold bg-gradient-to-r from-[var(--blue)] to-[var(--teal)] bg-clip-text text-transparent mb-1">
                   {stat.value}
                 </div>
@@ -729,9 +818,9 @@ export function LandingPage() {
         <section className="border-t border-[var(--border-default)]">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
             <div ref={reveal} className="scroll-reveal max-w-lg mx-auto text-center">
-              <h2 className="text-xl sm:text-2xl font-heading font-bold mb-2">Have a Trip Code?</h2>
+              <h2 className="text-xl sm:text-2xl font-heading font-bold mb-2">Invited to a Trip?</h2>
               <p className="text-sm text-[var(--text-2)] mb-6">
-                Paste your trip URL or ID to join an existing trip
+                Paste the link or trip ID your group organizer shared with you
               </p>
               <div className="flex gap-2">
                 <input
@@ -760,17 +849,17 @@ export function LandingPage() {
           ═══════════════════════════════════════════ */}
       <section className="border-t border-[var(--border-default)]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-          <div ref={reveal} className="scroll-reveal">
+          <div ref={reveal} className="scroll-reveal-scale">
             <div className="relative rounded-2xl overflow-hidden p-8 sm:p-12 text-center bg-gradient-to-br from-[var(--blue)] via-[oklch(0.55_0.18_240)] to-[var(--teal)]">
               {/* Noise texture overlay */}
               <div className="absolute inset-0 opacity-10 bg-[url(&quot;data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48ZmlsdGVyIGlkPSJuIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iMC44IiBudW1PY3RhdmVzPSI0IiBzdGl0Y2hUaWxlcz0ic3RpdGNoIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSI0MDAiIGZpbHRlcj0idXJsKCNuKSIgb3BhY2l0eT0iMC4zIi8+PC9zdmc+&quot;)]" />
 
               <div className="relative">
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-heading font-bold text-white mb-3">
-                  Ready to Plan Your Trip?
+                  Stop Planning in Group Chats
                 </h2>
                 <p className="text-sm sm:text-base text-white/80 max-w-md mx-auto mb-8">
-                  Set up your trip in minutes. Invite your group. Find the best weekend together.
+                  Set up your trip in minutes. Share one link. Everyone sees flights, stays, and costs — ranked by what works best for the group.
                 </p>
                 <a
                   href="/trip/new"
@@ -798,7 +887,7 @@ export function LandingPage() {
               <span className="text-sm font-heading font-bold">TripSync</span>
             </div>
             <p className="text-xs text-[var(--text-3)]">
-              Built for bachelor parties. Plan smarter, travel together.
+              Group trips, simplified. Plan smarter, travel together.
             </p>
           </div>
         </div>
