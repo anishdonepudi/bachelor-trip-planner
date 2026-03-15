@@ -18,6 +18,9 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
   const [isOpen, setIsOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const displayCache = useRef<Record<string, string>>({});
+
+  const getDisplay = (city: string) => displayCache.current[city] ?? getCityLocation(city);
 
   const { suggestions, loading } = useCitySearch(query);
 
@@ -26,13 +29,13 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
     (s) => !excludeCities.includes(s.name)
   );
 
-  useEffect(() => { setQuery(getCityLocation(value)); }, [value]);
+  useEffect(() => { setQuery(getDisplay(value)); }, [value]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setIsOpen(false);
-        if (query !== getCityLocation(value)) setQuery(getCityLocation(value));
+        if (query !== getDisplay(value)) setQuery(getDisplay(value));
       }
     };
     document.addEventListener("mousedown", handler);
@@ -49,7 +52,9 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
   };
 
   const selectCity = async (suggestion: CitySuggestion) => {
-    setQuery(formatFullLocation(suggestion));
+    const display = formatFullLocation(suggestion);
+    displayCache.current[suggestion.name] = display;
+    setQuery(display);
     setIsOpen(false);
 
     // If it's a local city with known airports, use those directly
