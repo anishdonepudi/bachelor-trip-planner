@@ -342,7 +342,7 @@ export function TripCreationWizard() {
     <div className="min-h-screen bg-[var(--surface-0)] text-[var(--text-1)]">
       {/* Header */}
       <header className="glass border-b border-[var(--border-default)] sticky top-0 z-50">
-        <div className={`${step === 3 ? "max-w-4xl" : "max-w-lg"} mx-auto px-4 h-12 flex items-center justify-between gap-3 transition-all duration-300`}>
+        <div className="max-w-2xl mx-auto px-4 h-12 flex items-center justify-between gap-3 transition-all duration-300">
           <div className="flex items-center gap-3">
             <a href="/" className="text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors duration-150">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -363,7 +363,7 @@ export function TripCreationWizard() {
         />
       </div>
 
-      <main className={`${step === 3 ? "max-w-4xl" : "max-w-lg"} mx-auto px-4 py-6 space-y-6 transition-all duration-300`}>
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-6 transition-all duration-300 relative">
         <div>
           <h2 className="text-lg font-heading font-semibold">{stepTitles[step - 1]}</h2>
           <p className="text-sm text-[var(--text-2)] mt-0.5">
@@ -478,8 +478,7 @@ export function TripCreationWizard() {
 
         {/* Step 3: Trip Dates */}
         {step === 3 && (
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-            {/* Left column: main content */}
+          <div className="relative">
             <div className="space-y-4">
               {/* Trip Duration — first */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -747,9 +746,9 @@ export function TripCreationWizard() {
               </>)}
             </div>
 
-            {/* Right column: sticky side panel for month details (desktop only) */}
-            <div className="hidden lg:block">
-              <div className="sticky top-16">
+            {/* Side panel: positioned to the right of centered content (desktop only) */}
+            <div className="hidden lg:block absolute right-0 top-0 translate-x-[85%] w-[320px] z-10">
+              <div className="sticky top-20">
                 <div
                   className={`transition-all duration-200 ${
                     isGridHovered && hoveredInsightMonth

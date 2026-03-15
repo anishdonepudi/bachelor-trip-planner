@@ -217,16 +217,16 @@ export function MonthDetailPanel({ month: m, hasWeatherData, unitSystem, lat, on
 
   return (
     <div className="rounded-lg border border-[var(--border-hover)] bg-[var(--surface-2)] p-3">
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
+      {/* Header */}
+      <div className="mb-2">
+        <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-heading font-semibold text-[var(--text-1)]">{m.label} {m.year}</span>
           <span className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded ${colors.bg} ${colors.text} border ${colors.border}`}>
             {m.recommendation}
           </span>
         </div>
         {reason && (
-          <span className="text-[10px] text-[var(--text-3)] italic">{reason}</span>
+          <p className="text-[10px] text-[var(--text-3)] italic leading-snug">{reason}</p>
         )}
       </div>
 
