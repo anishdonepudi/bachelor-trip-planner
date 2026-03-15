@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration } from "@/lib/types";
-import { CITY_AIRPORTS } from "@/lib/airports";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
@@ -220,8 +219,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       updated[index] = {
         ...updated[index],
         city: cityName,
-        primaryAirports: airports?.primary ?? CITY_AIRPORTS[cityName]?.primary ?? [],
-        nearbyAirports: airports?.nearby ?? CITY_AIRPORTS[cityName]?.nearby ?? [],
+        primaryAirports: airports?.primary ?? [],
+        nearbyAirports: airports?.nearby ?? [],
       };
     } else if (field === "people") {
       updated[index] = { ...updated[index], people: value as number };

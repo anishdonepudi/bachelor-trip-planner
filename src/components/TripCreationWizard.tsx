@@ -3,7 +3,6 @@
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration } from "@/lib/types";
-import { CITY_AIRPORTS } from "@/lib/airports";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
@@ -212,8 +211,8 @@ export function TripCreationWizard() {
       updated[index] = {
         ...updated[index],
         city: cityName,
-        primaryAirports: airports?.primary ?? CITY_AIRPORTS[cityName]?.primary ?? [],
-        nearbyAirports: airports?.nearby ?? CITY_AIRPORTS[cityName]?.nearby ?? [],
+        primaryAirports: airports?.primary ?? [],
+        nearbyAirports: airports?.nearby ?? [],
       };
     } else if (field === "people") {
       updated[index] = { ...updated[index], people: value as number };

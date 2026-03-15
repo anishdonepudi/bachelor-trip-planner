@@ -1,8 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CITY_AIRPORTS, getCityLocation } from "@/lib/airports";
 import { useCitySearch, CitySuggestion } from "@/lib/hooks/use-city-search";
+
+// ── Client-side airport lookup cache (session-scoped) ──
+const airportCache = new Map<string, { primary: string[]; nearby: string[] }>();
+
+function getAirportCacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(2)},${lng.toFixed(2)}`;
+}
 
 interface CitySelectProps {
   value: string;
@@ -14,13 +20,13 @@ interface CitySelectProps {
 }
 
 export function CitySelect({ value, onChange, excludeCities = [], placeholder = "Search city...", currentAirports, onCoordinates }: CitySelectProps) {
-  const [query, setQuery] = useState(getCityLocation(value));
+  const [query, setQuery] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const displayCache = useRef<Record<string, string>>({});
 
-  const getDisplay = (city: string) => displayCache.current[city] ?? getCityLocation(city);
+  const getDisplay = (city: string) => displayCache.current[city] ?? city;
 
   const { suggestions, loading } = useCitySearch(query);
 
@@ -43,7 +49,6 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
   }, [query, value]);
 
   const formatFullLocation = (s: CitySuggestion): string => {
-    if (s.isLocal) return getCityLocation(s.name);
     const parts = [s.name];
     if (s.state) parts.push(s.state);
     if (s.countryCode) parts.push(s.countryCode);
@@ -57,31 +62,18 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
     setQuery(display);
     setIsOpen(false);
 
-    // If it's a local city with known airports, use those directly
-    if (suggestion.isLocal && CITY_AIRPORTS[suggestion.name]) {
-      const apt = CITY_AIRPORTS[suggestion.name];
-      onChange(suggestion.name, { primary: apt.primary, nearby: apt.nearby });
-      // Resolve coordinates in background for travel insights
-      if (onCoordinates) {
-        if (suggestion.lat != null && suggestion.lng != null) {
-          onCoordinates(suggestion.lat, suggestion.lng, { countryCode: suggestion.countryCode, country: suggestion.country, state: suggestion.state });
-        } else {
-          fetch(`/api/cities/search?q=${encodeURIComponent(suggestion.name)}`)
-            .then(r => r.ok ? r.json() : [])
-            .then((results: { lat?: number; lng?: number; countryCode?: string; country?: string; state?: string }[]) => {
-              if (results[0]?.lat != null && results[0]?.lng != null) {
-                onCoordinates(results[0].lat, results[0].lng, { countryCode: results[0].countryCode, country: results[0].country, state: results[0].state });
-              }
-            })
-            .catch(() => {});
-        }
-      }
-      return;
-    }
-
-    // For GeoNames results, fetch nearest airports
+    // All cities resolve airports via the API using lat/lng
     if (suggestion.lat != null && suggestion.lng != null) {
       onCoordinates?.(suggestion.lat, suggestion.lng, { countryCode: suggestion.countryCode, country: suggestion.country, state: suggestion.state });
+
+      const cacheKey = getAirportCacheKey(suggestion.lat, suggestion.lng);
+      const cached = airportCache.get(cacheKey);
+
+      if (cached) {
+        onChange(suggestion.name, cached);
+        return;
+      }
+
       setResolving(true);
       try {
         const res = await fetch(
@@ -89,10 +81,12 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
         );
         if (res.ok) {
           const data = await res.json();
-          onChange(suggestion.name, {
+          const airports = {
             primary: (data.primary ?? []).map((a: { iata: string }) => a.iata),
             nearby: (data.nearby ?? []).map((a: { iata: string }) => a.iata),
-          });
+          };
+          airportCache.set(cacheKey, airports);
+          onChange(suggestion.name, airports);
         } else {
           onChange(suggestion.name, { primary: [], nearby: [] });
         }
@@ -102,19 +96,16 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
         setResolving(false);
       }
     } else {
-      onChange(suggestion.name);
+      // No lat/lng available — pass empty airports
+      onChange(suggestion.name, { primary: [], nearby: [] });
     }
   };
 
-  // Get airports for display (from props, static map, or none)
-  const airports = currentAirports ?? CITY_AIRPORTS[value];
+  // Get airports for display (from props only)
+  const airports = currentAirports;
 
   // Format subtitle for a suggestion
   const formatSubtitle = (s: CitySuggestion) => {
-    if (s.isLocal && CITY_AIRPORTS[s.name]) {
-      const apt = CITY_AIRPORTS[s.name];
-      return [...apt.primary, ...apt.nearby].join(", ");
-    }
     const parts: string[] = [];
     if (s.state) parts.push(s.state);
     if (s.country && s.country !== "United States") parts.push(s.country);

@@ -1,7 +1,6 @@
 "use client";
 
 import { CityConfig } from "@/lib/types";
-import { CITY_AIRPORTS } from "@/lib/airports";
 import { CitySelect } from "../CitySelect";
 
 interface TravelGroupFormProps {
@@ -31,8 +30,8 @@ export function TravelGroupForm({ cities, onCitiesChange, onEdited }: TravelGrou
       updated[index] = {
         ...updated[index],
         city: cityName,
-        primaryAirports: airports?.primary ?? CITY_AIRPORTS[cityName]?.primary ?? [],
-        nearbyAirports: airports?.nearby ?? CITY_AIRPORTS[cityName]?.nearby ?? [],
+        primaryAirports: airports?.primary ?? [],
+        nearbyAirports: airports?.nearby ?? [],
       };
     } else if (field === "people") {
       updated[index] = { ...updated[index], people: value as number };

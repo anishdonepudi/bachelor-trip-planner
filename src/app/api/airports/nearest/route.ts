@@ -19,6 +19,34 @@ interface AirportResult {
   distanceKm: number;
 }
 
+// ── In-memory cache keyed by rounded lat/lng (~11km grid) ──
+interface CacheEntry {
+  data: { primary: AirportResult[]; nearby: AirportResult[] };
+  timestamp: number;
+}
+
+const cache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const CACHE_MAX_ENTRIES = 500;
+
+function getCacheKey(lat: number, lng: number): string {
+  return `${lat.toFixed(1)},${lng.toFixed(1)}`;
+}
+
+function evictStaleEntries() {
+  if (cache.size <= CACHE_MAX_ENTRIES) return;
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (now - entry.timestamp > CACHE_TTL_MS) cache.delete(key);
+  }
+  // If still over limit, remove oldest entries
+  if (cache.size > CACHE_MAX_ENTRIES) {
+    const entries = [...cache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toRemove = entries.slice(0, cache.size - CACHE_MAX_ENTRIES);
+    for (const [key] of toRemove) cache.delete(key);
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const lat = parseFloat(searchParams.get("lat") ?? "");
@@ -29,6 +57,13 @@ export async function GET(request: NextRequest) {
       { error: "lat and lng query parameters are required" },
       { status: 400 }
     );
+  }
+
+  // Check cache
+  const cacheKey = getCacheKey(lat, lng);
+  const cached = cache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json(cached.data);
   }
 
   // Calculate distances for all airports
@@ -69,8 +104,14 @@ export async function GET(request: NextRequest) {
     distanceKm: Math.round(a.distanceKm),
   });
 
-  return NextResponse.json({
+  const result = {
     primary: primary.map(format),
     nearby: nearby.map(format),
-  });
+  };
+
+  // Store in cache
+  cache.set(cacheKey, { data: result, timestamp: Date.now() });
+  evictStaleEntries();
+
+  return NextResponse.json(result);
 }
