@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { WeekendScore, FlightCategory, BudgetTier, RankChangeInfo, CityStats } from "@/lib/types";
-import { FLIGHT_CATEGORIES, TOTAL_PEOPLE } from "@/lib/constants";
+import { FLIGHT_CATEGORIES } from "@/lib/constants";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
 import { ScoreBadge } from "./ScoreBadge";
 import { FlightSummary } from "./FlightSummary";
@@ -191,6 +191,8 @@ interface WeekendCardProps {
   rankChangeInfo?: RankChangeInfo;
   rankChangeSince?: string | null;
   onCollapsedHeight?: (height: number) => void;
+  totalPeople: number;
+  destinationCity: string;
 }
 
 type DetailTab = "flights" | "stays" | "costs";
@@ -239,7 +241,7 @@ function DeltaSpan({ value, lowerIsBetter = false, prefix = "$" }: { value: numb
   );
 }
 
-export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorityCity, rankChangeInfo, rankChangeSince, onCollapsedHeight }: WeekendCardProps) {
+export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorityCity, rankChangeInfo, rankChangeSince, onCollapsedHeight, totalPeople, destinationCity }: WeekendCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<DetailTab>("flights");
   const [showScoreSheet, setShowScoreSheet] = useState(false);
@@ -264,7 +266,7 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
   const returnDay = new Date(dateRange.returnDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" });
 
   const villaCount = weekend.airbnbListings.filter((l) => l.budget_tier === budgetTier).length;
-  const avgPerPerson = totalGroupCost !== Infinity ? Math.round(totalGroupCost / TOTAL_PEOPLE) : null;
+  const avgPerPerson = totalPeople > 0 && totalGroupCost !== Infinity ? Math.round(totalGroupCost / totalPeople) : null;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -362,7 +364,7 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
       >
         {/* Desktop layout - single compact row */}
         <div className="hidden sm:flex items-center gap-4 px-4 py-3">
-          <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} />
+          <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} totalPeople={totalPeople} />
 
           <div className="min-w-0">
             <h3 className="text-sm font-heading font-semibold text-[var(--text-1)]">
@@ -452,6 +454,8 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
                 departDate={dateRange.departDate}
                 returnDate={dateRange.returnDate}
                 selectedAirbnbUrl={weekend.selectedAirbnbUrl}
+                destinationCity={destinationCity}
+                totalPeople={totalPeople}
               />
             )}
             {activeTab === "costs" && (

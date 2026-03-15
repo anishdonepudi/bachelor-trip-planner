@@ -24,7 +24,7 @@ import {
   fetchPreviousWeekendDataFromDB,
 } from "@/lib/rank-history";
 import { computeRankChanges } from "@/lib/rank-changes";
-import { DEFAULT_CITIES } from "@/config/default-config";
+
 import { migrateTimeFilters } from "@/lib/migrate-time-filters";
 import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
@@ -44,7 +44,7 @@ import { RankChangeIndicator } from "./ScoreBadge";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface DashboardProps {
-  tripId?: string;
+  tripId: string;
 }
 
 export function Dashboard({ tripId }: DashboardProps) {
@@ -53,15 +53,15 @@ export function Dashboard({ tripId }: DashboardProps) {
   const [tripName, setTripName] = useState<string | null>(null);
   // ── State ──
   const [flightCategory, setFlightCategory] = useState<FlightCategory>(DEFAULT_FLIGHT_CATEGORIES[0].id);
-  const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
+  const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>([]);
   const [flightTimeFilters, setFlightTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
-  const [cities, setCities] = useState<CityConfig[]>(DEFAULT_CITIES);
+  const [cities, setCities] = useState<CityConfig[]>([]);
   const [priorityCity, setPriorityCity] = useState("all");
   const [scoringAlgorithm, setScoringAlgorithm] = useState<ScoringAlgorithm>("zscore");
   const [excludedDates, setExcludedDates] = useState<string[]>([]);
-  const [destinationAirport, setDestinationAirport] = useState("CUN");
-  const [destinationCity, setDestinationCity] = useState("Tulum, Quintana Roo, Mexico");
+  const [destinationAirport, setDestinationAirport] = useState("");
+  const [destinationCity, setDestinationCity] = useState("");
   const [selectedMonths, setSelectedMonths] = useState<SelectedMonth[]>([]);
   const [tripDuration, setTripDuration] = useState<TripDuration>(DEFAULT_TRIP_DURATION);
   const [configChanged, setConfigChanged] = useState(false);
@@ -76,7 +76,7 @@ export function Dashboard({ tripId }: DashboardProps) {
   const initialLastUpdated = useRef<string | null | undefined>(undefined);
 
   // ── API base path ──
-  const apiBase = tripId ? `/api/trips/${tripId}` : "/api";
+  const apiBase = `/api/trips/${tripId}`;
 
   // ── Data fetching ──
   const { data: weekendData, isLoading: weekendsLoading, mutate: mutateWeekends } = useSWR<WeekendData>(
@@ -180,7 +180,7 @@ export function Dashboard({ tripId }: DashboardProps) {
     // and calls onDismissed when the transition completes
   }, [scrapeData?.lastFlightUpdate, mutateWeekends, mutateScrape]);
 
-  const configUrl = tripId ? `/api/trips/${tripId}` : "/api/config";
+  const configUrl = `/api/trips/${tripId}`;
   const { data: configData, mutate: mutateConfig } = useSWR(configUrl, fetcher, { revalidateOnFocus: false });
 
   useEffect(() => {
@@ -207,10 +207,10 @@ export function Dashboard({ tripId }: DashboardProps) {
           })
           .catch(() => setCanEdit(false));
       }
-    } else if (!tripId) {
-      setCanEdit(true); // Legacy mode — always editable
     }
   }, [configData, tripId, user]);
+
+  const totalPeople = useMemo(() => cities.reduce((s, c) => s + c.people, 0), [cities]);
 
   // ── Derived data ──
   const allDateRanges = useMemo(() => {
@@ -364,24 +364,21 @@ export function Dashboard({ tripId }: DashboardProps) {
         <div className="max-w-5xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
           {/* Left: brand */}
           <div className="flex items-center gap-3">
-            {tripId && (
               <a href="/" className="text-[var(--text-3)] hover:text-[var(--text-1)] transition-colors duration-150 mr-1">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
               </a>
-            )}
             <h1 className="text-sm font-heading font-bold tracking-tight text-[var(--text-1)]">
               {tripName || "TripSync"}
             </h1>
             <span className="text-[11px] text-[var(--text-3)] font-mono tabular-nums hidden sm:inline">
-              {cities.filter(c => c.city).length} cities &middot; {cities.reduce((s, c) => s + c.people, 0)} people
+              {cities.filter(c => c.city).length} cities &middot; {totalPeople} people
             </span>
           </div>
 
           {/* Right: actions */}
           <div className="flex items-center gap-1.5">
-            {tripId && (
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(window.location.href);
@@ -394,7 +391,6 @@ export function Dashboard({ tripId }: DashboardProps) {
                 </svg>
                 <span className="hidden sm:inline">Share</span>
               </button>
-            )}
             <div className="hidden md:block">
               <JobsPanel runs={scrapeData?.runs ?? []} />
             </div>
@@ -564,6 +560,7 @@ export function Dashboard({ tripId }: DashboardProps) {
                 activeBudgetTier={budgetTier}
                 previousWeekendData={previousWeekendData}
                 rankChangeSince={rankChangeSince}
+                totalPeople={totalPeople}
                 onSelectCombo={(fc, bt) => {
                   setFlightCategory(fc);
                   setBudgetTier(bt);
@@ -602,6 +599,8 @@ export function Dashboard({ tripId }: DashboardProps) {
                         rankChangeInfo={rankChangeMap[weekend.dateRange.id]}
                         rankChangeSince={rankChangeSince}
                         onCollapsedHeight={i === 0 ? setCollapsedCardHeight : undefined}
+                        totalPeople={totalPeople}
+                        destinationCity={destinationCity}
                       />
                     </React.Fragment>
                   ))}

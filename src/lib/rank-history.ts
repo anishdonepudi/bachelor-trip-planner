@@ -1,11 +1,11 @@
 import { WeekendData } from "./types";
 
-function storageKey(tripId?: string) {
-  return tripId ? `tripsync_previous_weekend_data_${tripId}` : "tripsync_previous_weekend_data";
+function storageKey(tripId: string) {
+  return `tripsync_previous_weekend_data_${tripId}`;
 }
 
-function timestampKey(tripId?: string) {
-  return tripId ? `tripsync_previous_data_timestamp_${tripId}` : "tripsync_previous_data_timestamp";
+function timestampKey(tripId: string) {
+  return `tripsync_previous_data_timestamp_${tripId}`;
 }
 
 /**
@@ -66,7 +66,7 @@ export function minimizeForScoring(data: WeekendData): WeekendData {
   return { flights, flightOptions, airbnbListings } as WeekendData;
 }
 
-export function savePreviousWeekendData(data: WeekendData, tripId?: string): void {
+export function savePreviousWeekendData(data: WeekendData, tripId: string): void {
   try {
     const minimal = minimizeForScoring(data);
     const json = JSON.stringify(minimal);
@@ -77,7 +77,7 @@ export function savePreviousWeekendData(data: WeekendData, tripId?: string): voi
   }
 }
 
-export function loadPreviousWeekendData(tripId?: string): WeekendData | null {
+export function loadPreviousWeekendData(tripId: string): WeekendData | null {
   try {
     const raw = localStorage.getItem(storageKey(tripId));
     if (!raw) return null;
@@ -87,7 +87,7 @@ export function loadPreviousWeekendData(tripId?: string): WeekendData | null {
   }
 }
 
-export function getPreviousDataTimestamp(tripId?: string): string | null {
+export function getPreviousDataTimestamp(tripId: string): string | null {
   try {
     return localStorage.getItem(timestampKey(tripId));
   } catch {
@@ -95,7 +95,7 @@ export function getPreviousDataTimestamp(tripId?: string): string | null {
   }
 }
 
-export function clearPreviousWeekendData(tripId?: string): void {
+export function clearPreviousWeekendData(tripId: string): void {
   try {
     localStorage.removeItem(storageKey(tripId));
     localStorage.removeItem(timestampKey(tripId));
@@ -138,14 +138,12 @@ export function isLocalStorageStale(
  * Fetch previous weekend data from the DB snapshot (fallback when localStorage is stale).
  * Returns the snapshot and its timestamp, or null if unavailable.
  */
-export async function fetchPreviousWeekendDataFromDB(tripId?: string): Promise<{
+export async function fetchPreviousWeekendDataFromDB(tripId: string): Promise<{
   data: WeekendData;
   timestamp: string;
 } | null> {
   try {
-    const url = tripId
-      ? `/api/trips/${tripId}/weekends/previous`
-      : "/api/weekends/previous";
+    const url = `/api/trips/${tripId}/weekends/previous`;
     const res = await fetch(url);
     if (!res.ok) return null;
 

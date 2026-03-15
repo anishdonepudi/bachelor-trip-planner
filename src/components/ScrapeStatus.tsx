@@ -6,7 +6,7 @@ interface ScrapeStatusProps {
   lastUpdated: string | null;
   isRunning?: boolean;
   onTriggered?: () => void;
-  tripId?: string;
+  tripId: string;
 }
 
 export function ScrapeStatus({ lastUpdated, isRunning, onTriggered, tripId }: ScrapeStatusProps) {
@@ -39,7 +39,7 @@ export function ScrapeStatus({ lastUpdated, isRunning, onTriggered, tripId }: Sc
     setRefreshing(true);
     setMessage(null);
     try {
-      const triggerUrl = tripId ? `/api/trips/${tripId}/trigger-scrape` : "/api/trigger-scrape";
+      const triggerUrl = `/api/trips/${tripId}/trigger-scrape`;
       const res = await fetch(triggerUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

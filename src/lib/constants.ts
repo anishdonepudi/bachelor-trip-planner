@@ -87,9 +87,6 @@ export const DEFAULT_TRIP_DURATION: TripDuration = {
   departDays: [4, 5], // Thursday, Friday
 };
 
-export const NIGHTS = 3;
-export const TOTAL_PEOPLE = 17;
-
 export const SCORING_ALGORITHMS: {
   value: ScoringAlgorithm;
   label: string;

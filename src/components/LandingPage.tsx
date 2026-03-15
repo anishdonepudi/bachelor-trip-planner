@@ -56,12 +56,6 @@ export function LandingPage() {
         <div className="max-w-4xl mx-auto px-4 h-12 flex items-center justify-between">
           <h1 className="text-sm font-heading font-bold tracking-tight">TripSync</h1>
           <div className="flex items-center gap-2">
-            <a
-              href="/dashboard"
-              className="h-7 px-1.5 rounded text-[10px] font-mono text-[var(--text-3)] hover:text-[var(--text-2)] transition-colors"
-            >
-              Dev
-            </a>
             {loading ? null : user ? (
               <>
                 <span className="text-[11px] text-[var(--text-3)] font-mono hidden sm:inline">{user.email}</span>

@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { AirbnbListingRow, BudgetTier } from "@/lib/types";
-import { TOTAL_PEOPLE } from "@/lib/constants";
-
 interface AirbnbGridProps {
   listings: AirbnbListingRow[];
   budgetTier: BudgetTier;
   departDate: string;
   returnDate: string;
   selectedAirbnbUrl: string | null;
+  destinationCity: string;
+  totalPeople: number;
 }
 
 const BAYESIAN_M = 5;
@@ -91,7 +91,7 @@ function SelectedTooltip({ listing, avgRating }: { listing: AirbnbListingRow & {
   );
 }
 
-export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selectedAirbnbUrl }: AirbnbGridProps) {
+export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selectedAirbnbUrl, destinationCity, totalPeople }: AirbnbGridProps) {
   const [showAll, setShowAll] = useState(false);
 
   const tierListings = listings.filter((l) => l.budget_tier === budgetTier);
@@ -100,7 +100,8 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
   const rest = ranked.slice(6);
 
   if (ranked.length === 0) {
-    const searchUrl = `https://www.airbnb.com/s/Tulum--Quintana-Roo--Mexico/homes?tab_id=home_tab&checkin=${departDate}&checkout=${returnDate}&adults=${TOTAL_PEOPLE}&property_type_id%5B%5D=4&amenities%5B%5D=7&currency=USD`;
+    const destSlug = destinationCity.replace(/[\s,]+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    const searchUrl = `https://www.airbnb.com/s/${destSlug}/homes?tab_id=home_tab&checkin=${departDate}&checkout=${returnDate}&adults=${totalPeople}&property_type_id%5B%5D=4&amenities%5B%5D=7&currency=USD`;
     return (
       <div className="py-6 text-center">
         <p className="text-sm text-[var(--text-2)] mb-2">No villas found for this tier</p>
@@ -154,7 +155,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
               )}
               <div className="p-3">
                 <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <h5 className="text-sm font-medium text-[var(--text-1)] line-clamp-1">{listing.listing_name ?? "Villa in Tulum"}</h5>
+                  <h5 className="text-sm font-medium text-[var(--text-1)] line-clamp-1">{listing.listing_name ?? "Villa"}</h5>
                   {listing.superhost && (
                     <span className="shrink-0 text-[11px] md:text-[9px] px-1.5 py-0.5 rounded bg-[var(--rose-soft)] text-[var(--rose)] border border-[var(--rose-border)] font-semibold">
                       Superhost
@@ -211,7 +212,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                     className="flex items-center gap-3 py-2 px-3 rounded-md hover:bg-[var(--surface-1)] transition-colors duration-150">
                     <span className="text-[11px] font-mono font-semibold text-[var(--text-3)] w-5 text-right shrink-0">{i + 7}</span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-[var(--text-1)] truncate">{listing.listing_name ?? "Villa in Tulum"}</div>
+                      <div className="text-sm text-[var(--text-1)] truncate">{listing.listing_name ?? "Villa"}</div>
                       <div className="flex items-center gap-2 text-[11px] text-[var(--text-2)] mt-0.5">
                         {listing.rating != null && (
                           <span className="flex items-center gap-0.5">
@@ -256,7 +257,7 @@ export function AirbnbGrid({ listings, budgetTier, departDate, returnDate, selec
                         <td className="px-3 py-2">
                           <a href={listing.airbnb_url ?? "#"} target="_blank" rel="noopener noreferrer"
                             className="text-[var(--text-1)] hover:text-[var(--blue)] transition-colors duration-150 line-clamp-1">
-                            {listing.listing_name ?? "Villa in Tulum"}
+                            {listing.listing_name ?? "Villa"}
                             {listing.superhost && (
                               <span className="ml-1.5 text-[9px] px-1 py-0.5 rounded bg-[var(--rose-soft)] text-[var(--rose)] border border-[var(--rose-border)] font-semibold">
                                 SH

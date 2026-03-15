@@ -2,14 +2,13 @@
 
 import { useState, useRef, useCallback } from "react";
 import { CostBreakdown, CityStats, RankChangeInfo } from "@/lib/types";
-import { TOTAL_PEOPLE } from "@/lib/constants";
-
 interface ScoreBadgeProps {
   score: number;
   rank: number;
   totalGroupCost: number;
   perCityCosts: CostBreakdown[];
   cityAverages: Record<string, CityStats>;
+  totalPeople: number;
 }
 
 function shouldFlipUp(triggerEl: HTMLElement, tooltipHeight: number): boolean {
@@ -37,14 +36,14 @@ function getTier(score: number) {
   return { color: "var(--red)", label: "Poor" };
 }
 
-export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAverages }: ScoreBadgeProps) {
+export function ScoreBadge({ score, rank, totalGroupCost, perCityCosts, cityAverages, totalPeople }: ScoreBadgeProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const [flipUp, setFlipUp] = useState(false);
   const triggerRef = useRef<HTMLDivElement>(null);
   const tier = getTier(score);
 
   const avgPerPerson =
-    totalGroupCost !== Infinity ? Math.round(totalGroupCost / TOTAL_PEOPLE) : null;
+    totalPeople > 0 && totalGroupCost !== Infinity ? Math.round(totalGroupCost / totalPeople) : null;
 
   const handleShow = useCallback(() => {
     if (triggerRef.current) {

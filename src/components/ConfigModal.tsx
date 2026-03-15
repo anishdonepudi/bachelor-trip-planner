@@ -29,7 +29,7 @@ interface ConfigModalProps {
   onOpen?: () => void;
   onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration) => void;
   inlineMode?: boolean;
-  tripId?: string;
+  tripId: string;
 }
 
 type Section = "trip" | "group" | "flights" | "schedule";
@@ -433,7 +433,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setSaving(true);
     try {
       const total = cities.reduce((sum, c) => sum + c.people, 0);
-      const saveUrl = tripId ? `/api/trips/${tripId}` : "/api/config";
+      const saveUrl = `/api/trips/${tripId}`;
       const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

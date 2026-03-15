@@ -13,7 +13,7 @@ import {
   RankChangeInfo,
 } from "@/lib/types";
 import { computeRankChanges } from "@/lib/rank-changes";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, TOTAL_PEOPLE } from "@/lib/constants";
+import { FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
 import { scoreAllWeekends } from "@/lib/scoring";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
 import { ScoreBadge, RankChangeIndicator } from "./ScoreBadge";
@@ -28,6 +28,7 @@ interface ComboSummaryProps {
   activeBudgetTier: BudgetTier;
   previousWeekendData: WeekendData | null;
   rankChangeSince: string | null;
+  totalPeople: number;
   onSelectCombo: (flightCategory: FlightCategory, budgetTier: BudgetTier) => void;
 }
 
@@ -56,6 +57,7 @@ export function ComboSummary({
   activeBudgetTier,
   previousWeekendData,
   rankChangeSince,
+  totalPeople,
   onSelectCombo,
 }: ComboSummaryProps) {
   const [mobileFlightCat, setMobileFlightCat] = useState<FlightCategory>(activeFlightCategory);
@@ -315,7 +317,7 @@ export function ComboSummary({
             ) : (
               <div className="border-t border-[var(--border-default)] divide-y divide-[var(--border-default)]">
                 {combo.top3.map((ws, i) => {
-                  const avgPP = ws.totalGroupCost !== Infinity ? Math.round(ws.totalGroupCost / TOTAL_PEOPLE) : null;
+                  const avgPP = totalPeople > 0 && ws.totalGroupCost !== Infinity ? Math.round(ws.totalGroupCost / totalPeople) : null;
                   const selectedCost = priorityCity !== "all" ? ws.perCityCosts.find((c) => c.city === priorityCity) : null;
                   const displayCost = selectedCost?.perPersonTotal != null ? Math.round(selectedCost.perPersonTotal) : avgPP;
                   const departDay = new Date(ws.dateRange.departDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "short" });
@@ -401,7 +403,7 @@ export function ComboSummary({
                             const changes = comboRankChanges.get(comboKey);
                             const rc = changes ? changes[ws.dateRange.id] : undefined;
                             return (
-                              <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} rankChangeInfo={rc} sinceTimestamp={rankChangeSince} />
+                              <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} rankChangeInfo={rc} sinceTimestamp={rankChangeSince} totalPeople={totalPeople} />
                             );
                           })}
                         </div>
@@ -418,7 +420,7 @@ export function ComboSummary({
   );
 }
 
-function WeekendPill({ weekend, rank, priorityCity, rankChangeInfo, sinceTimestamp }: { weekend: WeekendScore; rank: number; priorityCity: string; rankChangeInfo?: RankChangeInfo; sinceTimestamp?: string | null }) {
+function WeekendPill({ weekend, rank, priorityCity, rankChangeInfo, sinceTimestamp, totalPeople }: { weekend: WeekendScore; rank: number; priorityCity: string; rankChangeInfo?: RankChangeInfo; sinceTimestamp?: string | null; totalPeople: number }) {
   const { dateRange, score, totalGroupCost, perCityCosts, cityAverages } = weekend;
   const selectedCityCost = priorityCity !== "all" ? perCityCosts.find((c) => c.city === priorityCity) : null;
 
@@ -429,7 +431,7 @@ function WeekendPill({ weekend, rank, priorityCity, rankChangeInfo, sinceTimesta
           <RankChangeIndicator info={rankChangeInfo} sinceTimestamp={sinceTimestamp} />
         </span>
       )}
-      <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} />
+      <ScoreBadge score={score} rank={rank} totalGroupCost={totalGroupCost} perCityCosts={perCityCosts} cityAverages={cityAverages} totalPeople={totalPeople} />
       <div className="flex-1 min-w-0 text-center">
         <div className="text-[11px] font-medium text-[var(--text-1)] truncate">
           {formatDateRangeDisplay(dateRange.departDate, dateRange.returnDate)}
