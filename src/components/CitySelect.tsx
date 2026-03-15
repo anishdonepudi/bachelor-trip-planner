@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { CITY_AIRPORTS } from "@/lib/airports";
+import { CITY_AIRPORTS, getCityLocation } from "@/lib/airports";
 import { useCitySearch, CitySuggestion } from "@/lib/hooks/use-city-search";
 
 interface CitySelectProps {
@@ -14,7 +14,7 @@ interface CitySelectProps {
 }
 
 export function CitySelect({ value, onChange, excludeCities = [], placeholder = "Search city...", currentAirports, onCoordinates }: CitySelectProps) {
-  const [query, setQuery] = useState(value);
+  const [query, setQuery] = useState(getCityLocation(value));
   const [isOpen, setIsOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -26,21 +26,30 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
     (s) => !excludeCities.includes(s.name)
   );
 
-  useEffect(() => { setQuery(value); }, [value]);
+  useEffect(() => { setQuery(getCityLocation(value)); }, [value]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
         setIsOpen(false);
-        if (query !== value) setQuery(value);
+        if (query !== getCityLocation(value)) setQuery(getCityLocation(value));
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [query, value]);
 
+  const formatFullLocation = (s: CitySuggestion): string => {
+    if (s.isLocal) return getCityLocation(s.name);
+    const parts = [s.name];
+    if (s.state) parts.push(s.state);
+    if (s.countryCode) parts.push(s.countryCode);
+    else if (s.country) parts.push(s.country);
+    return parts.join(", ");
+  };
+
   const selectCity = async (suggestion: CitySuggestion) => {
-    setQuery(suggestion.name);
+    setQuery(formatFullLocation(suggestion));
     setIsOpen(false);
 
     // If it's a local city with known airports, use those directly
@@ -136,14 +145,7 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
               onClick={() => selectCity(suggestion)}
               className="w-full text-left px-3 py-2 hover:bg-[var(--surface-3)] transition-colors duration-100 flex items-center justify-between gap-2"
             >
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-sm text-[var(--text-1)] truncate">{suggestion.name}</span>
-                {!suggestion.isLocal && suggestion.countryCode && (
-                  <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--surface-3)] text-[var(--text-3)] font-mono shrink-0">
-                    {suggestion.countryCode}
-                  </span>
-                )}
-              </div>
+              <span className="text-sm text-[var(--text-1)] truncate">{formatFullLocation(suggestion)}</span>
               <span className="text-[10px] text-[var(--text-3)] font-mono shrink-0 text-right max-w-[45%] truncate">
                 {formatSubtitle(suggestion)}
               </span>
