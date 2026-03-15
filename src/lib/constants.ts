@@ -46,10 +46,8 @@ export const FLIGHT_CATEGORIES: {
 }[] = flightCategoryConfigToDisplay(DEFAULT_FLIGHT_CATEGORIES);
 
 export const DEFAULT_TIME_FILTERS: FlightTimeFilters = {
-  outboundDeparture: { time: "12:00", plusMinus: 12, includeNextDay: false },
-  outboundArrival: { time: "12:00", plusMinus: 12, includeNextDay: false },
-  returnDeparture: { time: "12:00", plusMinus: 12, includeNextDay: false },
-  returnArrival: { time: "12:00", plusMinus: 12, includeNextDay: false },
+  destinationArrival: { from: "00:00", to: "23:30" },
+  destinationDeparture: { from: "00:00", to: "23:30" },
   maxDuration: 10,
 };
 
