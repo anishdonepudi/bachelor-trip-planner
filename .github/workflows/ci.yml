@@ -1,0 +1,44 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ github.ref == 'refs/heads/main' && secrets.PROD_SUPABASE_URL || secrets.STAGING_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ github.ref == 'refs/heads/main' && secrets.PROD_SUPABASE_ANON_KEY || secrets.STAGING_SUPABASE_ANON_KEY }}
+      SUPABASE_URL: ${{ github.ref == 'refs/heads/main' && secrets.PROD_SUPABASE_URL || secrets.STAGING_SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ github.ref == 'refs/heads/main' && secrets.PROD_SUPABASE_SERVICE_KEY || secrets.STAGING_SUPABASE_SERVICE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  migrate:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Link and push migrations
+        run: |
+          PROJECT_REF=${{ github.ref == 'refs/heads/main' && secrets.PROD_PROJECT_REF || secrets.STAGING_PROJECT_REF }}
+          DB_PASSWORD=${{ github.ref == 'refs/heads/main' && secrets.PROD_SUPABASE_DB_PASSWORD || secrets.STAGING_SUPABASE_DB_PASSWORD }}
+          supabase link --project-ref "$PROJECT_REF" -p "$DB_PASSWORD"
+          supabase db push

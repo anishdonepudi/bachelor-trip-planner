@@ -13,7 +13,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import axios from "axios";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { BudgetTier, AirbnbListingRow, MonthRange } from "../src/lib/types";
+import type { BudgetTier, AirbnbListingRow, MonthRange, SelectedMonth } from "../src/lib/types";
 import { DEFAULT_MONTH_RANGE } from "../src/lib/constants";
 
 // ---------------------------------------------------------------------------
@@ -24,6 +24,7 @@ let TOTAL_PEOPLE = 17;
 const NIGHTS = 3;
 let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 let MONTH_RANGE: MonthRange = DEFAULT_MONTH_RANGE;
+let SELECTED_MONTHS: SelectedMonth[] | null = null;
 
 const IS_TEST = process.argv.includes("--test");
 
@@ -668,6 +669,9 @@ async function loadConfig(): Promise<void> {
     if (data?.month_range) {
       MONTH_RANGE = data.month_range;
     }
+    if (data?.selected_months && Array.isArray(data.selected_months) && data.selected_months.length > 0) {
+      SELECTED_MONTHS = data.selected_months;
+    }
     console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}`);
   } catch (err) {
     console.warn("Could not load config, using defaults:", err instanceof Error ? err.message : err);
@@ -721,7 +725,7 @@ async function completeJob(jobId: number, errorMsg?: string): Promise<void> {
 async function runTest(): Promise<void> {
   console.log("=== Airbnb Scraper — LOCAL TEST MODE ===\n");
 
-  const dateRanges = generateDateRanges(MONTH_RANGE);
+  const dateRanges = generateDateRanges(MONTH_RANGE, undefined, SELECTED_MONTHS ?? undefined);
   const testRange = dateRanges[0];
 
   console.log(`Search parameters:`);
@@ -885,7 +889,7 @@ async function runFull(): Promise<void> {
 
   await loadConfig();
 
-  const dateRanges = generateDateRanges(MONTH_RANGE);
+  const dateRanges = generateDateRanges(MONTH_RANGE, undefined, SELECTED_MONTHS ?? undefined);
   const jobId = await createScrapeJob();
   const runId = process.env.GITHUB_RUN_ID ?? null;
 

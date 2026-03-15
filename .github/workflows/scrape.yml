@@ -21,17 +21,25 @@ on:
         required: false
         default: "manual"
         type: string
+      environment:
+        description: "Target environment"
+        required: false
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
 
   repository_dispatch:
     types: [config-changed]
 
 concurrency:
-  group: scrape-workflow
+  group: scrape-${{ github.event.inputs.environment || 'production' }}
   cancel-in-progress: false
 
 env:
-  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-  SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+  SUPABASE_URL: ${{ (github.event.inputs.environment == 'staging' && secrets.STAGING_SUPABASE_URL) || secrets.SUPABASE_URL }}
+  SUPABASE_SERVICE_KEY: ${{ (github.event.inputs.environment == 'staging' && secrets.STAGING_SUPABASE_SERVICE_KEY) || secrets.SUPABASE_SERVICE_KEY }}
 
 jobs:
   # Step 1: Read config from Supabase and build airport matrix

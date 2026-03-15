@@ -10,9 +10,10 @@ interface CitySelectProps {
   excludeCities?: string[];
   placeholder?: string;
   currentAirports?: { primary: string[]; nearby: string[] };
+  onCoordinates?: (lat: number, lng: number, geo?: { countryCode?: string; country?: string; state?: string }) => void;
 }
 
-export function CitySelect({ value, onChange, excludeCities = [], placeholder = "Search city...", currentAirports }: CitySelectProps) {
+export function CitySelect({ value, onChange, excludeCities = [], placeholder = "Search city...", currentAirports, onCoordinates }: CitySelectProps) {
   const [query, setQuery] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -46,11 +47,27 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
     if (suggestion.isLocal && CITY_AIRPORTS[suggestion.name]) {
       const apt = CITY_AIRPORTS[suggestion.name];
       onChange(suggestion.name, { primary: apt.primary, nearby: apt.nearby });
+      // Resolve coordinates in background for travel insights
+      if (onCoordinates) {
+        if (suggestion.lat != null && suggestion.lng != null) {
+          onCoordinates(suggestion.lat, suggestion.lng, { countryCode: suggestion.countryCode, country: suggestion.country, state: suggestion.state });
+        } else {
+          fetch(`/api/cities/search?q=${encodeURIComponent(suggestion.name)}`)
+            .then(r => r.ok ? r.json() : [])
+            .then((results: { lat?: number; lng?: number; countryCode?: string; country?: string; state?: string }[]) => {
+              if (results[0]?.lat != null && results[0]?.lng != null) {
+                onCoordinates(results[0].lat, results[0].lng, { countryCode: results[0].countryCode, country: results[0].country, state: results[0].state });
+              }
+            })
+            .catch(() => {});
+        }
+      }
       return;
     }
 
     // For GeoNames results, fetch nearest airports
     if (suggestion.lat != null && suggestion.lng != null) {
+      onCoordinates?.(suggestion.lat, suggestion.lng, { countryCode: suggestion.countryCode, country: suggestion.country, state: suggestion.state });
       setResolving(true);
       try {
         const res = await fetch(

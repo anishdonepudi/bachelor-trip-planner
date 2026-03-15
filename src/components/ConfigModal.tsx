@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange, TripDuration } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange, SelectedMonth, TripDuration } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { CitySelect } from "./CitySelect";
+import { TravelInsights, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type UnitSystem, type DailyAvg } from "./TravelInsights";
+import { useTravelInsights } from "@/lib/hooks/use-travel-insights";
 import {
   Dialog,
   DialogContent,
@@ -23,9 +25,10 @@ interface ConfigModalProps {
   flightCategories: FlightCategoryConfig[];
   flightTimeFilters: FlightTimeFilters;
   monthRange: MonthRange;
+  selectedMonths: SelectedMonth[];
   tripDuration: TripDuration;
   onOpen?: () => void;
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, monthRange: MonthRange, tripDuration: TripDuration) => void;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, monthRange: MonthRange, selectedMonths: SelectedMonth[], tripDuration: TripDuration) => void;
   inlineMode?: boolean;
   tripId?: string;
 }
@@ -77,7 +80,7 @@ function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, c
   );
 }
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<Section>>(new Set(["trip"]));
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -86,9 +89,63 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [destinationCity, setDestinationCity] = useState(initialDestinationCity);
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(initialFlightCategories);
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(initialTimeFilters);
-  const [monthRange, setMonthRange] = useState<MonthRange>(initialMonthRange);
+  const [selectedMonths, setSelectedMonths] = useState<SelectedMonth[]>(initialSelectedMonths);
   const [tripDuration, setTripDuration] = useState<TripDuration>(initialTripDuration);
+
+  // Derive monthRange from selectedMonths (min → max)
+  const monthRange = useMemo((): MonthRange => {
+    if (selectedMonths.length === 0) return initialMonthRange;
+    const sorted = [...selectedMonths].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+    return {
+      startMonth: sorted[0].month,
+      startYear: sorted[0].year,
+      endMonth: sorted[sorted.length - 1].month,
+      endYear: sorted[sorted.length - 1].year,
+    };
+  }, [selectedMonths, initialMonthRange]);
+
+  const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
   const [saving, setSaving] = useState(false);
+  const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number; countryCode?: string; country?: string; state?: string } | null>(null);
+  const coordsResolved = useRef(false);
+
+  // Fetch travel insights for the destination
+  const insights = useTravelInsights(
+    destinationCoords?.lat ?? null,
+    destinationCoords?.lng ?? null,
+    destinationCity,
+    destinationCoords?.countryCode,
+    destinationCoords?.country,
+    destinationCoords?.state
+  );
+
+  const monthInsightMap = useMemo(() => {
+    const map = new Map<number, { avgHighC: number; precipMm: number; recommendation: string; crowd: number }>();
+    if (!insights.data) return map;
+    for (const m of insights.data.months) {
+      map.set(m.month, { avgHighC: m.avgHighC, precipMm: m.precipitationMm, recommendation: m.recommendation, crowd: m.crowd });
+    }
+    return map;
+  }, [insights.data]);
+
+  // Daily temperature averages from insights (keyed by "MM-DD")
+  const dailyAvgMap: Record<string, DailyAvg> | undefined = insights.data?.dailyAverages;
+
+  // Build a map of date -> holiday names from insights events
+  const holidayMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (!insights.data) return map;
+    for (const m of insights.data.months) {
+      for (const e of m.events) {
+        if (e.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date)) {
+          const existing = map.get(e.date) ?? [];
+          existing.push(e.name);
+          map.set(e.date, existing);
+        }
+      }
+    }
+    return map;
+  }, [insights.data]);
 
   const hasEdited = useRef(false);
 
@@ -101,10 +158,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setDestinationCity(initialDestinationCity);
     setFlightCategories(initialFlightCategories);
     setTimeFilters(initialTimeFilters);
-    setMonthRange(initialMonthRange);
+    setSelectedMonths(initialSelectedMonths);
     setTripDuration(initialTripDuration);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialMonthRange, initialTripDuration]);
+  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialSelectedMonths, initialTripDuration]);
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
@@ -116,9 +173,11 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setDestinationCity(initialDestinationCity);
       setFlightCategories(initialFlightCategories);
       setTimeFilters(initialTimeFilters);
-      setMonthRange(initialMonthRange);
+      setSelectedMonths(initialSelectedMonths);
       setTripDuration(initialTripDuration);
       setExpandedSections(new Set(["trip"]));
+      setDestinationCoords(null);
+      coordsResolved.current = false;
     }
     setOpen(isOpen);
   };
@@ -135,7 +194,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const totalPeople = cities.reduce((sum, c) => sum + c.people, 0);
   const categoriesChanged = JSON.stringify(flightCategories) !== JSON.stringify(initialFlightCategories);
   const timeFiltersChanged = JSON.stringify(timeFilters) !== JSON.stringify(initialTimeFilters);
-  const monthRangeChanged = JSON.stringify(monthRange) !== JSON.stringify(initialMonthRange);
+  const selectedMonthsChanged = JSON.stringify(selectedMonths) !== JSON.stringify(initialSelectedMonths);
   const tripDurationChanged = JSON.stringify(tripDuration) !== JSON.stringify(initialTripDuration);
   const hasChanges =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
@@ -144,7 +203,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     destinationCity !== initialDestinationCity ||
     categoriesChanged ||
     timeFiltersChanged ||
-    monthRangeChanged ||
+    selectedMonthsChanged ||
     tripDurationChanged;
   const citiesChanged =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
@@ -152,7 +211,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     destinationCity !== initialDestinationCity ||
     categoriesChanged ||
     timeFiltersChanged ||
-    monthRangeChanged ||
+    selectedMonthsChanged ||
     tripDurationChanged;
 
   // ── City helpers ──
@@ -190,18 +249,22 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   };
 
   const seasonDates = useMemo(() => {
+    if (selectedMonths.length === 0) return [];
     const dates: { date: string; dayOfWeek: number; month: string }[] = [];
-    const current = new Date(monthRange.startYear, monthRange.startMonth - 1, 1);
-    const end = new Date(monthRange.endYear, monthRange.endMonth, 0);
-    while (current <= end) {
-      const y = current.getFullYear();
-      const m = String(current.getMonth() + 1).padStart(2, "0");
-      const d = String(current.getDate()).padStart(2, "0");
-      dates.push({ date: `${y}-${m}-${d}`, dayOfWeek: current.getDay(), month: current.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
-      current.setDate(current.getDate() + 1);
+    const sorted = [...selectedMonths].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+    for (const sm of sorted) {
+      const current = new Date(sm.year, sm.month - 1, 1);
+      const end = new Date(sm.year, sm.month, 0);
+      while (current <= end) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, "0");
+        const d = String(current.getDate()).padStart(2, "0");
+        dates.push({ date: `${y}-${m}-${d}`, dayOfWeek: current.getDay(), month: current.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
+        current.setDate(current.getDate() + 1);
+      }
     }
     return dates;
-  }, [monthRange]);
+  }, [selectedMonths]);
 
   const monthGroups = useMemo(() => {
     const groups: { month: string; dates: typeof seasonDates }[] = [];
@@ -213,7 +276,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     return groups;
   }, [seasonDates]);
 
-  const potentialTrips = useMemo(() => generateDateRanges(monthRange, tripDuration), [monthRange, tripDuration]);
+  const potentialTrips = useMemo(() => generateDateRanges(undefined, tripDuration, selectedMonths), [selectedMonths, tripDuration]);
   const tripDateSet = useMemo(() => {
     const set = new Set<string>();
     for (const trip of potentialTrips) {
@@ -265,6 +328,22 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       categoryCount: flightCategories.length,
     });
   }, [citiesChanged, cities, potentialTrips.length, flightCategories.length]);
+
+  // Resolve coordinates for existing destination city (for TravelInsights)
+  useEffect(() => {
+    if (destinationCoords || coordsResolved.current || !destinationCity) return;
+    if (!expandedSections.has("schedule")) return;
+    coordsResolved.current = true;
+    fetch(`/api/cities/search?q=${encodeURIComponent(destinationCity)}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((results: { name: string; lat: number; lng: number; countryCode?: string; country?: string; state?: string }[]) => {
+        const match = results.find(
+          (r) => r.name.toLowerCase() === destinationCity.toLowerCase()
+        ) ?? results[0];
+        if (match) setDestinationCoords({ lat: match.lat, lng: match.lng, countryCode: match.countryCode, country: match.country, state: match.state });
+      })
+      .catch(() => {});
+  }, [destinationCity, destinationCoords, expandedSections]);
 
   // Prune excluded dates outside trip windows
   useEffect(() => {
@@ -342,10 +421,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, month_range: monthRange, trip_duration: tripDuration, skip_scrape: !citiesChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, month_range: monthRange, selected_months: selectedMonths, trip_duration: tripDuration, skip_scrape: !citiesChanged }),
       });
       if (res.ok) {
-        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, monthRange, tripDuration);
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, monthRange, selectedMonths, tripDuration);
         hasEdited.current = false;
         setOpen(false);
       } else {
@@ -370,7 +449,13 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const flightSubtitle = `${flightCategories.length} ${flightCategories.length === 1 ? "category" : "categories"} \u00b7 ${timeFilters.maxDuration}hr max`;
 
   const scheduleSubtitle = [
-    `${MONTH_NAMES[monthRange.startMonth - 1]} ${monthRange.startYear} \u2013 ${MONTH_NAMES[monthRange.endMonth - 1]} ${monthRange.endYear}`,
+    selectedMonths.length > 0
+      ? selectedMonths
+          .slice()
+          .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+          .map(sm => `${MONTH_NAMES[sm.month - 1]} ${sm.year}`)
+          .join(", ")
+      : "No months selected",
     `${potentialTrips.length} trips`,
     excludedDates.length > 0 ? `${excludedDates.length} blocked` : null,
   ].filter(Boolean).join(" \u00b7 ");
@@ -406,6 +491,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                   setDestinationAirport(airports.primary[0]);
                 }
               }}
+              onCoordinates={(lat, lng, geo) => { setDestinationCoords({ lat, lng, countryCode: geo?.countryCode, country: geo?.country, state: geo?.state }); coordsResolved.current = true; }}
               placeholder="Search destination..."
             />
             {destinationAirport && (
@@ -738,107 +824,120 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
             </svg>
           }
         >
-          {/* Month Range Picker */}
-          <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
-            <div className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2.5">Trip Window</div>
-            <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-[var(--text-3)] block">From</label>
-                <div className="flex gap-1">
-                  <select
-                    value={monthRange.startMonth}
-                    onChange={(e) => {
-                      hasEdited.current = true;
-                      const m = Number(e.target.value);
-                      const updated = { ...monthRange, startMonth: m };
-                      if (monthRange.startYear > monthRange.endYear || (monthRange.startYear === monthRange.endYear && m > monthRange.endMonth)) {
-                        updated.endMonth = m;
-                      }
-                      setMonthRange(updated);
-                    }}
-                    className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                  >
-                    {MONTH_NAMES.map((name, i) => (
-                      <option key={i} value={i + 1}>{name}</option>
-                    ))}
-                  </select>
-                  <select
-                    value={monthRange.startYear}
-                    onChange={(e) => {
-                      hasEdited.current = true;
-                      const y = Number(e.target.value);
-                      const updated = { ...monthRange, startYear: y };
-                      if (y > monthRange.endYear) {
-                        updated.endYear = y;
-                        updated.endMonth = monthRange.startMonth;
-                      }
-                      setMonthRange(updated);
-                    }}
-                    className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                  >
-                    {YEAR_OPTIONS.map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <svg className="w-4 h-4 text-[var(--text-3)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-              </svg>
-              <div className="space-y-1.5">
-                <label className="text-[10px] text-[var(--text-3)] block">To</label>
-                <div className="flex gap-1">
-                  <select
-                    value={monthRange.endMonth}
-                    onChange={(e) => {
-                      hasEdited.current = true;
-                      setMonthRange(prev => ({ ...prev, endMonth: Number(e.target.value) }));
-                    }}
-                    className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                  >
-                    {MONTH_NAMES.map((name, i) => {
-                      const m = i + 1;
-                      const disabled = monthRange.endYear === monthRange.startYear && m < monthRange.startMonth;
-                      return <option key={i} value={m} disabled={disabled}>{name}</option>;
-                    })}
-                  </select>
-                  <select
-                    value={monthRange.endYear}
-                    onChange={(e) => {
-                      hasEdited.current = true;
-                      const y = Number(e.target.value);
-                      const updated = { ...monthRange, endYear: y };
-                      if (y === monthRange.startYear && monthRange.endMonth < monthRange.startMonth) {
-                        updated.endMonth = monthRange.startMonth;
-                      }
-                      setMonthRange(updated);
-                    }}
-                    className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:border-[var(--border-hover)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none cursor-pointer"
-                  >
-                    {YEAR_OPTIONS.filter(y => y >= monthRange.startYear).map(y => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+          {/* Unit system toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Units</span>
+            <div className="flex items-center p-0.5 rounded-md bg-[var(--surface-2)] border border-[var(--border-default)]">
+              <button
+                onClick={() => setUnitSystem("metric")}
+                className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all duration-150 ${
+                  unitSystem === "metric"
+                    ? "bg-[var(--blue)] text-white shadow-sm"
+                    : "text-[var(--text-2)] hover:text-[var(--text-1)]"
+                }`}
+              >
+                Metric
+              </button>
+              <button
+                onClick={() => setUnitSystem("imperial")}
+                className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all duration-150 ${
+                  unitSystem === "imperial"
+                    ? "bg-[var(--blue)] text-white shadow-sm"
+                    : "text-[var(--text-2)] hover:text-[var(--text-1)]"
+                }`}
+              >
+                Imperial
+              </button>
             </div>
           </div>
+
+          {/* Travel Insights — only fetches when schedule section is expanded */}
+          {destinationCoords && destinationCity && (
+            <TravelInsights
+              lat={destinationCoords.lat}
+              lng={destinationCoords.lng}
+              cityName={destinationCity}
+              data={insights.data}
+              loading={insights.loading}
+              unitSystem={unitSystem}
+              onMonthsChange={(months) => {
+                hasEdited.current = true;
+                setSelectedMonths(months);
+              }}
+            />
+          )}
+
+          {/* Selected Months Display */}
+          {selectedMonths.length > 0 && (
+            <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+              <div className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">Selected Months</div>
+              <div className="flex flex-wrap gap-1.5">
+                {[...selectedMonths]
+                  .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+                  .map((sm) => (
+                    <span
+                      key={`${sm.month}-${sm.year}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] text-xs font-medium"
+                    >
+                      {MONTH_NAMES[sm.month - 1]} {sm.year}
+                      <button
+                        onClick={() => {
+                          hasEdited.current = true;
+                          setSelectedMonths(prev => prev.filter(s => !(s.month === sm.month && s.year === sm.year)));
+                        }}
+                        className="hover:text-[var(--text-1)] transition-colors duration-150"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {/* Calendar */}
           <div className="flex items-center justify-between">
             <p className="text-xs text-[var(--text-2)] leading-relaxed">
               Tap highlighted dates to block them.
             </p>
-            <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums shrink-0 ml-2">
-              {potentialTrips.length} trips
-            </span>
+            <div className="flex items-center gap-3 shrink-0 ml-2">
+              <div className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span className="text-[10px] text-[var(--text-3)]">Holiday</span>
+              </div>
+              <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">
+                {potentialTrips.length} trips
+              </span>
+            </div>
           </div>
           <div className="space-y-4">
             {monthGroups.map((group) => {
               const firstDow = group.dates[0].dayOfWeek;
+              const monthNum = new Date(group.dates[0].date + "T00:00:00").getMonth() + 1;
+              const mi = monthInsightMap.get(monthNum);
+              const colors = mi ? RECOMMENDATION_COLORS[mi.recommendation] : null;
               return (
                 <div key={group.month}>
-                  <div className="text-sm font-heading font-semibold text-[var(--text-1)] mb-1.5">{group.month}</div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-heading font-semibold text-[var(--text-1)]">{group.month}</span>
+                      {mi && colors && (
+                        <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${colors.bg} border ${colors.border}`}>
+                          <span className={colors.text}>
+                            <WeatherIcon precipMm={mi.precipMm} highC={mi.avgHighC} className="w-3.5 h-3.5" />
+                          </span>
+                          <span className={`text-[10px] font-mono font-semibold tabular-nums ${colors.text}`}>
+                            {formatTemp(mi.avgHighC, unitSystem)}
+                          </span>
+                          <span className={`text-[10px] font-medium capitalize ${colors.text}`}>
+                            {mi.recommendation}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                   <div className="grid grid-cols-7 gap-0.5">
                     {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
                       <div key={i} className="text-center text-[10px] text-[var(--text-3)] font-medium py-1">{d}</div>
@@ -849,14 +948,20 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                       const dayNum = new Date(d.date + "T00:00:00").getDate();
                       const inTrip = tripDateSet.has(d.date);
                       const pos = tripPositionMap.get(d.date);
+                      const holidays = holidayMap.get(d.date);
+                      const mmdd = d.date.slice(5); // "MM-DD"
+                      const dayAvg = dailyAvgMap?.[mmdd];
 
                       if (!inTrip) {
                         return (
                           <div
                             key={d.date}
-                            className="py-2 flex items-center justify-center rounded text-sm min-h-[36px] text-[var(--text-3)] opacity-30"
+                            className="flex flex-col items-center justify-center rounded text-sm min-h-[44px] text-[var(--text-3)] opacity-30 relative"
+                            title={holidays?.join(", ")}
                           >
-                            {dayNum}
+                            {holidays && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400 opacity-50" />}
+                            <span>{dayNum}</span>
+                            {dayAvg && <span className="text-[8px] font-mono tabular-nums leading-none mt-0.5">{formatTemp(dayAvg.highC, unitSystem)}</span>}
                           </div>
                         );
                       }
@@ -865,7 +970,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                         <button
                           key={d.date}
                           onClick={() => toggleDate(d.date)}
-                          className={`py-2 flex items-center justify-center text-sm transition-all duration-100 min-h-[36px] relative ${
+                          title={holidays?.join(", ")}
+                          className={`flex flex-col items-center justify-center text-sm transition-all duration-100 min-h-[44px] relative ${
                             pos?.isStart && pos?.isEnd ? "rounded" :
                             pos?.isStart ? "rounded-l" :
                             pos?.isEnd ? "rounded-r" : ""
@@ -875,7 +981,13 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                               : "bg-[var(--blue-soft)] text-[var(--text-1)] hover:bg-[var(--blue-soft)] hover:brightness-95"
                           }`}
                         >
-                          {dayNum}
+                          {holidays && <div className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-400" />}
+                          <span>{dayNum}</span>
+                          {dayAvg && (
+                            <span className={`text-[8px] font-mono tabular-nums leading-none mt-0.5 ${excluded ? "text-[var(--red)]" : "text-[var(--text-3)]"}`}>
+                              {formatTemp(dayAvg.highC, unitSystem)}
+                            </span>
+                          )}
                         </button>
                       );
                     })}

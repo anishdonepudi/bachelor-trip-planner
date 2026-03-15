@@ -78,7 +78,13 @@ export interface FlightTimeFilters {
   maxDuration: number; // max flight duration in hours
 }
 
-/** Configurable month range for trip season */
+/** Individual month selection */
+export interface SelectedMonth {
+  month: number; // 1-12
+  year: number;
+}
+
+/** Configurable month range for trip season (derived from selected months) */
 export interface MonthRange {
   startMonth: number; // 1-12
   startYear: number;

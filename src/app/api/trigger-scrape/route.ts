@@ -73,6 +73,7 @@ export async function POST(request: Request) {
           inputs: {
             scrape_type: scrapeType,
             triggered_by: "web_app",
+            environment: process.env.ENVIRONMENT || "production",
           },
         }),
       }

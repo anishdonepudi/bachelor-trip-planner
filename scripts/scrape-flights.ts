@@ -32,6 +32,7 @@ import type {
   FlightCategoryConfig,
   FlightTimeFilters,
   MonthRange,
+  SelectedMonth,
 } from "../src/lib/types";
 import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE } from "../src/lib/constants";
 
@@ -57,6 +58,7 @@ let CATEGORIES_TO_SCRAPE_CONFIGS: FlightCategoryConfig[] = DEFAULT_FLIGHT_CATEGO
 let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
 let TIME_FILTERS: FlightTimeFilters = DEFAULT_TIME_FILTERS;
 let MONTH_RANGE: MonthRange = DEFAULT_MONTH_RANGE;
+let SELECTED_MONTHS: SelectedMonth[] | null = null;
 
 const TOP_N_PER_CATEGORY = 3;
 
@@ -73,7 +75,7 @@ let AIRPORT_TO_CITIES: Record<string, string[]> = {};
 async function loadAirportToCities(): Promise<void> {
   const { data, error } = await supabase
     .from("config")
-    .select("cities, destination_airport, flight_categories, flight_time_filters, month_range")
+    .select("cities, destination_airport, flight_categories, flight_time_filters, month_range, selected_months")
     .limit(1)
     .single();
 
@@ -109,6 +111,10 @@ async function loadAirportToCities(): Promise<void> {
 
   if (data.month_range) {
     MONTH_RANGE = data.month_range;
+  }
+
+  if (data.selected_months && Array.isArray(data.selected_months) && data.selected_months.length > 0) {
+    SELECTED_MONTHS = data.selected_months;
   }
 
   console.log(`Loaded config: ${Object.keys(map).length} airports, ${cities.length} cities, destination: ${DESTINATION_AIRPORT}`);
@@ -897,10 +903,10 @@ async function main(): Promise<void> {
   console.log(`Airports: ${inputAirports.join(", ")}`);
   console.log(`Target cities: ${[...targetCities].join(", ")}`);
 
-  const dateRanges = generateDateRanges(MONTH_RANGE);
+  const dateRanges = generateDateRanges(MONTH_RANGE, undefined, SELECTED_MONTHS ?? undefined);
   const totalTasks = inputAirports.length * dateRanges.length;
 
-  console.log(`Date ranges: ${dateRanges.length} (${MONTH_RANGE.startMonth}/${MONTH_RANGE.startYear} - ${MONTH_RANGE.endMonth}/${MONTH_RANGE.endYear})`);
+  console.log(`Date ranges: ${dateRanges.length} (${SELECTED_MONTHS ? `${SELECTED_MONTHS.length} selected months` : `${MONTH_RANGE.startMonth}/${MONTH_RANGE.startYear} - ${MONTH_RANGE.endMonth}/${MONTH_RANGE.endYear}`})`);
   console.log(`Categories: ${CATEGORIES_TO_SCRAPE.join(", ")}`);
   console.log(`Top N per category: ${TOP_N_PER_CATEGORY}`);
   console.log(`Max duration: ${TIME_FILTERS.maxDuration}hr`);

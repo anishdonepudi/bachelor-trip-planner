@@ -1,14 +1,14 @@
 "use client";
 
 import { useMemo } from "react";
-import { MonthRange, TripDuration } from "@/lib/types";
+import { SelectedMonth, TripDuration } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 
 interface BlockedDatesFormProps {
-  monthRange: MonthRange;
+  selectedMonths: SelectedMonth[];
   tripDuration: TripDuration;
   excludedDates: string[];
-  onMonthRangeChange: (range: MonthRange) => void;
+  onSelectedMonthsChange: (months: SelectedMonth[]) => void;
   onTripDurationChange: (duration: TripDuration) => void;
   onExcludedDatesChange: (dates: string[]) => void;
   onEdited?: () => void;
@@ -16,28 +16,31 @@ interface BlockedDatesFormProps {
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i);
 
 export function BlockedDatesForm({
-  monthRange, tripDuration, excludedDates,
-  onMonthRangeChange, onTripDurationChange, onExcludedDatesChange,
+  selectedMonths, tripDuration, excludedDates,
+  onSelectedMonthsChange, onTripDurationChange, onExcludedDatesChange,
   onEdited,
 }: BlockedDatesFormProps) {
-  const potentialTrips = useMemo(() => generateDateRanges(monthRange, tripDuration), [monthRange, tripDuration]);
+  const potentialTrips = useMemo(() => generateDateRanges(undefined, tripDuration, selectedMonths), [selectedMonths, tripDuration]);
 
   const seasonDates = useMemo(() => {
+    if (selectedMonths.length === 0) return [];
     const dates: { date: string; dayOfWeek: number; month: string }[] = [];
-    const current = new Date(monthRange.startYear, monthRange.startMonth - 1, 1);
-    const end = new Date(monthRange.endYear, monthRange.endMonth, 0);
-    while (current <= end) {
-      const y = current.getFullYear();
-      const m = String(current.getMonth() + 1).padStart(2, "0");
-      const d = String(current.getDate()).padStart(2, "0");
-      dates.push({ date: `${y}-${m}-${d}`, dayOfWeek: current.getDay(), month: current.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
-      current.setDate(current.getDate() + 1);
+    const sorted = [...selectedMonths].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
+    for (const sm of sorted) {
+      const current = new Date(sm.year, sm.month - 1, 1);
+      const end = new Date(sm.year, sm.month, 0);
+      while (current <= end) {
+        const y = current.getFullYear();
+        const m = String(current.getMonth() + 1).padStart(2, "0");
+        const d = String(current.getDate()).padStart(2, "0");
+        dates.push({ date: `${y}-${m}-${d}`, dayOfWeek: current.getDay(), month: current.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
+        current.setDate(current.getDate() + 1);
+      }
     }
     return dates;
-  }, [monthRange]);
+  }, [selectedMonths]);
 
   const monthGroups = useMemo(() => {
     const groups: { month: string; dates: typeof seasonDates }[] = [];
@@ -151,71 +154,35 @@ export function BlockedDatesForm({
         </div>
       </div>
 
-      {/* Month Range */}
-      <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
-        <div className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2.5">Trip Window</div>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-[var(--text-3)] block">From</label>
-            <div className="flex gap-1">
-              <select value={monthRange.startMonth}
-                onChange={(e) => {
-                  onEdited?.();
-                  const m = Number(e.target.value);
-                  const updated = { ...monthRange, startMonth: m };
-                  if (monthRange.startYear > monthRange.endYear || (monthRange.startYear === monthRange.endYear && m > monthRange.endMonth)) {
-                    updated.endMonth = m;
-                  }
-                  onMonthRangeChange(updated);
-                }}
-                className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                {MONTH_NAMES.map((name, i) => <option key={i} value={i + 1}>{name}</option>)}
-              </select>
-              <select value={monthRange.startYear}
-                onChange={(e) => {
-                  onEdited?.();
-                  const y = Number(e.target.value);
-                  const updated = { ...monthRange, startYear: y };
-                  if (y > monthRange.endYear) { updated.endYear = y; updated.endMonth = monthRange.startMonth; }
-                  onMonthRangeChange(updated);
-                }}
-                className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
-          </div>
-          <svg className="w-4 h-4 text-[var(--text-3)] mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-          </svg>
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-[var(--text-3)] block">To</label>
-            <div className="flex gap-1">
-              <select value={monthRange.endMonth}
-                onChange={(e) => { onEdited?.(); onMonthRangeChange({ ...monthRange, endMonth: Number(e.target.value) }); }}
-                className="flex-1 h-8 px-1.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                {MONTH_NAMES.map((name, i) => {
-                  const m = i + 1;
-                  const disabled = monthRange.endYear === monthRange.startYear && m < monthRange.startMonth;
-                  return <option key={i} value={m} disabled={disabled}>{name}</option>;
-                })}
-              </select>
-              <select value={monthRange.endYear}
-                onChange={(e) => {
-                  onEdited?.();
-                  const y = Number(e.target.value);
-                  const updated = { ...monthRange, endYear: y };
-                  if (y === monthRange.startYear && monthRange.endMonth < monthRange.startMonth) {
-                    updated.endMonth = monthRange.startMonth;
-                  }
-                  onMonthRangeChange(updated);
-                }}
-                className="w-[4.5rem] h-8 px-1.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                {YEAR_OPTIONS.filter(y => y >= monthRange.startYear).map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
-            </div>
+      {/* Selected Months Display */}
+      {selectedMonths.length > 0 && (
+        <div className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+          <div className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">Selected Months</div>
+          <div className="flex flex-wrap gap-1.5">
+            {[...selectedMonths]
+              .sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month)
+              .map((sm) => (
+                <span
+                  key={`${sm.month}-${sm.year}`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] text-xs font-medium"
+                >
+                  {MONTH_NAMES[sm.month - 1]} {sm.year}
+                  <button
+                    onClick={() => {
+                      onEdited?.();
+                      onSelectedMonthsChange(selectedMonths.filter(s => !(s.month === sm.month && s.year === sm.year)));
+                    }}
+                    className="hover:text-[var(--text-1)] transition-colors duration-150"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Calendar */}
       <div className="flex items-center justify-between">
