@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange, SelectedMonth, TripDuration } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
@@ -24,11 +24,10 @@ interface ConfigModalProps {
   destinationCity: string;
   flightCategories: FlightCategoryConfig[];
   flightTimeFilters: FlightTimeFilters;
-  monthRange: MonthRange;
   selectedMonths: SelectedMonth[];
   tripDuration: TripDuration;
   onOpen?: () => void;
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, monthRange: MonthRange, selectedMonths: SelectedMonth[], tripDuration: TripDuration) => void;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration) => void;
   inlineMode?: boolean;
   tripId?: string;
 }
@@ -80,7 +79,7 @@ function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, c
   );
 }
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, monthRange: initialMonthRange, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<Section>>(new Set(["trip"]));
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -91,18 +90,6 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(initialTimeFilters);
   const [selectedMonths, setSelectedMonths] = useState<SelectedMonth[]>(initialSelectedMonths);
   const [tripDuration, setTripDuration] = useState<TripDuration>(initialTripDuration);
-
-  // Derive monthRange from selectedMonths (min → max)
-  const monthRange = useMemo((): MonthRange => {
-    if (selectedMonths.length === 0) return initialMonthRange;
-    const sorted = [...selectedMonths].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
-    return {
-      startMonth: sorted[0].month,
-      startYear: sorted[0].year,
-      endMonth: sorted[sorted.length - 1].month,
-      endYear: sorted[sorted.length - 1].year,
-    };
-  }, [selectedMonths, initialMonthRange]);
 
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
   const [saving, setSaving] = useState(false);
@@ -276,7 +263,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     return groups;
   }, [seasonDates]);
 
-  const potentialTrips = useMemo(() => generateDateRanges(undefined, tripDuration, selectedMonths), [selectedMonths, tripDuration]);
+  const potentialTrips = useMemo(() => generateDateRanges(tripDuration, selectedMonths), [selectedMonths, tripDuration]);
   const tripDateSet = useMemo(() => {
     const set = new Set<string>();
     for (const trip of potentialTrips) {
@@ -335,7 +322,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   }, [potentialTrips]);
 
   const estimatedMinutes = useMemo(() => {
-    if (!citiesChanged) return 0;
+    if (!citiesChanged && !selectedMonthsChanged) return 0;
     const uniqueAirports = new Set<string>();
     for (const c of cities) {
       for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) uniqueAirports.add(apt);
@@ -411,8 +398,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   // ── Time filter helpers ──
   const updateTimeFilter = (
     leg: "outboundDeparture" | "outboundArrival" | "returnDeparture" | "returnArrival",
-    field: "time" | "plusMinus",
-    value: string | number
+    field: "time" | "plusMinus" | "includeNextDay",
+    value: string | number | boolean
   ) => {
     hasEdited.current = true;
     setTimeFilters(prev => ({
@@ -439,10 +426,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, month_range: monthRange, selected_months: selectedMonths, trip_duration: tripDuration, skip_scrape: !citiesChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, selected_months: selectedMonths, trip_duration: tripDuration, skip_scrape: !citiesChanged && !selectedMonthsChanged }),
       });
       if (res.ok) {
-        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, monthRange, selectedMonths, tripDuration);
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, selectedMonths, tripDuration);
         hasEdited.current = false;
         setOpen(false);
       } else {
@@ -772,16 +759,42 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
           {/* Time filter grid — 2 cols on desktop for outbound/return pairing */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {([
-              { key: "outboundDeparture" as const, label: "Outbound Depart" },
-              { key: "outboundArrival" as const, label: "Outbound Arrive" },
-              { key: "returnDeparture" as const, label: "Return Depart" },
-              { key: "returnArrival" as const, label: "Return Arrive" },
-            ]).map(({ key, label }) => {
+              { key: "outboundDeparture" as const, label: "Outbound Depart", isArrival: false },
+              { key: "outboundArrival" as const, label: "Outbound Arrive", isArrival: true },
+              { key: "returnDeparture" as const, label: "Return Depart", isArrival: false },
+              { key: "returnArrival" as const, label: "Return Arrive", isArrival: true },
+            ]).map(({ key, label, isArrival }) => {
               const filter = timeFilters[key];
               const centerMin = parseInt(filter.time.split(":")[0], 10) * 60 + parseInt(filter.time.split(":")[1], 10);
-              const earliest = Math.max(0, centerMin - filter.plusMinus * 60);
-              const latest = Math.min(24 * 60 - 1, centerMin + filter.plusMinus * 60);
-              const fmtTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+              const rawEarliest = centerMin - filter.plusMinus * 60;
+              const rawLatest = centerMin + filter.plusMinus * 60;
+              const fmtTime = (m: number) => {
+                const clamped = ((m % (24 * 60)) + 24 * 60) % (24 * 60);
+                return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+              };
+
+              let earliest: number, latest: number;
+              let showNextDay = false;
+              let showPrevDay = false;
+
+              if (filter.includeNextDay) {
+                if (isArrival && rawLatest > 24 * 60 - 1) {
+                  earliest = Math.max(0, rawEarliest);
+                  latest = rawLatest % (24 * 60);
+                  showNextDay = true;
+                } else if (!isArrival && rawEarliest < 0) {
+                  earliest = (rawEarliest + 24 * 60) % (24 * 60);
+                  latest = Math.min(24 * 60 - 1, rawLatest);
+                  showPrevDay = true;
+                } else {
+                  earliest = Math.max(0, rawEarliest);
+                  latest = Math.min(24 * 60 - 1, rawLatest);
+                }
+              } else {
+                earliest = Math.max(0, rawEarliest);
+                latest = Math.min(24 * 60 - 1, rawLatest);
+              }
+
               return (
                 <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
                   <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
@@ -817,8 +830,32 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                       </div>
                     </div>
                   </div>
-                  <div className="text-[10px] text-[var(--text-3)] mt-1 font-mono tabular-nums">
-                    {fmtTime(earliest)} – {fmtTime(latest)}
+                  <div className="flex items-center justify-between mt-1.5">
+                    <div className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">
+                      {showPrevDay && <span className="text-[var(--blue)]">-1d </span>}
+                      {fmtTime(earliest)} – {fmtTime(latest)}
+                      {showNextDay && <span className="text-[var(--blue)]"> +1d</span>}
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <span className="text-[10px] text-[var(--text-3)]">
+                        {isArrival ? "+1 day" : "-1 day"}
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={!!filter.includeNextDay}
+                        onClick={() => updateTimeFilter(key, "includeNextDay", !filter.includeNextDay)}
+                        className={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
+                          filter.includeNextDay
+                            ? "bg-[var(--blue)]"
+                            : "bg-[var(--surface-3)] border border-[var(--border-default)]"
+                        }`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                          filter.includeNextDay ? "translate-x-3" : "translate-x-0"
+                        }`} />
+                      </button>
+                    </label>
                   </div>
                 </div>
               );
@@ -898,17 +935,19 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] text-xs font-medium"
                     >
                       {MONTH_NAMES[sm.month - 1]} {sm.year}
-                      <button
-                        onClick={() => {
-                          hasEdited.current = true;
-                          setSelectedMonths(prev => prev.filter(s => !(s.month === sm.month && s.year === sm.year)));
-                        }}
-                        className="hover:text-[var(--text-1)] transition-colors duration-150"
-                      >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                      {selectedMonths.length > 1 && (
+                        <button
+                          onClick={() => {
+                            hasEdited.current = true;
+                            setSelectedMonths(prev => prev.filter(s => !(s.month === sm.month && s.year === sm.year)));
+                          }}
+                          className="hover:text-[var(--text-1)] transition-colors duration-150"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
                     </span>
                   ))}
               </div>
@@ -1035,7 +1074,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
           <div className="flex items-center gap-1.5 text-xs">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] animate-pulse" />
             <span className="text-[var(--gold)]">Unsaved changes</span>
-            {citiesChanged && (
+            {(citiesChanged || selectedMonthsChanged) && (
               <span className="text-[var(--text-3)]">
                 — triggers refresh{estimatedMinutes > 0 && <> (~{estimatedMinutes} min)</>}
               </span>

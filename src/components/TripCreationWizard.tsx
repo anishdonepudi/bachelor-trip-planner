@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, MonthRange, TripDuration } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration } from "@/lib/types";
 import { CITY_AIRPORTS } from "@/lib/airports";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE, DEFAULT_TRIP_DURATION } from "@/lib/constants";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
 import { TravelInsights, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type SelectedMonth, type UnitSystem, type DailyAvg } from "./TravelInsights";
@@ -34,18 +34,6 @@ export function TripCreationWizard() {
   const [selectedMonths, setSelectedMonths] = useState<SelectedMonth[]>([]);
   const [tripDuration, setTripDuration] = useState<TripDuration>({ nights: 0, departDays: [] });
   const [excludedDates, setExcludedDates] = useState<string[]>([]);
-
-  // Derive MonthRange from selected months for downstream compatibility
-  const monthRange = useMemo((): MonthRange | null => {
-    if (selectedMonths.length === 0) return null;
-    const sorted = [...selectedMonths].sort((a, b) => a.year !== b.year ? a.year - b.year : a.month - b.month);
-    return {
-      startMonth: sorted[0].month,
-      startYear: sorted[0].year,
-      endMonth: sorted[sorted.length - 1].month,
-      endYear: sorted[sorted.length - 1].year,
-    };
-  }, [selectedMonths]);
 
   // Step 4: Flight Preferences
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
@@ -106,7 +94,7 @@ export function TripCreationWizard() {
 
   const potentialTrips = useMemo(() => {
     if (!hasFullConfig) return [];
-    return generateDateRanges(undefined, tripDuration, selectedMonths);
+    return generateDateRanges(tripDuration, selectedMonths);
   }, [selectedMonths, tripDuration, hasFullConfig]);
 
   const seasonDates = useMemo(() => {
@@ -252,8 +240,8 @@ export function TripCreationWizard() {
 
   const updateTimeFilter = (
     leg: "outboundDeparture" | "outboundArrival" | "returnDeparture" | "returnArrival",
-    field: "time" | "plusMinus",
-    value: string | number
+    field: "time" | "plusMinus" | "includeNextDay",
+    value: string | number | boolean
   ) => {
     setTimeFilters(prev => ({
       ...prev,
@@ -295,7 +283,6 @@ export function TripCreationWizard() {
           excluded_dates: excludedDates,
           flight_categories: flightCategories,
           flight_time_filters: timeFilters,
-          month_range: monthRange ?? DEFAULT_MONTH_RANGE,
           selected_months: selectedMonths,
           trip_duration: tripDuration,
         }),
@@ -566,17 +553,19 @@ export function TripCreationWizard() {
                         <span className="text-xs font-medium text-[var(--blue)]">
                           {MONTH_NAMES[sm.month - 1]} {sm.year}
                         </span>
-                        <button
-                          onClick={() => {
-                            const next = selectedMonths.filter(s => !(s.month === sm.month && s.year === sm.year));
-                            setSelectedMonths(next);
-                          }}
-                          className="text-[var(--blue)] hover:text-[var(--red)] transition-colors"
-                        >
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
+                        {selectedMonths.length > 1 && (
+                          <button
+                            onClick={() => {
+                              const next = selectedMonths.filter(s => !(s.month === sm.month && s.year === sm.year));
+                              setSelectedMonths(next);
+                            }}
+                            className="text-[var(--blue)] hover:text-[var(--red)] transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     ))}
                 </div>
@@ -775,16 +764,42 @@ export function TripCreationWizard() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {([
-                { key: "outboundDeparture" as const, label: "Outbound Depart" },
-                { key: "outboundArrival" as const, label: "Outbound Arrive" },
-                { key: "returnDeparture" as const, label: "Return Depart" },
-                { key: "returnArrival" as const, label: "Return Arrive" },
-              ]).map(({ key, label }) => {
+                { key: "outboundDeparture" as const, label: "Outbound Depart", isArrival: false },
+                { key: "outboundArrival" as const, label: "Outbound Arrive", isArrival: true },
+                { key: "returnDeparture" as const, label: "Return Depart", isArrival: false },
+                { key: "returnArrival" as const, label: "Return Arrive", isArrival: true },
+              ]).map(({ key, label, isArrival }) => {
                 const filter = timeFilters[key];
                 const centerMin = parseInt(filter.time.split(":")[0], 10) * 60 + parseInt(filter.time.split(":")[1], 10);
-                const earliest = Math.max(0, centerMin - filter.plusMinus * 60);
-                const latest = Math.min(24 * 60 - 1, centerMin + filter.plusMinus * 60);
-                const fmtTime = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+                const rawEarliest = centerMin - filter.plusMinus * 60;
+                const rawLatest = centerMin + filter.plusMinus * 60;
+                const fmtTime = (m: number) => {
+                  const clamped = ((m % (24 * 60)) + 24 * 60) % (24 * 60);
+                  return `${String(Math.floor(clamped / 60)).padStart(2, "0")}:${String(clamped % 60).padStart(2, "0")}`;
+                };
+
+                let earliest: number, latest: number;
+                let showNextDay = false;
+                let showPrevDay = false;
+
+                if (filter.includeNextDay) {
+                  if (isArrival && rawLatest > 24 * 60 - 1) {
+                    earliest = Math.max(0, rawEarliest);
+                    latest = rawLatest % (24 * 60);
+                    showNextDay = true;
+                  } else if (!isArrival && rawEarliest < 0) {
+                    earliest = (rawEarliest + 24 * 60) % (24 * 60);
+                    latest = Math.min(24 * 60 - 1, rawLatest);
+                    showPrevDay = true;
+                  } else {
+                    earliest = Math.max(0, rawEarliest);
+                    latest = Math.min(24 * 60 - 1, rawLatest);
+                  }
+                } else {
+                  earliest = Math.max(0, rawEarliest);
+                  latest = Math.min(24 * 60 - 1, rawLatest);
+                }
+
                 return (
                   <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
                     <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">{label}</div>
@@ -807,7 +822,33 @@ export function TripCreationWizard() {
                         </button>
                       </div>
                     </div>
-                    <div className="text-[10px] text-[var(--text-3)] mt-1 font-mono tabular-nums">{fmtTime(earliest)} – {fmtTime(latest)}</div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <div className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">
+                        {showPrevDay && <span className="text-[var(--blue)]">-1d </span>}
+                        {fmtTime(earliest)} – {fmtTime(latest)}
+                        {showNextDay && <span className="text-[var(--blue)]"> +1d</span>}
+                      </div>
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <span className="text-[10px] text-[var(--text-3)]">
+                          {isArrival ? "+1 day" : "-1 day"}
+                        </span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={!!filter.includeNextDay}
+                          onClick={() => updateTimeFilter(key, "includeNextDay", !filter.includeNextDay)}
+                          className={`relative w-7 h-4 rounded-full transition-colors duration-200 ${
+                            filter.includeNextDay
+                              ? "bg-[var(--blue)]"
+                              : "bg-[var(--surface-3)] border border-[var(--border-default)]"
+                          }`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                            filter.includeNextDay ? "translate-x-3" : "translate-x-0"
+                          }`} />
+                        </button>
+                      </label>
+                    </div>
                   </div>
                 );
               })}
