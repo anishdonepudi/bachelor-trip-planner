@@ -592,7 +592,7 @@ export function TripCreationWizard() {
                   <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                   <span className="text-[10px] text-[var(--text-3)]">Holiday</span>
                 </div>
-                {hasFullConfig && <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">{remainingTrips} of {potentialTrips.length} trips</span>}
+                {hasFullConfig && <span className="text-[10px] text-[var(--text-3)] font-mono tabular-nums">{remainingTrips} of {potentialTrips.length} weekends</span>}
               </div>
             </div>
             <div className="space-y-4">
