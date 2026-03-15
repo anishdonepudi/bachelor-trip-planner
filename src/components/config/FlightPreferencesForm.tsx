@@ -11,11 +11,24 @@ interface FlightPreferencesFormProps {
   onEdited?: () => void;
 }
 
-const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
-  const h = Math.floor(i / 2);
-  const m = i % 2 === 0 ? "00" : "30";
-  return `${String(h).padStart(2, "0")}:${m}`;
-});
+const TIME_OPTIONS = [
+  ...Array.from({ length: 48 }, (_, i) => {
+    const h = Math.floor(i / 2);
+    const m = i % 2 === 0 ? "00" : "30";
+    return `${String(h).padStart(2, "0")}:${m}`;
+  }),
+  "23:59",
+];
+
+/** Format "HH:MM" as 12-hour time (e.g. "14:00" → "2:00PM") */
+function to12h(time: string): string {
+  const [hStr, mStr] = time.split(":");
+  const h = parseInt(hStr, 10);
+  const m = mStr;
+  const period = h < 12 ? "AM" : "PM";
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${m}${period}`;
+}
 
 export function FlightPreferencesForm({
   flightCategories, timeFilters,
@@ -176,16 +189,16 @@ export function FlightPreferencesForm({
               <div className="flex items-center gap-1.5">
                 <select value={window.from} onChange={(e) => updateTimeFilter(key, "from", e.target.value)}
                   className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{to12h(t)}</option>)}
                 </select>
                 <span className="text-[10px] text-[var(--text-3)] shrink-0">to</span>
                 <select value={window.to} onChange={(e) => updateTimeFilter(key, "to", e.target.value)}
                   className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{to12h(t)}</option>)}
                 </select>
               </div>
               <div className="mt-1.5 text-[10px] text-[var(--text-3)] font-mono tabular-nums">
-                {window.from} – {window.to}
+                {to12h(window.from)} – {to12h(window.to)}
                 {wrapsOvernight && <span className="text-[var(--blue)]"> (+1 day)</span>}
               </div>
             </div>

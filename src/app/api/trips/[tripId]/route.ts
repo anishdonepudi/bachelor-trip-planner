@@ -47,7 +47,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, month_range, selected_months, trip_duration, skip_scrape } = body;
+    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, skip_scrape } = body;
 
     const payload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -60,7 +60,6 @@ export async function PUT(
     if (excluded_dates !== undefined) payload.excluded_dates = excluded_dates;
     if (flight_categories !== undefined) payload.flight_categories = flight_categories;
     if (flight_time_filters !== undefined) payload.flight_time_filters = flight_time_filters;
-    if (month_range !== undefined) payload.month_range = month_range;
     if (selected_months !== undefined) payload.selected_months = selected_months;
     if (trip_duration !== undefined) payload.trip_duration = trip_duration;
 

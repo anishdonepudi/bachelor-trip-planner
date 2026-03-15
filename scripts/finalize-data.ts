@@ -13,8 +13,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { FlightCategory, MonthRange, SelectedMonth } from "../src/lib/types";
-import { DEFAULT_MONTH_RANGE } from "../src/lib/constants";
+import type { FlightCategory, SelectedMonth } from "../src/lib/types";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
@@ -96,12 +95,16 @@ async function main() {
     console.log(`CAPTCHA gate passed: 0 CAPTCHAs across ${jobs?.length ?? 0} scrape jobs\n`);
   }
 
-  // Load month range and selected months from config
-  const { data: configRow } = await supabase.from("config").select("month_range, selected_months").limit(1).single();
-  const monthRange: MonthRange = configRow?.month_range ?? DEFAULT_MONTH_RANGE;
+  // Load selected months from config
+  const { data: configRow } = await supabase.from("config").select("selected_months").limit(1).single();
   const selectedMonths: SelectedMonth[] | undefined = configRow?.selected_months?.length ? configRow.selected_months : undefined;
 
-  const dateRanges = generateDateRanges(monthRange, undefined, selectedMonths);
+  if (!selectedMonths || selectedMonths.length === 0) {
+    console.error("No selected_months in config — nothing to finalize. Exiting.");
+    process.exit(0);
+  }
+
+  const dateRanges = generateDateRanges(undefined, selectedMonths);
   const dateRangeMap = new Map(dateRanges.map((dr) => [dr.id, dr]));
 
   // =============================================

@@ -22,7 +22,7 @@ export function BlockedDatesForm({
   onSelectedMonthsChange, onTripDurationChange, onExcludedDatesChange,
   onEdited,
 }: BlockedDatesFormProps) {
-  const potentialTrips = useMemo(() => generateDateRanges(undefined, tripDuration, selectedMonths), [selectedMonths, tripDuration]);
+  const potentialTrips = useMemo(() => generateDateRanges(tripDuration, selectedMonths), [selectedMonths, tripDuration]);
 
   const seasonDates = useMemo(() => {
     if (selectedMonths.length === 0) return [];

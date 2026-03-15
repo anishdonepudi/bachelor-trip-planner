@@ -31,10 +31,9 @@ import type {
   FlightLeg,
   FlightCategoryConfig,
   FlightTimeFilters,
-  MonthRange,
   SelectedMonth,
 } from "../src/lib/types";
-import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_MONTH_RANGE } from "../src/lib/constants";
+import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS } from "../src/lib/constants";
 import { migrateTimeFilters } from "../src/lib/migrate-time-filters";
 
 // ---------------------------------------------------------------------------
@@ -58,7 +57,6 @@ let DESTINATION_AIRPORT = "CUN";
 let CATEGORIES_TO_SCRAPE_CONFIGS: FlightCategoryConfig[] = DEFAULT_FLIGHT_CATEGORIES;
 let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
 let TIME_FILTERS: FlightTimeFilters = DEFAULT_TIME_FILTERS;
-let MONTH_RANGE: MonthRange = DEFAULT_MONTH_RANGE;
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
 
 const TOP_N_PER_CATEGORY = 3;
@@ -76,7 +74,7 @@ let AIRPORT_TO_CITIES: Record<string, string[]> = {};
 async function loadAirportToCities(): Promise<void> {
   const { data, error } = await supabase
     .from("config")
-    .select("cities, destination_airport, flight_categories, flight_time_filters, month_range, selected_months")
+    .select("cities, destination_airport, flight_categories, flight_time_filters, selected_months")
     .limit(1)
     .single();
 
@@ -108,10 +106,6 @@ async function loadAirportToCities(): Promise<void> {
 
   if (data.flight_time_filters) {
     TIME_FILTERS = migrateTimeFilters(data.flight_time_filters);
-  }
-
-  if (data.month_range) {
-    MONTH_RANGE = data.month_range;
   }
 
   if (data.selected_months && Array.isArray(data.selected_months) && data.selected_months.length > 0) {
@@ -887,6 +881,11 @@ async function main(): Promise<void> {
 
   await loadAirportToCities();
 
+  if (!SELECTED_MONTHS || SELECTED_MONTHS.length === 0) {
+    console.error("No selected_months in config — nothing to scrape. Exiting.");
+    process.exit(0);
+  }
+
   const inputAirports = airportsEnv.split(",").map((a) => a.trim());
 
   const targetCities = new Set<string>();
@@ -911,10 +910,10 @@ async function main(): Promise<void> {
   console.log(`Airports: ${inputAirports.join(", ")}`);
   console.log(`Target cities: ${[...targetCities].join(", ")}`);
 
-  const dateRanges = generateDateRanges(MONTH_RANGE, undefined, SELECTED_MONTHS ?? undefined);
+  const dateRanges = generateDateRanges(undefined, SELECTED_MONTHS);
   const totalTasks = inputAirports.length * dateRanges.length;
 
-  console.log(`Date ranges: ${dateRanges.length} (${SELECTED_MONTHS ? `${SELECTED_MONTHS.length} selected months` : `${MONTH_RANGE.startMonth}/${MONTH_RANGE.startYear} - ${MONTH_RANGE.endMonth}/${MONTH_RANGE.endYear}`})`);
+  console.log(`Date ranges: ${dateRanges.length} (${SELECTED_MONTHS.length} selected months)`);
   console.log(`Categories: ${CATEGORIES_TO_SCRAPE.join(", ")}`);
   console.log(`Top N per category: ${TOP_N_PER_CATEGORY}`);
   console.log(`Max duration: ${TIME_FILTERS.maxDuration}hr`);

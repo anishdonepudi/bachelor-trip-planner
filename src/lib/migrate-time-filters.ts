@@ -21,21 +21,22 @@ export function migrateTimeFilters(raw: any): FlightTimeFilters {
   if ("outboundArrival" in raw || "returnDeparture" in raw) {
     const convert = (old: any): { from: string; to: string } => {
       if (!old || typeof old !== "object" || !old.time) {
-        return { from: "00:00", to: "23:30" };
+        return { from: "00:00", to: "23:59" };
       }
       const parts = old.time.split(":");
       const centerMin = parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
       const tolerance = (old.plusMinus ?? 12) * 60;
       const fromMin = Math.max(0, centerMin - tolerance);
-      const toMin = Math.min(23 * 60 + 30, centerMin + tolerance);
-      const fmt = (m: number) => {
+      const toMin = Math.min(23 * 60 + 59, centerMin + tolerance);
+      const fmt = (m: number, isMax?: boolean) => {
+        if (isMax && m >= 23 * 60 + 30) return "23:59";
         const h = Math.floor(m / 60);
         const min = m % 60;
         // Snap to nearest 30-minute increment
         const snapped = min >= 15 ? 30 : 0;
         return `${String(h).padStart(2, "0")}:${String(snapped).padStart(2, "0")}`;
       };
-      return { from: fmt(fromMin), to: fmt(toMin) };
+      return { from: fmt(fromMin), to: fmt(toMin, true) };
     };
 
     return {

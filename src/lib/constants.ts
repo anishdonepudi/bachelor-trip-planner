@@ -1,11 +1,4 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, MonthRange, TripDuration } from "./types";
-
-export const DEFAULT_MONTH_RANGE: MonthRange = {
-  startMonth: 6,
-  startYear: 2026,
-  endMonth: 8,
-  endYear: 2026,
-};
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, TripDuration } from "./types";
 
 function stopDescription(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
   const stopPart = stops === 0 ? "Nonstop flight" : stops === 1 ? "One-stop flight" : "Two-stop flight";
@@ -46,8 +39,8 @@ export const FLIGHT_CATEGORIES: {
 }[] = flightCategoryConfigToDisplay(DEFAULT_FLIGHT_CATEGORIES);
 
 export const DEFAULT_TIME_FILTERS: FlightTimeFilters = {
-  destinationArrival: { from: "00:00", to: "23:30" },
-  destinationDeparture: { from: "00:00", to: "23:30" },
+  destinationArrival: { from: "00:00", to: "23:59" },
+  destinationDeparture: { from: "00:00", to: "23:59" },
   maxDuration: 10,
 };
 

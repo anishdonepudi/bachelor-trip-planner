@@ -13,8 +13,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import axios from "axios";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { BudgetTier, AirbnbListingRow, MonthRange, SelectedMonth } from "../src/lib/types";
-import { DEFAULT_MONTH_RANGE } from "../src/lib/constants";
+import type { BudgetTier, AirbnbListingRow, SelectedMonth } from "../src/lib/types";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -23,7 +22,6 @@ import { DEFAULT_MONTH_RANGE } from "../src/lib/constants";
 let TOTAL_PEOPLE = 17;
 const NIGHTS = 3;
 let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
-let MONTH_RANGE: MonthRange = DEFAULT_MONTH_RANGE;
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
 
 const IS_TEST = process.argv.includes("--test");
@@ -666,9 +664,6 @@ async function loadConfig(): Promise<void> {
     if (data?.total_people) {
       TOTAL_PEOPLE = data.total_people;
     }
-    if (data?.month_range) {
-      MONTH_RANGE = data.month_range;
-    }
     if (data?.selected_months && Array.isArray(data.selected_months) && data.selected_months.length > 0) {
       SELECTED_MONTHS = data.selected_months;
     }
@@ -725,7 +720,7 @@ async function completeJob(jobId: number, errorMsg?: string): Promise<void> {
 async function runTest(): Promise<void> {
   console.log("=== Airbnb Scraper — LOCAL TEST MODE ===\n");
 
-  const dateRanges = generateDateRanges(MONTH_RANGE, undefined, SELECTED_MONTHS ?? undefined);
+  const dateRanges = generateDateRanges(undefined, SELECTED_MONTHS ?? undefined);
   const testRange = dateRanges[0];
 
   console.log(`Search parameters:`);
@@ -889,7 +884,12 @@ async function runFull(): Promise<void> {
 
   await loadConfig();
 
-  const dateRanges = generateDateRanges(MONTH_RANGE, undefined, SELECTED_MONTHS ?? undefined);
+  if (!SELECTED_MONTHS || SELECTED_MONTHS.length === 0) {
+    console.error("No selected_months in config — nothing to scrape. Exiting.");
+    process.exit(0);
+  }
+
+  const dateRanges = generateDateRanges(undefined, SELECTED_MONTHS);
   const jobId = await createScrapeJob();
   const runId = process.env.GITHUB_RUN_ID ?? null;
 

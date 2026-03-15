@@ -201,6 +201,7 @@ export function TravelInsights({ lat, lng, cityName, onMonthsChange, maxSelectio
       const exists = prev.findIndex(s => s.month === month && s.year === year);
       let next: SelectedMonth[];
       if (exists >= 0) {
+        if (prev.length <= 1) return prev; // prevent deselecting last month
         next = prev.filter((_, i) => i !== exists);
       } else if (prev.length >= maxSelections) {
         // Replace oldest selection

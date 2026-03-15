@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, month_range, selected_months, trip_duration } = body;
+    const { name, cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration } = body;
 
     if (!name || !destination_airport) {
       return NextResponse.json({ error: "Name and destination airport are required" }, { status: 400 });
@@ -78,7 +78,6 @@ export async function POST(request: Request) {
         excluded_dates: excluded_dates ?? [],
         flight_categories: flight_categories ?? null,
         flight_time_filters: flight_time_filters ?? null,
-        month_range: month_range ?? null,
         selected_months: selected_months ?? null,
         trip_duration: trip_duration ?? { nights: 3, departDays: [4, 5] },
       })

@@ -82,14 +82,6 @@ export interface SelectedMonth {
   year: number;
 }
 
-/** Configurable month range for trip season (derived from selected months) */
-export interface MonthRange {
-  startMonth: number; // 1-12
-  startYear: number;
-  endMonth: number;   // 1-12
-  endYear: number;
-}
-
 /** Configurable trip duration and departure day choices */
 export interface TripDuration {
   nights: number;      // number of nights (e.g. 3, 4, 5)

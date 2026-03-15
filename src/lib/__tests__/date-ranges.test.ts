@@ -5,38 +5,20 @@ import {
 } from "../date-ranges";
 
 describe("generateDateRanges", () => {
-  const ranges = generateDateRanges();
+  const selectedMonths = [
+    { month: 6, year: 2026 },
+    { month: 7, year: 2026 },
+    { month: 8, year: 2026 },
+  ];
+  const ranges = generateDateRanges(undefined, selectedMonths);
 
   it("should generate a non-empty array of date ranges", () => {
     expect(ranges.length).toBeGreaterThan(0);
   });
 
-  it("should generate between 22 and 26 valid weekends", () => {
-    // Plan specifies ~22-26 weekend date ranges
-    expect(ranges.length).toBeGreaterThanOrEqual(22);
-    expect(ranges.length).toBeLessThanOrEqual(26);
-  });
-
-  it("should only contain Thu-Sun or Fri-Mon formats", () => {
-    for (const range of ranges) {
-      expect(["Thu-Sun", "Fri-Mon"]).toContain(range.format);
-    }
-  });
-
-  it("should have Thu-Sun ranges starting on Thursday", () => {
-    const thuSun = ranges.filter((r) => r.format === "Thu-Sun");
-    for (const range of thuSun) {
-      const depart = new Date(range.departDate + "T00:00:00");
-      expect(depart.getDay()).toBe(4); // Thursday
-    }
-  });
-
-  it("should have Fri-Mon ranges starting on Friday", () => {
-    const friMon = ranges.filter((r) => r.format === "Fri-Mon");
-    for (const range of friMon) {
-      const depart = new Date(range.departDate + "T00:00:00");
-      expect(depart.getDay()).toBe(5); // Friday
-    }
+  it("should return empty array when no months selected", () => {
+    expect(generateDateRanges()).toEqual([]);
+    expect(generateDateRanges(undefined, [])).toEqual([]);
   });
 
   it("should have exactly 3 nights (3 days) between depart and return", () => {
@@ -61,25 +43,11 @@ describe("generateDateRanges", () => {
     }
   });
 
-  it("should exclude the 2nd weekend of June (Jun 11-14 / Jun 12-15)", () => {
-    const excludedDepartDates = ["2026-06-11", "2026-06-12"];
+  it("should only depart on Thursday or Friday (default departDays)", () => {
     for (const range of ranges) {
-      expect(excludedDepartDates).not.toContain(range.departDate);
+      const depart = new Date(range.departDate + "T00:00:00");
+      expect([4, 5]).toContain(depart.getDay());
     }
-  });
-
-  it("should exclude the 3rd weekend of June (Jun 18-21 / Jun 19-22)", () => {
-    const excludedDepartDates = ["2026-06-18", "2026-06-19"];
-    for (const range of ranges) {
-      expect(excludedDepartDates).not.toContain(range.departDate);
-    }
-  });
-
-  it("should include the 1st weekend of June (Jun 4-7 Thu-Sun)", () => {
-    const firstWeekend = ranges.find((r) => r.departDate === "2026-06-04");
-    expect(firstWeekend).toBeDefined();
-    expect(firstWeekend!.returnDate).toBe("2026-06-07");
-    expect(firstWeekend!.format).toBe("Thu-Sun");
   });
 
   it("should have unique IDs for each range", () => {
@@ -101,19 +69,17 @@ describe("generateDateRanges", () => {
     }
   });
 
-  it("should have Thu-Sun return on Sunday (day 0)", () => {
-    const thuSun = ranges.filter((r) => r.format === "Thu-Sun");
-    for (const range of thuSun) {
+  it("should respect custom trip duration", () => {
+    const customRanges = generateDateRanges(
+      { nights: 4, departDays: [5] },
+      [{ month: 7, year: 2026 }]
+    );
+    for (const range of customRanges) {
+      const depart = new Date(range.departDate + "T00:00:00");
       const ret = new Date(range.returnDate + "T00:00:00");
-      expect(ret.getDay()).toBe(0); // Sunday
-    }
-  });
-
-  it("should have Fri-Mon return on Monday (day 1)", () => {
-    const friMon = ranges.filter((r) => r.format === "Fri-Mon");
-    for (const range of friMon) {
-      const ret = new Date(range.returnDate + "T00:00:00");
-      expect(ret.getDay()).toBe(1); // Monday
+      const diffDays = (ret.getTime() - depart.getTime()) / (1000 * 60 * 60 * 24);
+      expect(diffDays).toBe(4);
+      expect(depart.getDay()).toBe(5); // Friday
     }
   });
 });
@@ -127,14 +93,15 @@ describe("formatDateDisplay", () => {
 });
 
 describe("formatDateRangeDisplay", () => {
-  it("should format same-month range as 'Mon D-D'", () => {
-    expect(formatDateRangeDisplay("2026-06-04", "2026-06-07")).toBe("Jun 4-7");
-    expect(formatDateRangeDisplay("2026-07-09", "2026-07-12")).toBe("Jul 9-12");
+  it("should format same-month range", () => {
+    expect(formatDateRangeDisplay("2026-06-04", "2026-06-07")).toBe(
+      "June 4 - June 7"
+    );
   });
 
   it("should format cross-month range with both months", () => {
     expect(formatDateRangeDisplay("2026-07-30", "2026-08-02")).toBe(
-      "Jul 30 - Aug 2"
+      "July 30 - August 2"
     );
   });
 });

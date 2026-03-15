@@ -1,4 +1,4 @@
-import { DateRange, MonthRange, SelectedMonth, TripDuration } from "./types";
+import { DateRange, SelectedMonth, TripDuration } from "./types";
 import { DEFAULT_TRIP_DURATION } from "./constants";
 
 /**
@@ -35,39 +35,27 @@ function generateForRange(startDate: Date, endDate: Date, nights: number, depart
 }
 
 /**
- * Generate all valid trip date ranges.
- * If selectedMonths is provided, generates ranges for each selected month individually.
- * Otherwise falls back to monthRange (start→end contiguous range).
+ * Generate all valid trip date ranges from selected months.
+ * Returns empty array if no months are selected.
  */
-export function generateDateRanges(monthRange?: MonthRange, tripDuration?: TripDuration, selectedMonths?: SelectedMonth[]): DateRange[] {
+export function generateDateRanges(tripDuration?: TripDuration, selectedMonths?: SelectedMonth[]): DateRange[] {
   const { nights, departDays } = tripDuration ?? DEFAULT_TRIP_DURATION;
 
-  // Use selected months if available — only generate for those specific months
-  if (selectedMonths && selectedMonths.length > 0) {
-    const seen = new Set<string>();
-    const allRanges: DateRange[] = [];
-    for (const sm of selectedMonths) {
-      const start = new Date(sm.year, sm.month - 1, 1);
-      const end = new Date(sm.year, sm.month, 0); // last day of month
-      for (const r of generateForRange(start, end, nights, departDays)) {
-        if (!seen.has(r.id)) {
-          seen.add(r.id);
-          allRanges.push(r);
-        }
+  if (!selectedMonths || selectedMonths.length === 0) return [];
+
+  const seen = new Set<string>();
+  const allRanges: DateRange[] = [];
+  for (const sm of selectedMonths) {
+    const start = new Date(sm.year, sm.month - 1, 1);
+    const end = new Date(sm.year, sm.month, 0); // last day of month
+    for (const r of generateForRange(start, end, nights, departDays)) {
+      if (!seen.has(r.id)) {
+        seen.add(r.id);
+        allRanges.push(r);
       }
     }
-    return allRanges.sort((a, b) => a.departDate.localeCompare(b.departDate));
   }
-
-  // Fallback: contiguous month range
-  const startDate = monthRange
-    ? new Date(monthRange.startYear, monthRange.startMonth - 1, 1)
-    : new Date(2026, 5, 1);
-  const endDate = monthRange
-    ? new Date(monthRange.endYear, monthRange.endMonth, 0)
-    : new Date(2026, 7, 31);
-
-  return generateForRange(startDate, endDate, nights, departDays);
+  return allRanges.sort((a, b) => a.departDate.localeCompare(b.departDate));
 }
 
 function formatDate(date: Date): string {
