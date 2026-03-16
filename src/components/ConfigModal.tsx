@@ -32,7 +32,7 @@ interface ConfigModalProps {
   tripId: string;
 }
 
-type Section = "trip" | "group" | "flights" | "schedule";
+type Section = "trip" | "group" | "flights" | "stay" | "schedule";
 
 // ── Collapsible section wrapper ──
 function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, children }: {
@@ -829,6 +829,21 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
             })}
           </div>
 
+        </ConfigSection>
+
+        {/* Section: Stay Preferences */}
+        <ConfigSection
+          id="stay"
+          title="Stay Preferences"
+          subtitle={`${budgetTiers.length} budget ${budgetTiers.length === 1 ? "tier" : "tiers"}`}
+          expanded={expandedSections.has("stay")}
+          onToggle={toggleSection}
+          icon={
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+            </svg>
+          }
+        >
           {/* Budget Tiers */}
           <div className="mt-1">
             <div className="flex items-center justify-between">

@@ -9,7 +9,7 @@ import { CitySelect } from "./CitySelect";
 import { TravelInsights, MonthDetailPanel, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type SelectedMonth, type UnitSystem, type DailyAvg, type HoveredMonthData } from "./TravelInsights";
 import { useTravelInsights } from "@/lib/hooks/use-travel-insights";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3 | 4 | 5;
 
 export function TripCreationWizard() {
   const router = useRouter();
@@ -301,7 +301,8 @@ export function TripCreationWizard() {
       case 1: return !!tripName.trim() && !!destinationAirport;
       case 2: return cities.some(c => c.city);
       case 3: return selectedMonths.length > 0 && tripDuration.nights > 0 && tripDuration.departDays.length > 0;
-      case 4: return flightCategories.length > 0 && !hasDuplicateCategories && budgetTiers.length > 0;
+      case 4: return flightCategories.length > 0 && !hasDuplicateCategories;
+      case 5: return budgetTiers.length > 0;
     }
   };
 
@@ -320,7 +321,7 @@ export function TripCreationWizard() {
   }, [step, canProceed, changeStep]);
 
   const handleSubmit = async () => {
-    if (!canProceed(4)) {
+    if (!canProceed(5)) {
       setShowValidation(true);
       setShakeKey(k => k + 1);
       return;
@@ -357,7 +358,7 @@ export function TripCreationWizard() {
     }
   };
 
-  const stepTitles = ["Trip Basics", "Travel Group", "Trip Dates", "Flight Preferences"];
+  const stepTitles = ["Trip Basics", "Travel Group", "Trip Dates", "Flight Preferences", "Stay Preferences"];
 
   return (
     <div className="min-h-screen bg-[var(--surface-0)] text-[var(--text-1)]">
@@ -372,7 +373,7 @@ export function TripCreationWizard() {
             </a>
             <h1 className="text-sm font-heading font-bold tracking-tight">New Trip</h1>
           </div>
-          <span className="text-[11px] text-[var(--text-3)] font-mono">Step {step} of 4</span>
+          <span className="text-[11px] text-[var(--text-3)] font-mono">Step {step} of 5</span>
         </div>
       </header>
 
@@ -380,7 +381,7 @@ export function TripCreationWizard() {
       <div className="h-0.5 bg-[var(--surface-2)]">
         <div
           className="h-full bg-[var(--blue)] transition-all duration-300"
-          style={{ width: `${(step / 4) * 100}%` }}
+          style={{ width: `${(step / 5) * 100}%` }}
         />
       </div>
 
@@ -392,6 +393,7 @@ export function TripCreationWizard() {
             {step === 2 && "Add the cities people are flying from."}
             {step === 3 && "Set your travel window and block dates."}
             {step === 4 && "Configure flight search preferences."}
+            {step === 5 && "Set your accommodation budget ranges."}
           </p>
         </div>
 
@@ -889,18 +891,58 @@ export function TripCreationWizard() {
               <p className="text-xs text-[var(--gold)]">Remove duplicate categories</p>
             )}
 
-            {/* Budget Tiers */}
-            <div className="mt-4">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Budget Tiers ({budgetTiers.length}/3)</span>
-                {budgetTiers.length < 3 && (
-                  <button onClick={addBudgetTier}
-                    className="text-[11px] text-[var(--blue)] hover:text-[var(--text-1)] font-medium flex items-center gap-1">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                    Add
-                  </button>
-                )}
-              </div>
+            {/* Time Filters */}
+            <div className="mt-1">
+              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Time Filters</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {([
+                { key: "destinationArrival" as const, label: "Arrive at Destination", subtitle: "When should everyone arrive" },
+                { key: "destinationDeparture" as const, label: "Depart from Destination", subtitle: "When should everyone leave" },
+              ]).map(({ key, label, subtitle }) => {
+                const window = timeFilters[key];
+                const fromMin = parseInt(window.from.split(":")[0], 10) * 60 + parseInt(window.from.split(":")[1], 10);
+                const toMin = parseInt(window.to.split(":")[0], 10) * 60 + parseInt(window.to.split(":")[1], 10);
+                const wrapsOvernight = toMin < fromMin;
+
+                return (
+                  <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+                    <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-0.5">{label}</div>
+                    <div className="text-[10px] text-[var(--text-3)] mb-2">{subtitle}</div>
+                    <div className="flex items-center gap-1.5">
+                      <select value={window.from} onChange={(e) => updateTimeFilter(key, "from", e.target.value)}
+                        className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
+                        {TIME_OPTIONS.map(t => <option key={t} value={t}>{to12h(t)}</option>)}
+                      </select>
+                      <span className="text-[10px] text-[var(--text-3)] shrink-0">to</span>
+                      <select value={window.to} onChange={(e) => updateTimeFilter(key, "to", e.target.value)}
+                        className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
+                        {TIME_OPTIONS.map(t => <option key={t} value={t}>{to12h(t)}</option>)}
+                      </select>
+                    </div>
+                    <div className="mt-1.5 text-[10px] text-[var(--text-3)] font-mono tabular-nums">
+                      {to12h(window.from)} – {to12h(window.to)}
+                      {wrapsOvernight && <span className="text-[var(--blue)]"> (+1 day)</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Stay Preferences */}
+        {step === 5 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Budget Tiers ({budgetTiers.length}/3)</span>
+              {budgetTiers.length < 3 && (
+                <button onClick={addBudgetTier}
+                  className="text-[11px] text-[var(--blue)] hover:text-[var(--text-1)] font-medium flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                  Add
+                </button>
+              )}
             </div>
             <div className="space-y-2">
               {budgetTiers.map((tier, i) => (
@@ -951,44 +993,6 @@ export function TripCreationWizard() {
             {showValidation && budgetTiers.length === 0 && (
               <p className="text-xs text-[var(--gold)]">Add at least one budget tier</p>
             )}
-
-            {/* Time Filters */}
-            <div className="mt-1">
-              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Time Filters</span>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {([
-                { key: "destinationArrival" as const, label: "Arrive at Destination", subtitle: "When should everyone arrive" },
-                { key: "destinationDeparture" as const, label: "Depart from Destination", subtitle: "When should everyone leave" },
-              ]).map(({ key, label, subtitle }) => {
-                const window = timeFilters[key];
-                const fromMin = parseInt(window.from.split(":")[0], 10) * 60 + parseInt(window.from.split(":")[1], 10);
-                const toMin = parseInt(window.to.split(":")[0], 10) * 60 + parseInt(window.to.split(":")[1], 10);
-                const wrapsOvernight = toMin < fromMin;
-
-                return (
-                  <div key={key} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
-                    <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-0.5">{label}</div>
-                    <div className="text-[10px] text-[var(--text-3)] mb-2">{subtitle}</div>
-                    <div className="flex items-center gap-1.5">
-                      <select value={window.from} onChange={(e) => updateTimeFilter(key, "from", e.target.value)}
-                        className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                        {TIME_OPTIONS.map(t => <option key={t} value={t}>{to12h(t)}</option>)}
-                      </select>
-                      <span className="text-[10px] text-[var(--text-3)] shrink-0">to</span>
-                      <select value={window.to} onChange={(e) => updateTimeFilter(key, "to", e.target.value)}
-                        className="flex-1 h-8 px-2 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] appearance-none cursor-pointer">
-                        {TIME_OPTIONS.map(t => <option key={t} value={t}>{to12h(t)}</option>)}
-                      </select>
-                    </div>
-                    <div className="mt-1.5 text-[10px] text-[var(--text-3)] font-mono tabular-nums">
-                      {to12h(window.from)} – {to12h(window.to)}
-                      {wrapsOvernight && <span className="text-[var(--blue)]"> (+1 day)</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
         )}
 
@@ -1009,7 +1013,7 @@ export function TripCreationWizard() {
               Back
             </button>
           )}
-          {step < 4 ? (
+          {step < 5 ? (
             <div key={shakeKey} className={`flex-1 ${shakeKey > 0 ? "animate-[shake_200ms_ease-in-out]" : ""}`}>
               <button
                 onClick={handleContinue}
@@ -1027,12 +1031,12 @@ export function TripCreationWizard() {
             <div key={shakeKey} className={`flex-1 ${shakeKey > 0 ? "animate-[shake_200ms_ease-in-out]" : ""}`}>
               <button
                 onClick={handleSubmit}
-                onMouseEnter={() => { if (!canProceed(4)) setShowValidation(true); }}
+                onMouseEnter={() => { if (!canProceed(5)) setShowValidation(true); }}
                 disabled={saving}
                 className={`w-full h-11 rounded-md text-sm font-semibold text-white transition-all duration-150 ${
                   saving
                     ? "bg-[var(--blue)] opacity-40 cursor-not-allowed"
-                    : canProceed(4)
+                    : canProceed(5)
                       ? "bg-[var(--blue)] hover:brightness-110"
                       : "bg-[var(--blue)] opacity-60 cursor-default"
                 }`}
