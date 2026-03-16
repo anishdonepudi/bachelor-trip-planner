@@ -7,32 +7,13 @@
  * Airports are grouped to keep total jobs ≤ 20 (GitHub Actions limit).
  */
 
-import { createClient } from "@supabase/supabase-js";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+import { loadTripConfig } from "./lib/load-trip-config";
 
 const MAX_JOBS = 19;
 
 async function main() {
-  const { data, error } = await supabase
-    .from("config")
-    .select("cities")
-    .limit(1)
-    .single();
-
-  if (error || !data?.cities) {
-    console.error("Failed to load config:", error);
-    process.exit(1);
-  }
-
-  const cities = data.cities as {
-    city: string;
-    primaryAirports: string[];
-    nearbyAirports: string[];
-  }[];
+  const config = await loadTripConfig();
+  const cities = config.cities;
 
   // Collect all unique airports
   const allAirports = new Set<string>();

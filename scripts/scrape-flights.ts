@@ -35,6 +35,7 @@ import type {
 } from "../src/lib/types";
 import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS } from "../src/lib/constants";
 import { migrateTimeFilters } from "../src/lib/migrate-time-filters";
+import { loadTripConfig } from "./lib/load-trip-config";
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -58,6 +59,7 @@ let CATEGORIES_TO_SCRAPE_CONFIGS: FlightCategoryConfig[] = DEFAULT_FLIGHT_CATEGO
 let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
 let TIME_FILTERS: FlightTimeFilters = DEFAULT_TIME_FILTERS;
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
+let TRIP_ID: string | null = null;
 
 const TOP_N_PER_CATEGORY = 3;
 
@@ -72,21 +74,17 @@ const RETURN_POST_DELAY_MS = parseInt(process.env.RETURN_POST_DELAY_MS ?? "500",
 let AIRPORT_TO_CITIES: Record<string, string[]> = {};
 
 async function loadAirportToCities(): Promise<void> {
-  const { data, error } = await supabase
-    .from("config")
-    .select("cities, destination_airport, flight_categories, flight_time_filters, selected_months")
-    .limit(1)
-    .single();
+  const config = await loadTripConfig();
 
-  if (error || !data?.cities) {
-    console.error("Failed to load config from Supabase, using empty map");
-    return;
-  }
+  TRIP_ID = config.tripId;
+  DESTINATION_AIRPORT = config.destinationAirport;
+  CATEGORIES_TO_SCRAPE_CONFIGS = config.flightCategories;
+  CATEGORIES_TO_SCRAPE = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
+  TIME_FILTERS = config.flightTimeFilters;
+  SELECTED_MONTHS = config.selectedMonths;
 
-  const cities = data.cities as { city: string; primaryAirports: string[]; nearbyAirports: string[] }[];
   const map: Record<string, string[]> = {};
-
-  for (const c of cities) {
+  for (const c of config.cities) {
     for (const apt of [...c.primaryAirports, ...c.nearbyAirports]) {
       if (!map[apt]) map[apt] = [];
       if (!map[apt].includes(c.city)) map[apt].push(c.city);
@@ -94,25 +92,7 @@ async function loadAirportToCities(): Promise<void> {
   }
 
   AIRPORT_TO_CITIES = map;
-
-  if (data.destination_airport) {
-    DESTINATION_AIRPORT = data.destination_airport;
-  }
-
-  if (data.flight_categories && Array.isArray(data.flight_categories)) {
-    CATEGORIES_TO_SCRAPE_CONFIGS = data.flight_categories;
-    CATEGORIES_TO_SCRAPE = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
-  }
-
-  if (data.flight_time_filters) {
-    TIME_FILTERS = migrateTimeFilters(data.flight_time_filters);
-  }
-
-  if (data.selected_months && Array.isArray(data.selected_months) && data.selected_months.length > 0) {
-    SELECTED_MONTHS = data.selected_months;
-  }
-
-  console.log(`Loaded config: ${Object.keys(map).length} airports, ${cities.length} cities, destination: ${DESTINATION_AIRPORT}`);
+  console.log(`Loaded config: ${Object.keys(map).length} airports, ${config.cities.length} cities, destination: ${DESTINATION_AIRPORT}${TRIP_ID ? `, trip: ${TRIP_ID}` : ""}`);
 }
 
 const USER_AGENTS = [
@@ -182,6 +162,7 @@ async function createScrapeJob(airports: string[]): Promise<number> {
       status: "running",
       started_at: new Date().toISOString(),
       github_run_id: process.env.GITHUB_RUN_ID ?? null,
+      trip_id: TRIP_ID,
       progress: { completed: 0, total: 0, current: "initializing", airports },
     })
     .select("id")
@@ -842,6 +823,7 @@ async function processTask(
       is_best: false,
       scraped_at: now,
       run_id: runId,
+      trip_id: TRIP_ID,
     }));
 
     dbPromises.push(

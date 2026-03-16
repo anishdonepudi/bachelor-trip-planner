@@ -14,6 +14,7 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import axios from "axios";
 import { generateDateRanges } from "../src/lib/date-ranges";
 import type { BudgetTier, AirbnbListingRow, SelectedMonth } from "../src/lib/types";
+import { loadTripConfig } from "./lib/load-trip-config";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -23,6 +24,7 @@ let TOTAL_PEOPLE = 17;
 const NIGHTS = 3;
 let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
+let TRIP_ID: string | null = null;
 
 const IS_TEST = process.argv.includes("--test");
 
@@ -656,18 +658,18 @@ function getSupabase(): SupabaseClient {
 
 async function loadConfig(): Promise<void> {
   try {
-    const sb = getSupabase();
-    const { data } = await sb.from("config").select("*").limit(1).single();
-    if (data?.destination_city) {
-      DESTINATION_CITY = data.destination_city;
+    const config = await loadTripConfig();
+    TRIP_ID = config.tripId;
+    if (config.destinationCity) {
+      DESTINATION_CITY = config.destinationCity;
     }
-    if (data?.total_people) {
-      TOTAL_PEOPLE = data.total_people;
+    if (config.totalPeople) {
+      TOTAL_PEOPLE = config.totalPeople;
     }
-    if (data?.selected_months && Array.isArray(data.selected_months) && data.selected_months.length > 0) {
-      SELECTED_MONTHS = data.selected_months;
+    if (config.selectedMonths) {
+      SELECTED_MONTHS = config.selectedMonths;
     }
-    console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}`);
+    console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}${TRIP_ID ? `, trip: ${TRIP_ID}` : ""}`);
   } catch (err) {
     console.warn("Could not load config, using defaults:", err instanceof Error ? err.message : err);
   }
@@ -682,6 +684,7 @@ async function createScrapeJob(): Promise<number> {
       status: "running",
       started_at: new Date().toISOString(),
       github_run_id: process.env.GITHUB_RUN_ID ?? null,
+      trip_id: TRIP_ID,
       progress: { completed: 0, total: 0, current: "initializing" },
     })
     .select("id")
@@ -853,6 +856,7 @@ async function processTierTask(
       budget_tier: tier.value,
       scraped_at: now,
       run_id: runId,
+      trip_id: TRIP_ID,
     }));
 
     const delQuery = sb

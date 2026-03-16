@@ -14,10 +14,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { generateDateRanges } from "../src/lib/date-ranges";
 import type { FlightCategory, SelectedMonth } from "../src/lib/types";
+import { loadTripConfig } from "./lib/load-trip-config";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
 const RUN_ID = process.env.GITHUB_RUN_ID ?? null;
+const TRIP_ID = process.env.TRIP_ID || null;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY env vars");
@@ -72,10 +74,12 @@ async function main() {
   // =============================================
 
   if (RUN_ID) {
-    const { data: jobs } = await supabase
+    let jobsQuery = supabase
       .from("scrape_jobs")
       .select("id, job_type, progress")
       .eq("github_run_id", RUN_ID);
+    if (TRIP_ID) jobsQuery = jobsQuery.eq("trip_id", TRIP_ID);
+    const { data: jobs } = await jobsQuery;
 
     let totalCaptchas = 0;
     if (jobs) {
@@ -95,16 +99,16 @@ async function main() {
     console.log(`CAPTCHA gate passed: 0 CAPTCHAs across ${jobs?.length ?? 0} scrape jobs\n`);
   }
 
-  // Load selected months from config
-  const { data: configRow } = await supabase.from("config").select("selected_months").limit(1).single();
-  const selectedMonths: SelectedMonth[] | undefined = configRow?.selected_months?.length ? configRow.selected_months : undefined;
+  // Load config (trip-aware)
+  const tripConfig = await loadTripConfig();
+  const selectedMonths = tripConfig.selectedMonths;
 
   if (!selectedMonths || selectedMonths.length === 0) {
     console.error("No selected_months in config — nothing to finalize. Exiting.");
     process.exit(0);
   }
 
-  const dateRanges = generateDateRanges(undefined, selectedMonths);
+  const dateRanges = generateDateRanges(tripConfig.tripDuration ?? undefined, selectedMonths);
   const dateRangeMap = new Map(dateRanges.map((dr) => [dr.id, dr]));
 
   // =============================================
@@ -116,10 +120,28 @@ async function main() {
   console.log("--- Phase 0.5: Snapshot current production data ---\n");
 
   try {
+    // Scope production data fetch by trip_id if set
+    const fetchProdData = async (table: string) => {
+      if (TRIP_ID) {
+        const rows: Record<string, unknown>[] = [];
+        let offset = 0;
+        const PAGE_SIZE = 1000;
+        while (true) {
+          const { data, error } = await supabase.from(table).select("*").eq("trip_id", TRIP_ID).range(offset, offset + PAGE_SIZE - 1);
+          if (error) { console.error(`Error fetching ${table}: ${error.message}`); break; }
+          if (!data || data.length === 0) break;
+          rows.push(...data);
+          if (data.length < PAGE_SIZE) break;
+          offset += PAGE_SIZE;
+        }
+        return rows;
+      }
+      return fetchAll(table, null);
+    };
     const [prodFlights, prodFlightOptions, prodAirbnb] = await Promise.all([
-      fetchAll("flights", null),
-      fetchAll("flight_options", null),
-      fetchAll("airbnb_listings", null),
+      fetchProdData("flights"),
+      fetchProdData("flight_options"),
+      fetchProdData("airbnb_listings"),
     ]);
 
     if (prodFlights.length > 0 || prodFlightOptions.length > 0 || prodAirbnb.length > 0) {
@@ -179,9 +201,10 @@ async function main() {
         airbnbListings: minAirbnb,
       };
 
+      const snapshotKey = TRIP_ID ?? "legacy0001";
       const { error: snapshotError } = await supabase
         .from("previous_weekend_snapshot")
-        .upsert({ id: 1, snapshot, created_at: new Date().toISOString() });
+        .upsert({ trip_id: snapshotKey, snapshot, created_at: new Date().toISOString() });
 
       if (snapshotError) {
         console.error(`   Snapshot upsert error: ${snapshotError.message}`);
@@ -257,6 +280,7 @@ async function main() {
         google_flights_url: best.google_flights_url,
         scraped_at: best.scraped_at,
         run_id: RUN_ID,
+        trip_id: TRIP_ID,
       });
     }
 
@@ -285,16 +309,17 @@ async function main() {
     console.log("5. Promoting flight_options...");
     const foRows = stagedFlights.map((row) => {
       const { id, ...rest } = row;
-      return { ...rest, run_id: promoteRunId };
+      return { ...rest, run_id: promoteRunId, trip_id: TRIP_ID };
     });
     const foInserted = await batchInsert("flight_options", foRows);
     console.log(`   Inserted ${foInserted} new flight options`);
 
-    // Delete old rows (different run_id or null)
-    const { count: deletedCount } = await supabase
-      .from("flight_options")
-      .delete({ count: "exact" })
-      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    // Delete old rows — scope by trip_id to avoid nuking other trips' data
+    let foDeleteQuery = supabase.from("flight_options").delete({ count: "exact" });
+    if (TRIP_ID) {
+      foDeleteQuery = foDeleteQuery.eq("trip_id", TRIP_ID);
+    }
+    const { count: deletedCount } = await foDeleteQuery.or(`run_id.is.null,run_id.neq.${promoteRunId}`);
     console.log(`   Deleted ${deletedCount ?? "?"} old flight options`);
   }
 
@@ -304,15 +329,16 @@ async function main() {
     console.log("6. Promoting best flights...");
     const flightRows = stagedBestFlights.map((row) => {
       const { id, ...rest } = row;
-      return { ...rest, run_id: promoteRunId };
+      return { ...rest, run_id: promoteRunId, trip_id: TRIP_ID };
     });
     const inserted = await batchInsert("flights", flightRows);
     console.log(`   Inserted ${inserted} new best flights`);
 
-    const { count: deletedCount } = await supabase
-      .from("flights")
-      .delete({ count: "exact" })
-      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    let fDeleteQuery = supabase.from("flights").delete({ count: "exact" });
+    if (TRIP_ID) {
+      fDeleteQuery = fDeleteQuery.eq("trip_id", TRIP_ID);
+    }
+    const { count: deletedCount } = await fDeleteQuery.or(`run_id.is.null,run_id.neq.${promoteRunId}`);
     console.log(`   Deleted ${deletedCount ?? "?"} old best flights`);
   }
 
@@ -321,15 +347,16 @@ async function main() {
     console.log("7. Promoting airbnb_listings...");
     const alRows = stagedAirbnb.map((row) => {
       const { id, ...rest } = row;
-      return { ...rest, run_id: promoteRunId };
+      return { ...rest, run_id: promoteRunId, trip_id: TRIP_ID };
     });
     const alInserted = await batchInsert("airbnb_listings", alRows);
     console.log(`   Inserted ${alInserted} new airbnb listings`);
 
-    const { count: deletedCount } = await supabase
-      .from("airbnb_listings")
-      .delete({ count: "exact" })
-      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    let alDeleteQuery = supabase.from("airbnb_listings").delete({ count: "exact" });
+    if (TRIP_ID) {
+      alDeleteQuery = alDeleteQuery.eq("trip_id", TRIP_ID);
+    }
+    const { count: deletedCount } = await alDeleteQuery.or(`run_id.is.null,run_id.neq.${promoteRunId}`);
     console.log(`   Deleted ${deletedCount ?? "?"} old airbnb listings`);
   } else {
     console.log("7. No staged airbnb listings — skipping.");
@@ -341,15 +368,19 @@ async function main() {
 
   console.log("\n--- Phase 3: Cleanup ---\n");
   console.log("8. Cleaning staging tables...");
-  if (RUN_ID) {
-    await supabase.from("flight_options_staging").delete().eq("run_id", RUN_ID);
-    await supabase.from("flights_staging").delete().eq("run_id", RUN_ID);
-    await supabase.from("airbnb_listings_staging").delete().eq("run_id", RUN_ID);
-  } else {
-    await supabase.from("flight_options_staging").delete().gte("id", 0);
-    await supabase.from("flights_staging").delete().gte("id", 0);
-    await supabase.from("airbnb_listings_staging").delete().gte("id", 0);
-  }
+  const cleanStaging = async (table: string) => {
+    let query = supabase.from(table).delete();
+    if (RUN_ID) {
+      query = query.eq("run_id", RUN_ID);
+    } else {
+      query = query.gte("id", 0);
+    }
+    if (TRIP_ID) query = query.eq("trip_id", TRIP_ID);
+    await query;
+  };
+  await cleanStaging("flight_options_staging");
+  await cleanStaging("flights_staging");
+  await cleanStaging("airbnb_listings_staging");
   console.log("   Done");
 
   console.log(`\nFinalization complete at ${new Date().toISOString()}`);

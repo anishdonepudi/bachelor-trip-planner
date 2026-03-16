@@ -29,17 +29,23 @@ on:
         options:
           - production
           - staging
+      trip_id:
+        description: "Trip ID to scrape for (V3 multi-trip)"
+        required: false
+        default: ""
+        type: string
 
   repository_dispatch:
     types: [config-changed]
 
 concurrency:
-  group: scrape-${{ github.event.inputs.environment || 'production' }}
+  group: scrape-${{ github.event.inputs.environment || 'production' }}-${{ github.event.inputs.trip_id || 'global' }}
   cancel-in-progress: false
 
 env:
   SUPABASE_URL: ${{ (github.event.inputs.environment == 'staging' && secrets.STAGING_SUPABASE_URL) || secrets.SUPABASE_URL }}
   SUPABASE_SERVICE_KEY: ${{ (github.event.inputs.environment == 'staging' && secrets.STAGING_SUPABASE_SERVICE_KEY) || secrets.SUPABASE_SERVICE_KEY }}
+  TRIP_ID: ${{ github.event.inputs.trip_id || '' }}
 
 jobs:
   # Step 1: Read config from Supabase and build airport matrix
