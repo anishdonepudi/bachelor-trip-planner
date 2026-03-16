@@ -59,7 +59,7 @@ let CATEGORIES_TO_SCRAPE_CONFIGS: FlightCategoryConfig[] = DEFAULT_FLIGHT_CATEGO
 let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
 let TIME_FILTERS: FlightTimeFilters = DEFAULT_TIME_FILTERS;
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
-let TRIP_ID: string | null = null;
+let TRIP_ID: string = "";
 
 const TOP_N_PER_CATEGORY = 3;
 

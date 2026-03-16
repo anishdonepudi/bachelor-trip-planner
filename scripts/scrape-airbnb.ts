@@ -24,7 +24,7 @@ let TOTAL_PEOPLE = 17;
 const NIGHTS = 3;
 let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
-let TRIP_ID: string | null = null;
+let TRIP_ID: string = "";
 
 const IS_TEST = process.argv.includes("--test");
 

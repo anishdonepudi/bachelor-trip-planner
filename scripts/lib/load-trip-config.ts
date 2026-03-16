@@ -1,7 +1,6 @@
 /**
  * Shared config loader for scraper scripts.
- * If TRIP_ID env var is set → reads from `trips` table.
- * If not → falls back to `config` table (backward compat for production on main).
+ * Reads trip configuration from the `trips` table using the required TRIP_ID env var.
  */
 
 import { createClient } from "@supabase/supabase-js";
@@ -15,7 +14,7 @@ import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION 
 import { migrateTimeFilters } from "../../src/lib/migrate-time-filters";
 
 export interface TripConfig {
-  tripId: string | null;
+  tripId: string;
   cities: { city: string; primaryAirports: string[]; nearbyAirports: string[] }[];
   destinationAirport: string;
   destinationCity: string | null;
@@ -29,57 +28,23 @@ export interface TripConfig {
 export async function loadTripConfig(): Promise<TripConfig> {
   const supabaseUrl = process.env.SUPABASE_URL!;
   const supabaseKey = process.env.SUPABASE_SERVICE_KEY!;
-  const tripId = process.env.TRIP_ID || null;
+  const tripId = process.env.TRIP_ID;
+
+  if (!tripId) {
+    throw new Error("Missing required TRIP_ID env var");
+  }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  if (tripId) {
-    console.log(`Loading config from trips table for trip: ${tripId}`);
-    const { data, error } = await supabase
-      .from("trips")
-      .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration")
-      .eq("id", tripId)
-      .single();
-
-    if (error || !data) {
-      throw new Error(`Failed to load trip ${tripId}: ${error?.message ?? "not found"}`);
-    }
-
-    const cities = (data.cities ?? []) as TripConfig["cities"];
-    const flightCategories = (data.flight_categories && Array.isArray(data.flight_categories))
-      ? data.flight_categories as FlightCategoryConfig[]
-      : DEFAULT_FLIGHT_CATEGORIES;
-    const flightTimeFilters = data.flight_time_filters
-      ? migrateTimeFilters(data.flight_time_filters)
-      : DEFAULT_TIME_FILTERS;
-    const selectedMonths = (data.selected_months && Array.isArray(data.selected_months) && data.selected_months.length > 0)
-      ? data.selected_months as SelectedMonth[]
-      : null;
-    const tripDuration = data.trip_duration as TripDuration | null;
-
-    return {
-      tripId,
-      cities,
-      destinationAirport: data.destination_airport ?? "CUN",
-      destinationCity: data.destination_city ?? null,
-      totalPeople: data.total_people ?? 1,
-      flightCategories,
-      flightTimeFilters,
-      selectedMonths,
-      tripDuration,
-    };
-  }
-
-  // Fallback: read from config table (production on main)
-  console.log("No TRIP_ID set — loading config from config table (legacy mode)");
+  console.log(`Loading config from trips table for trip: ${tripId}`);
   const { data, error } = await supabase
-    .from("config")
+    .from("trips")
     .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration")
-    .limit(1)
+    .eq("id", tripId)
     .single();
 
   if (error || !data) {
-    throw new Error(`Failed to load config: ${error?.message ?? "no data"}`);
+    throw new Error(`Failed to load trip ${tripId}: ${error?.message ?? "not found"}`);
   }
 
   const cities = (data.cities ?? []) as TripConfig["cities"];
@@ -95,7 +60,7 @@ export async function loadTripConfig(): Promise<TripConfig> {
   const tripDuration = data.trip_duration as TripDuration | null;
 
   return {
-    tripId: null,
+    tripId,
     cities,
     destinationAirport: data.destination_airport ?? "CUN",
     destinationCity: data.destination_city ?? null,

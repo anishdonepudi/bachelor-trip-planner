@@ -19,10 +19,15 @@ import { loadTripConfig } from "./lib/load-trip-config";
 const SUPABASE_URL = process.env.SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY!;
 const RUN_ID = process.env.GITHUB_RUN_ID ?? null;
-const TRIP_ID = process.env.TRIP_ID || null;
+const TRIP_ID = process.env.TRIP_ID!;
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
   console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY env vars");
+  process.exit(1);
+}
+
+if (!TRIP_ID) {
+  console.error("Missing TRIP_ID env var");
   process.exit(1);
 }
 
@@ -77,8 +82,8 @@ async function main() {
     let jobsQuery = supabase
       .from("scrape_jobs")
       .select("id, job_type, progress")
-      .eq("github_run_id", RUN_ID);
-    if (TRIP_ID) jobsQuery = jobsQuery.eq("trip_id", TRIP_ID);
+      .eq("github_run_id", RUN_ID)
+      .eq("trip_id", TRIP_ID);
     const { data: jobs } = await jobsQuery;
 
     let totalCaptchas = 0;
@@ -120,23 +125,20 @@ async function main() {
   console.log("--- Phase 0.5: Snapshot current production data ---\n");
 
   try {
-    // Scope production data fetch by trip_id if set
+    // Scope production data fetch by trip_id
     const fetchProdData = async (table: string) => {
-      if (TRIP_ID) {
-        const rows: Record<string, unknown>[] = [];
-        let offset = 0;
-        const PAGE_SIZE = 1000;
-        while (true) {
-          const { data, error } = await supabase.from(table).select("*").eq("trip_id", TRIP_ID).range(offset, offset + PAGE_SIZE - 1);
-          if (error) { console.error(`Error fetching ${table}: ${error.message}`); break; }
-          if (!data || data.length === 0) break;
-          rows.push(...data);
-          if (data.length < PAGE_SIZE) break;
-          offset += PAGE_SIZE;
-        }
-        return rows;
+      const rows: Record<string, unknown>[] = [];
+      let offset = 0;
+      const PAGE_SIZE = 1000;
+      while (true) {
+        const { data, error } = await supabase.from(table).select("*").eq("trip_id", TRIP_ID).range(offset, offset + PAGE_SIZE - 1);
+        if (error) { console.error(`Error fetching ${table}: ${error.message}`); break; }
+        if (!data || data.length === 0) break;
+        rows.push(...data);
+        if (data.length < PAGE_SIZE) break;
+        offset += PAGE_SIZE;
       }
-      return fetchAll(table, null);
+      return rows;
     };
     const [prodFlights, prodFlightOptions, prodAirbnb] = await Promise.all([
       fetchProdData("flights"),
@@ -201,10 +203,9 @@ async function main() {
         airbnbListings: minAirbnb,
       };
 
-      const snapshotKey = TRIP_ID ?? "legacy0001";
       const { error: snapshotError } = await supabase
         .from("previous_weekend_snapshot")
-        .upsert({ trip_id: snapshotKey, snapshot, created_at: new Date().toISOString() });
+        .upsert({ trip_id: TRIP_ID, snapshot, created_at: new Date().toISOString() });
 
       if (snapshotError) {
         console.error(`   Snapshot upsert error: ${snapshotError.message}`);
@@ -315,11 +316,9 @@ async function main() {
     console.log(`   Inserted ${foInserted} new flight options`);
 
     // Delete old rows — scope by trip_id to avoid nuking other trips' data
-    let foDeleteQuery = supabase.from("flight_options").delete({ count: "exact" });
-    if (TRIP_ID) {
-      foDeleteQuery = foDeleteQuery.eq("trip_id", TRIP_ID);
-    }
-    const { count: deletedCount } = await foDeleteQuery.or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    const { count: deletedCount } = await supabase.from("flight_options").delete({ count: "exact" })
+      .eq("trip_id", TRIP_ID)
+      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
     console.log(`   Deleted ${deletedCount ?? "?"} old flight options`);
   }
 
@@ -334,11 +333,9 @@ async function main() {
     const inserted = await batchInsert("flights", flightRows);
     console.log(`   Inserted ${inserted} new best flights`);
 
-    let fDeleteQuery = supabase.from("flights").delete({ count: "exact" });
-    if (TRIP_ID) {
-      fDeleteQuery = fDeleteQuery.eq("trip_id", TRIP_ID);
-    }
-    const { count: deletedCount } = await fDeleteQuery.or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    const { count: deletedCount } = await supabase.from("flights").delete({ count: "exact" })
+      .eq("trip_id", TRIP_ID)
+      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
     console.log(`   Deleted ${deletedCount ?? "?"} old best flights`);
   }
 
@@ -352,11 +349,9 @@ async function main() {
     const alInserted = await batchInsert("airbnb_listings", alRows);
     console.log(`   Inserted ${alInserted} new airbnb listings`);
 
-    let alDeleteQuery = supabase.from("airbnb_listings").delete({ count: "exact" });
-    if (TRIP_ID) {
-      alDeleteQuery = alDeleteQuery.eq("trip_id", TRIP_ID);
-    }
-    const { count: deletedCount } = await alDeleteQuery.or(`run_id.is.null,run_id.neq.${promoteRunId}`);
+    const { count: deletedCount } = await supabase.from("airbnb_listings").delete({ count: "exact" })
+      .eq("trip_id", TRIP_ID)
+      .or(`run_id.is.null,run_id.neq.${promoteRunId}`);
     console.log(`   Deleted ${deletedCount ?? "?"} old airbnb listings`);
   } else {
     console.log("7. No staged airbnb listings — skipping.");
@@ -375,7 +370,7 @@ async function main() {
     } else {
       query = query.gte("id", 0);
     }
-    if (TRIP_ID) query = query.eq("trip_id", TRIP_ID);
+    query = query.eq("trip_id", TRIP_ID);
     await query;
   };
   await cleanStaging("flight_options_staging");
