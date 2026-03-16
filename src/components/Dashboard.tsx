@@ -27,7 +27,7 @@ import {
 import { computeRankChanges } from "@/lib/rank-changes";
 
 import { migrateTimeFilters } from "@/lib/migrate-time-filters";
-import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS } from "@/lib/constants";
+import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { useAuth } from "./auth/AuthProvider";
 import { FilterBar } from "./FilterBar";
@@ -57,7 +57,7 @@ export function Dashboard({ tripId }: DashboardProps) {
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>([]);
   const [flightTimeFilters, setFlightTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
-  const [budgetTierConfigs, setBudgetTierConfigs] = useState<BudgetTierConfig[]>(DEFAULT_BUDGET_TIER_CONFIGS);
+  const [budgetTierConfigs, setBudgetTierConfigs] = useState<BudgetTierConfig[]>([]);
   const [cities, setCities] = useState<CityConfig[]>([]);
   const [priorityCity, setPriorityCity] = useState("all");
   const [scoringAlgorithm, setScoringAlgorithm] = useState<ScoringAlgorithm>("zscore");
@@ -198,8 +198,6 @@ export function Dashboard({ tripId }: DashboardProps) {
     if (configData?.trip_duration) setTripDuration(configData.trip_duration);
     if (configData?.budget_tiers && Array.isArray(configData.budget_tiers)) {
       setBudgetTierConfigs(configData.budget_tiers);
-    } else {
-      setBudgetTierConfigs(DEFAULT_BUDGET_TIER_CONFIGS);
     }
     if (configData?.name) setTripName(configData.name);
     // Check edit permissions for trip-scoped dashboard

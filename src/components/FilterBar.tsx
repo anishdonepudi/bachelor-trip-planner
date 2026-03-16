@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig, BudgetTierConfig } from "@/lib/types";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay, DEFAULT_BUDGET_TIER_CONFIGS } from "@/lib/constants";
+import { FLIGHT_CATEGORIES, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
 
 interface FilterBarProps {
   flightCategory: FlightCategory;
@@ -11,7 +11,7 @@ interface FilterBarProps {
   scoringAlgorithm: ScoringAlgorithm;
   cities: CityConfig[];
   flightCategories?: FlightCategoryConfig[];
-  budgetTierConfigs?: BudgetTierConfig[];
+  budgetTierConfigs: BudgetTierConfig[];
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
   onPriorityCityChange: (city: string) => void;
@@ -102,9 +102,7 @@ export function FilterBar({
   const displayCategories = flightCategories
     ? flightCategoryConfigToDisplay(flightCategories)
     : FLIGHT_CATEGORIES;
-  const displayBudgetTiers = budgetTierConfigs
-    ? budgetTierConfigToDisplay(budgetTierConfigs)
-    : BUDGET_TIERS;
+  const displayBudgetTiers = budgetTierConfigToDisplay(budgetTierConfigs);
 
   return (
     <div className="space-y-3">

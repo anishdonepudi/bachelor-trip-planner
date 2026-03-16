@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig, BudgetTierConfig } from "@/lib/types";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay, DEFAULT_BUDGET_TIER_CONFIGS } from "@/lib/constants";
+import { FLIGHT_CATEGORIES, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
 
 interface FilterSheetProps {
   open: boolean;
@@ -13,7 +13,7 @@ interface FilterSheetProps {
   scoringAlgorithm: ScoringAlgorithm;
   cities: CityConfig[];
   flightCategories?: FlightCategoryConfig[];
-  budgetTierConfigs?: BudgetTierConfig[];
+  budgetTierConfigs: BudgetTierConfig[];
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
   onPriorityCityChange: (city: string) => void;
@@ -38,9 +38,7 @@ export function FilterSheet({
   const displayCategories = flightCategories
     ? flightCategoryConfigToDisplay(flightCategories)
     : FLIGHT_CATEGORIES;
-  const displayBudgetTiers = budgetTierConfigs
-    ? budgetTierConfigToDisplay(budgetTierConfigs)
-    : BUDGET_TIERS;
+  const displayBudgetTiers = budgetTierConfigToDisplay(budgetTierConfigs);
   const sheetRef = useRef<HTMLDivElement>(null);
   const startY = useRef<number | null>(null);
   const currentY = useRef<number | null>(null);

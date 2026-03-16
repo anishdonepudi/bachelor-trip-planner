@@ -15,7 +15,7 @@ import {
   BudgetTierConfig,
 } from "@/lib/types";
 import { computeRankChanges } from "@/lib/rank-changes";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_BUDGET_TIER_CONFIGS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
+import { FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
 import { scoreAllWeekends } from "@/lib/scoring";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
 import { ScoreBadge, RankChangeIndicator } from "./ScoreBadge";
@@ -32,7 +32,7 @@ interface ComboSummaryProps {
   rankChangeSince: string | null;
   totalPeople: number;
   flightCategories?: FlightCategoryConfig[];
-  budgetTierConfigs?: BudgetTierConfig[];
+  budgetTierConfigs: BudgetTierConfig[];
   onSelectCombo: (flightCategory: FlightCategory, budgetTier: BudgetTier) => void;
 }
 
@@ -74,7 +74,7 @@ export function ComboSummary({
     [flightCategories]
   );
   const displayBudgetTiers = useMemo(() =>
-    budgetTierConfigs ? budgetTierConfigToDisplay(budgetTierConfigs) : budgetTierConfigToDisplay(DEFAULT_BUDGET_TIER_CONFIGS),
+    budgetTierConfigToDisplay(budgetTierConfigs),
     [budgetTierConfigs]
   );
 

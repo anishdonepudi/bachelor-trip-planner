@@ -11,7 +11,7 @@ import type {
   TripDuration,
   BudgetTierConfig,
 } from "../../src/lib/types";
-import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS } from "../../src/lib/constants";
+import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "../../src/lib/constants";
 import { migrateTimeFilters } from "../../src/lib/migrate-time-filters";
 
 export interface TripConfig {
@@ -62,7 +62,10 @@ export async function loadTripConfig(): Promise<TripConfig> {
   const tripDuration = data.trip_duration as TripDuration | null;
   const budgetTiers = (data.budget_tiers && Array.isArray(data.budget_tiers))
     ? data.budget_tiers as BudgetTierConfig[]
-    : DEFAULT_BUDGET_TIER_CONFIGS;
+    : null;
+  if (!budgetTiers || budgetTiers.length === 0) {
+    throw new Error(`Trip ${tripId} has no budget_tiers configured`);
+  }
 
   return {
     tripId,
