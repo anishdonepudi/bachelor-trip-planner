@@ -47,7 +47,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, skip_scrape } = body;
+    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, skip_scrape } = body;
 
     const payload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -63,6 +63,7 @@ export async function PUT(
     if (selected_months !== undefined) payload.selected_months = selected_months;
     if (trip_duration !== undefined) payload.trip_duration = trip_duration;
     if (budget_tiers !== undefined) payload.budget_tiers = budget_tiers;
+    if (airbnb_amenities !== undefined) payload.airbnb_amenities = airbnb_amenities;
 
     const { data, error } = await supabaseAdmin
       .from("trips")

@@ -25,6 +25,7 @@ let NIGHTS = 3;
 let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
 let TRIP_ID: string = "";
+let AMENITY_IDS: string[] = ["7"]; // default: Pool (will be overwritten by config)
 
 const IS_TEST = process.argv.includes("--test");
 
@@ -89,7 +90,9 @@ export function buildAirbnbSearchUrl(
   if (priceMin > 0) params.set("price_min", String(priceMin));
   if (priceMax > 0) params.set("price_max", String(priceMax));
   params.append("room_types[]", "Entire home/apt");
-  params.append("amenities[]", "7"); // Pool
+  for (const amenityId of AMENITY_IDS) {
+    params.append("amenities[]", amenityId);
+  }
   params.append("refinement_paths[]", "/homes");
   if (cursor) params.set("cursor", cursor);
   const urlPath = cityToUrlPath(DESTINATION_CITY);
@@ -675,7 +678,11 @@ async function loadConfig(): Promise<void> {
       totalMin: t.perPersonMin * TOTAL_PEOPLE * NIGHTS,
       totalMax: t.perPersonMax * TOTAL_PEOPLE * NIGHTS,
     }));
+    if (config.airbnbAmenities && config.airbnbAmenities.length > 0) {
+      AMENITY_IDS = config.airbnbAmenities.map(a => a.id);
+    }
     console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}, nights: ${NIGHTS}${TRIP_ID ? `, trip: ${TRIP_ID}` : ""}`);
+    console.log(`  Amenities: ${AMENITY_IDS.join(", ")}`);
   } catch (err) {
     console.error("Failed to load config:", err instanceof Error ? err.message : err);
     throw err;
@@ -737,7 +744,8 @@ async function runTest(): Promise<void> {
   console.log(`  Dates: ${testRange.departDate} → ${testRange.returnDate}`);
   console.log(`  Location: ${DESTINATION_CITY}`);
   console.log(`  Guests: ${TOTAL_PEOPLE}`);
-  console.log(`  Filters: Entire home, Pool, ${Math.min(TOTAL_PEOPLE, 16)}+ guests\n`);
+  const amenityNames = AMENITY_IDS.length > 0 ? AMENITY_IDS.join(", ") : "none";
+  console.log(`  Filters: Entire home, amenities=[${amenityNames}], ${Math.min(TOTAL_PEOPLE, 16)}+ guests\n`);
 
   // Test all tiers + no-filter baseline
   const allListings: ScrapedListing[] = [];

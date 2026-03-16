@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig } from "@/lib/types";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS } from "@/lib/constants";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity } from "@/lib/types";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS, DEFAULT_AIRBNB_AMENITIES, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
 import { TravelInsights, MonthDetailPanel, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type SelectedMonth, type UnitSystem, type DailyAvg, type HoveredMonthData } from "./TravelInsights";
@@ -45,6 +45,7 @@ export function TripCreationWizard() {
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(DEFAULT_BUDGET_TIER_CONFIGS);
+  const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>(DEFAULT_AIRBNB_AMENITIES);
 
   // Fetch travel insights once for the destination
   const insights = useTravelInsights(
@@ -291,6 +292,14 @@ export function TripCreationWizard() {
     setBudgetTiers(updated);
   };
 
+  const toggleAmenity = (id: string, label: string) => {
+    setAirbnbAmenities(prev =>
+      prev.some(a => a.id === id)
+        ? prev.filter(a => a.id !== id)
+        : [...prev, { id, label }]
+    );
+  };
+
   const toggleDate = (date: string) => {
     setExcludedDates((prev) => prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]);
   };
@@ -344,6 +353,7 @@ export function TripCreationWizard() {
           selected_months: selectedMonths,
           trip_duration: tripDuration,
           budget_tiers: budgetTiers,
+          airbnb_amenities: airbnbAmenities,
         }),
       });
       if (!res.ok) {
@@ -993,6 +1003,43 @@ export function TripCreationWizard() {
             {showValidation && budgetTiers.length === 0 && (
               <p className="text-xs text-[var(--gold)]">Add at least one budget tier</p>
             )}
+
+            {/* Airbnb Amenities */}
+            <div className="mt-6">
+              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">
+                Amenity Filters
+              </span>
+              <p className="text-[10px] text-[var(--text-3)] mt-0.5 mb-3">
+                Only show stays that have these amenities
+              </p>
+            </div>
+            {(() => {
+              const categories = [...new Set(AIRBNB_AMENITY_OPTIONS.map(a => a.category))];
+              return categories.map(cat => (
+                <div key={cat} className="mb-3">
+                  <div className="text-[10px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1.5">{cat}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {AIRBNB_AMENITY_OPTIONS.filter(a => a.category === cat).map(amenity => {
+                      const isSelected = airbnbAmenities.some(a => a.id === amenity.id);
+                      return (
+                        <button
+                          key={amenity.id}
+                          type="button"
+                          onClick={() => toggleAmenity(amenity.id, amenity.label)}
+                          className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all duration-150 ${
+                            isSelected
+                              ? "bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]"
+                              : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)] hover:border-[var(--border-hover)]"
+                          }`}
+                        >
+                          {amenity.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         )}
 

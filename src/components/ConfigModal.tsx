@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration, BudgetTierConfig } from "@/lib/types";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration, BudgetTierConfig, AirbnbAmenity } from "@/lib/types";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_AIRBNB_AMENITIES, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { CitySelect } from "./CitySelect";
@@ -26,8 +26,9 @@ interface ConfigModalProps {
   selectedMonths: SelectedMonth[];
   tripDuration: TripDuration;
   budgetTierConfigs: BudgetTierConfig[];
+  airbnbAmenities: AirbnbAmenity[];
   onOpen?: () => void;
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration, budgetTierConfigs: BudgetTierConfig[]) => void;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration, budgetTierConfigs: BudgetTierConfig[], airbnbAmenities: AirbnbAmenity[]) => void;
   inlineMode?: boolean;
   tripId: string;
 }
@@ -79,7 +80,7 @@ function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, c
   );
 }
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, budgetTierConfigs: initialBudgetTierConfigs, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, budgetTierConfigs: initialBudgetTierConfigs, airbnbAmenities: initialAirbnbAmenities, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<Section>>(new Set(["trip"]));
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -91,6 +92,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [selectedMonths, setSelectedMonths] = useState<SelectedMonth[]>(initialSelectedMonths);
   const [tripDuration, setTripDuration] = useState<TripDuration>(initialTripDuration);
   const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(initialBudgetTierConfigs);
+  const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>(initialAirbnbAmenities);
 
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
   const [saving, setSaving] = useState(false);
@@ -149,8 +151,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setSelectedMonths(initialSelectedMonths);
     setTripDuration(initialTripDuration);
     setBudgetTiers(initialBudgetTierConfigs);
+    setAirbnbAmenities(initialAirbnbAmenities);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialSelectedMonths, initialTripDuration, initialBudgetTierConfigs]);
+  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialSelectedMonths, initialTripDuration, initialBudgetTierConfigs, initialAirbnbAmenities]);
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
@@ -165,6 +168,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setSelectedMonths(initialSelectedMonths);
       setTripDuration(initialTripDuration);
       setBudgetTiers(initialBudgetTierConfigs);
+      setAirbnbAmenities(initialAirbnbAmenities);
       setExpandedSections(new Set(["trip"]));
       setDestinationCoords(null);
       coordsResolved.current = false;
@@ -187,6 +191,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const selectedMonthsChanged = JSON.stringify(selectedMonths) !== JSON.stringify(initialSelectedMonths);
   const tripDurationChanged = JSON.stringify(tripDuration) !== JSON.stringify(initialTripDuration);
   const budgetTiersChanged = JSON.stringify(budgetTiers) !== JSON.stringify(initialBudgetTierConfigs);
+  const amenitiesChanged = JSON.stringify(airbnbAmenities) !== JSON.stringify(initialAirbnbAmenities);
   const hasChanges =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     JSON.stringify(excludedDates.slice().sort()) !== JSON.stringify(initialExcluded.slice().sort()) ||
@@ -196,7 +201,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     timeFiltersChanged ||
     selectedMonthsChanged ||
     tripDurationChanged ||
-    budgetTiersChanged;
+    budgetTiersChanged ||
+    amenitiesChanged;
   const citiesChanged =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     destinationAirport !== initialDestination ||
@@ -205,7 +211,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     timeFiltersChanged ||
     selectedMonthsChanged ||
     tripDurationChanged ||
-    budgetTiersChanged;
+    budgetTiersChanged ||
+    amenitiesChanged;
 
   // ── City helpers ──
   const addCity = () => {
@@ -437,6 +444,15 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setBudgetTiers(updated);
   };
 
+  const toggleAmenity = (id: string, label: string) => {
+    hasEdited.current = true;
+    setAirbnbAmenities(prev =>
+      prev.some(a => a.id === id)
+        ? prev.filter(a => a.id !== id)
+        : [...prev, { id, label }]
+    );
+  };
+
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() + i);
@@ -466,10 +482,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, selected_months: selectedMonths, trip_duration: tripDuration, budget_tiers: budgetTiers, skip_scrape: !citiesChanged && !selectedMonthsChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, selected_months: selectedMonths, trip_duration: tripDuration, budget_tiers: budgetTiers, airbnb_amenities: airbnbAmenities, skip_scrape: !citiesChanged && !selectedMonthsChanged }),
       });
       if (res.ok) {
-        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, selectedMonths, tripDuration, budgetTiers);
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, selectedMonths, tripDuration, budgetTiers, airbnbAmenities);
         hasEdited.current = false;
         setOpen(false);
       } else {
@@ -835,7 +851,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         <ConfigSection
           id="stay"
           title="Stay Preferences"
-          subtitle={`${budgetTiers.length} budget ${budgetTiers.length === 1 ? "tier" : "tiers"}`}
+          subtitle={`${budgetTiers.length} budget ${budgetTiers.length === 1 ? "tier" : "tiers"} \u00b7 ${airbnbAmenities.length} ${airbnbAmenities.length === 1 ? "amenity" : "amenities"}`}
           expanded={expandedSections.has("stay")}
           onToggle={toggleSection}
           icon={
@@ -905,6 +921,43 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
               </div>
             ))}
           </div>
+
+          {/* Airbnb Amenities */}
+          <div className="mt-4">
+            <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">
+              Amenity Filters
+            </span>
+            <p className="text-[10px] text-[var(--text-3)] mt-0.5 mb-3">
+              Only show stays that have these amenities
+            </p>
+          </div>
+          {(() => {
+            const categories = [...new Set(AIRBNB_AMENITY_OPTIONS.map(a => a.category))];
+            return categories.map(cat => (
+              <div key={cat} className="mb-3">
+                <div className="text-[10px] font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1.5">{cat}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {AIRBNB_AMENITY_OPTIONS.filter(a => a.category === cat).map(amenity => {
+                    const isSelected = airbnbAmenities.some(a => a.id === amenity.id);
+                    return (
+                      <button
+                        key={amenity.id}
+                        type="button"
+                        onClick={() => toggleAmenity(amenity.id, amenity.label)}
+                        className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-all duration-150 ${
+                          isSelected
+                            ? "bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]"
+                            : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)] hover:border-[var(--border-hover)]"
+                        }`}
+                      >
+                        {amenity.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ));
+          })()}
         </ConfigSection>
 
         {/* Section 4: Schedule */}

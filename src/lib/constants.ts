@@ -1,4 +1,4 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity } from "./types";
 
 function stopDescription(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
   const stopPart = stops === 0 ? "Nonstop flight" : stops === 1 ? "One-stop flight" : "Two-stop flight";
@@ -104,4 +104,79 @@ export const SCORING_ALGORITHMS: {
     description:
       "Balances cost with Airbnb quality (rating and reviews). A slightly pricier weekend with a top-rated stay can outrank a cheaper one with poor reviews.",
   },
+];
+
+// ── Airbnb Amenity Options ──
+
+export interface AirbnbAmenityOption {
+  id: string;
+  label: string;
+  category: string;
+}
+
+export const AIRBNB_AMENITY_OPTIONS: AirbnbAmenityOption[] = [
+  // Essentials
+  { id: "4", label: "WiFi", category: "Essentials" },
+  { id: "8", label: "Kitchen", category: "Essentials" },
+  { id: "5", label: "Air Conditioning", category: "Essentials" },
+  { id: "30", label: "Heating", category: "Essentials" },
+  { id: "33", label: "Washer", category: "Essentials" },
+  { id: "34", label: "Dryer", category: "Essentials" },
+  { id: "45", label: "Hair Dryer", category: "Essentials" },
+  { id: "46", label: "Iron", category: "Essentials" },
+  { id: "47", label: "Dedicated Workspace", category: "Essentials" },
+  { id: "1", label: "TV", category: "Essentials" },
+
+  // Kitchen & Dining
+  { id: "89", label: "Microwave", category: "Kitchen & Dining" },
+  { id: "90", label: "Coffee Maker", category: "Kitchen & Dining" },
+  { id: "91", label: "Refrigerator", category: "Kitchen & Dining" },
+  { id: "92", label: "Dishwasher", category: "Kitchen & Dining" },
+  { id: "95", label: "Oven", category: "Kitchen & Dining" },
+  { id: "96", label: "Stove", category: "Kitchen & Dining" },
+  { id: "137", label: "Hot Water Kettle", category: "Kitchen & Dining" },
+  { id: "322", label: "Blender", category: "Kitchen & Dining" },
+  { id: "236", label: "Dining Table", category: "Kitchen & Dining" },
+
+  // Outdoor
+  { id: "7", label: "Pool", category: "Outdoor" },
+  { id: "25", label: "Hot Tub", category: "Outdoor" },
+  { id: "58", label: "Patio or Balcony", category: "Outdoor" },
+  { id: "57", label: "BBQ Grill", category: "Outdoor" },
+  { id: "210", label: "Outdoor Shower", category: "Outdoor" },
+  { id: "280", label: "Sauna", category: "Outdoor" },
+
+  // Parking & Facilities
+  { id: "9", label: "Free Parking", category: "Parking & Facilities" },
+  { id: "104", label: "EV Charger", category: "Parking & Facilities" },
+  { id: "15", label: "Gym", category: "Parking & Facilities" },
+
+  // Location
+  { id: "100", label: "Beach Access", category: "Location" },
+  { id: "286", label: "Ski-In/Ski-Out", category: "Location" },
+
+  // Entertainment
+  { id: "185", label: "Sound System", category: "Entertainment" },
+  { id: "227", label: "Exercise Equipment", category: "Entertainment" },
+  { id: "392", label: "Board Games", category: "Entertainment" },
+  { id: "515", label: "Ping Pong Table", category: "Entertainment" },
+  { id: "521", label: "Pool Table", category: "Entertainment" },
+  { id: "347", label: "Piano", category: "Entertainment" },
+
+  // Family
+  { id: "71", label: "Crib", category: "Family" },
+  { id: "64", label: "High Chair", category: "Family" },
+
+  // Safety
+  { id: "35", label: "Smoke Alarm", category: "Safety" },
+  { id: "36", label: "Carbon Monoxide Alarm", category: "Safety" },
+  { id: "37", label: "First Aid Kit", category: "Safety" },
+  { id: "39", label: "Fire Extinguisher", category: "Safety" },
+
+  // Booking
+  { id: "51", label: "Self Check-in", category: "Booking" },
+];
+
+export const DEFAULT_AIRBNB_AMENITIES: AirbnbAmenity[] = [
+  { id: "7", label: "Pool" },
 ];

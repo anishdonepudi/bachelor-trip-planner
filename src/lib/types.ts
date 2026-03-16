@@ -253,3 +253,8 @@ export interface RankChangeInfo {
 }
 
 export type RankChangeMap = Record<string, RankChangeInfo>;
+
+export interface AirbnbAmenity {
+  id: string;    // the Airbnb numeric ID as string, e.g. "7"
+  label: string; // display name
+}
