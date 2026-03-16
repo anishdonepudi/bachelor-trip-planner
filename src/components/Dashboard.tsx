@@ -13,6 +13,7 @@ import {
   FlightTimeFilters,
   SelectedMonth,
   TripDuration,
+  BudgetTierConfig,
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
@@ -26,7 +27,7 @@ import {
 import { computeRankChanges } from "@/lib/rank-changes";
 
 import { migrateTimeFilters } from "@/lib/migrate-time-filters";
-import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
+import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS } from "@/lib/constants";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { useAuth } from "./auth/AuthProvider";
 import { FilterBar } from "./FilterBar";
@@ -56,6 +57,7 @@ export function Dashboard({ tripId }: DashboardProps) {
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>([]);
   const [flightTimeFilters, setFlightTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
+  const [budgetTierConfigs, setBudgetTierConfigs] = useState<BudgetTierConfig[]>(DEFAULT_BUDGET_TIER_CONFIGS);
   const [cities, setCities] = useState<CityConfig[]>([]);
   const [priorityCity, setPriorityCity] = useState("all");
   const [scoringAlgorithm, setScoringAlgorithm] = useState<ScoringAlgorithm>("zscore");
@@ -154,11 +156,13 @@ export function Dashboard({ tripId }: DashboardProps) {
   const modalCooldownUntil = useRef<number>(0);
 
   useEffect(() => {
-    if (!scrapeData?.lastFlightUpdate) return;
     if (Date.now() < modalCooldownUntil.current) return;
+    const lfu = scrapeData?.lastFlightUpdate ?? null;
     if (initialLastUpdated.current === undefined) {
-      initialLastUpdated.current = scrapeData.lastFlightUpdate;
-    } else if (scrapeData.lastFlightUpdate !== initialLastUpdated.current) {
+      // First fetch — record whatever we have (null for new trips, timestamp for existing)
+      initialLastUpdated.current = lfu;
+    } else if (lfu !== initialLastUpdated.current) {
+      // Data changed — show modal (covers both null→timestamp and timestamp→timestamp)
       if (weekendData) {
         savePreviousWeekendData(weekendData, tripId);
         setRankChangeVersion((v) => v + 1);
@@ -192,6 +196,11 @@ export function Dashboard({ tripId }: DashboardProps) {
     if (configData?.flight_time_filters) setFlightTimeFilters(migrateTimeFilters(configData.flight_time_filters));
     if (configData?.selected_months && Array.isArray(configData.selected_months)) setSelectedMonths(configData.selected_months);
     if (configData?.trip_duration) setTripDuration(configData.trip_duration);
+    if (configData?.budget_tiers && Array.isArray(configData.budget_tiers)) {
+      setBudgetTierConfigs(configData.budget_tiers);
+    } else {
+      setBudgetTierConfigs(DEFAULT_BUDGET_TIER_CONFIGS);
+    }
     if (configData?.name) setTripName(configData.name);
     // Check edit permissions for trip-scoped dashboard
     if (tripId && configData?.owner_id && user) {
@@ -332,14 +341,15 @@ export function Dashboard({ tripId }: DashboardProps) {
   };
 
   const flightCatLabel = flightCategories.find((c) => c.id === flightCategory)?.label ?? FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
-  const budgetLabel = BUDGET_TIERS.find((t) => t.value === budgetTier)?.label ?? budgetTier;
+  const budgetLabel = budgetTierConfigs.find((t) => t.id === budgetTier)?.label ?? budgetTier;
 
-  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[], newTimeFilters: FlightTimeFilters, newSelectedMonths: SelectedMonth[], newTripDuration: TripDuration) => {
+  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[], newTimeFilters: FlightTimeFilters, newSelectedMonths: SelectedMonth[], newTripDuration: TripDuration, newBudgetTierConfigs: BudgetTierConfig[]) => {
     const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDest !== destinationAirport || newDestCity !== destinationCity;
     const categoriesChanged = JSON.stringify(newFlightCategories) !== JSON.stringify(flightCategories);
     const timeFiltersChanged = JSON.stringify(newTimeFilters) !== JSON.stringify(flightTimeFilters);
     const selectedMonthsChanged = JSON.stringify(newSelectedMonths) !== JSON.stringify(selectedMonths);
     const tripDurationChanged = JSON.stringify(newTripDuration) !== JSON.stringify(tripDuration);
+    const budgetTiersChanged = JSON.stringify(newBudgetTierConfigs) !== JSON.stringify(budgetTierConfigs);
     setCities(newCities);
     setExcludedDates(newExcluded);
     setDestinationAirport(newDest);
@@ -348,12 +358,17 @@ export function Dashboard({ tripId }: DashboardProps) {
     setFlightTimeFilters(newTimeFilters);
     setSelectedMonths(newSelectedMonths);
     setTripDuration(newTripDuration);
-    if (citiesChanged || categoriesChanged || timeFiltersChanged || selectedMonthsChanged || tripDurationChanged) setConfigChanged(true);
+    setBudgetTierConfigs(newBudgetTierConfigs);
+    if (citiesChanged || categoriesChanged || timeFiltersChanged || selectedMonthsChanged || tripDurationChanged || budgetTiersChanged) setConfigChanged(true);
     // If the active flight category was removed, fall back to first available
     if (!newFlightCategories.some(fc => fc.id === flightCategory)) {
       setFlightCategory(newFlightCategories[0]?.id ?? "nonstop_carryon");
     }
-  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory, flightTimeFilters, selectedMonths, tripDuration]);
+    // If the active budget tier was removed, fall back to first available
+    if (!newBudgetTierConfigs?.some(bt => bt.id === budgetTier)) {
+      setBudgetTier(newBudgetTierConfigs?.[0]?.id ?? "budget");
+    }
+  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory, flightTimeFilters, selectedMonths, tripDuration, budgetTierConfigs, budgetTier]);
 
   // ── Render ──
   return (
@@ -411,6 +426,7 @@ export function Dashboard({ tripId }: DashboardProps) {
                   flightTimeFilters={flightTimeFilters}
                   selectedMonths={selectedMonths}
                   tripDuration={tripDuration}
+                  budgetTierConfigs={budgetTierConfigs}
                   onOpen={() => mutateConfig()}
                   onSave={handleConfigSave}
                   tripId={tripId}
@@ -521,6 +537,7 @@ export function Dashboard({ tripId }: DashboardProps) {
                     scoringAlgorithm={scoringAlgorithm}
                     cities={cities}
                     flightCategories={flightCategories}
+                    budgetTierConfigs={budgetTierConfigs}
                     onFlightCategoryChange={setFlightCategory}
                     onBudgetTierChange={setBudgetTier}
                     onPriorityCityChange={setPriorityCity}
@@ -532,22 +549,47 @@ export function Dashboard({ tripId }: DashboardProps) {
 
             {/* Content area */}
             {!hasData ? (
-              <div className="text-center py-20">
-                <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-[var(--surface-1)] border border-[var(--border-default)] flex items-center justify-center">
-                  <svg className="w-6 h-6 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                  </svg>
+              isRunning ? (
+                <div className="text-center py-20">
+                  <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-[var(--blue-soft)] border border-[var(--blue-border)] flex items-center justify-center">
+                    <svg className="w-6 h-6 text-[var(--blue)] animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  </div>
+                  <h2 className="text-base font-heading font-semibold text-[var(--text-1)] mb-1">
+                    Searching for the best prices...
+                  </h2>
+                  <p className="text-sm text-[var(--text-2)] max-w-sm mx-auto mb-4">
+                    We&apos;re scanning flights and stays for your trip. This usually takes {estimatedRefreshMinutes > 0 ? `~${estimatedRefreshMinutes} minutes` : "a few minutes"}.
+                  </p>
+                  {activeRun && (
+                    <div className="max-w-xs mx-auto">
+                      <div className="h-1.5 rounded-full bg-[var(--surface-2)] overflow-hidden">
+                        <div className="h-full rounded-full bg-[var(--blue)] transition-all duration-500" style={{ width: `${refreshProgress}%` }} />
+                      </div>
+                      <p className="text-xs text-[var(--text-3)] font-mono tabular-nums mt-2">{refreshProgress}% complete</p>
+                    </div>
+                  )}
                 </div>
-                <h2 className="text-base font-heading font-semibold text-[var(--text-1)] mb-1">
-                  No Data Yet
-                </h2>
-                <p className="text-sm text-[var(--text-2)] max-w-sm mx-auto mb-4">
-                  Click &quot;Refresh&quot; to trigger the first data scrape, or wait for the scheduled run.
-                </p>
-                <p className="text-xs text-[var(--text-3)] font-mono tabular-nums">
-                  {dateRanges.length} available options
-                </p>
-              </div>
+              ) : (
+                <div className="text-center py-20">
+                  <div className="w-12 h-12 mx-auto mb-4 rounded-lg bg-[var(--surface-1)] border border-[var(--border-default)] flex items-center justify-center">
+                    <svg className="w-6 h-6 text-[var(--text-3)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </div>
+                  <h2 className="text-base font-heading font-semibold text-[var(--text-1)] mb-1">
+                    No Data Yet
+                  </h2>
+                  <p className="text-sm text-[var(--text-2)] max-w-sm mx-auto mb-4">
+                    Click &quot;Refresh&quot; to trigger the first data scrape, or wait for the scheduled run.
+                  </p>
+                  <p className="text-xs text-[var(--text-3)] font-mono tabular-nums">
+                    {dateRanges.length} available options
+                  </p>
+                </div>
+              )
             ) : showComboView ? (
               <div key="overview" className="animate-fade-in-up" style={{ animationDuration: "200ms" }}>
               <ComboSummary
@@ -561,6 +603,8 @@ export function Dashboard({ tripId }: DashboardProps) {
                 previousWeekendData={previousWeekendData}
                 rankChangeSince={rankChangeSince}
                 totalPeople={totalPeople}
+                flightCategories={flightCategories}
+                budgetTierConfigs={budgetTierConfigs}
                 onSelectCombo={(fc, bt) => {
                   setFlightCategory(fc);
                   setBudgetTier(bt);
@@ -650,6 +694,7 @@ export function Dashboard({ tripId }: DashboardProps) {
         scoringAlgorithm={scoringAlgorithm}
         cities={cities}
         flightCategories={flightCategories}
+        budgetTierConfigs={budgetTierConfigs}
         onFlightCategoryChange={setFlightCategory}
         onBudgetTierChange={setBudgetTier}
         onPriorityCityChange={setPriorityCity}
@@ -687,8 +732,9 @@ export function Dashboard({ tripId }: DashboardProps) {
                 flightTimeFilters={flightTimeFilters}
                 selectedMonths={selectedMonths}
                 tripDuration={tripDuration}
-                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration) => {
-                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration);
+                budgetTierConfigs={budgetTierConfigs}
+                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration, newBudgetTierConfigs) => {
+                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration, newBudgetTierConfigs);
                   setShowMobileConfig(false);
                 }}
                 inlineMode

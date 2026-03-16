@@ -90,7 +90,14 @@ export interface TripDuration {
 
 export type FlightCategory = string;
 
-export type BudgetTier = "budget" | "mid" | "premium";
+export type BudgetTier = string;
+
+export interface BudgetTierConfig {
+  id: string;
+  label: string;
+  perPersonMin: number;
+  perPersonMax: number;
+}
 
 export type ScoringAlgorithm =
   | "zscore"

@@ -35,9 +35,6 @@ on:
         default: ""
         type: string
 
-  repository_dispatch:
-    types: [config-changed]
-
 concurrency:
   group: scrape-${{ github.event.inputs.environment || 'production' }}-${{ github.event.inputs.trip_id || 'global' }}
   cancel-in-progress: false
@@ -55,7 +52,6 @@ jobs:
     timeout-minutes: 5
     if: >-
       github.event_name == 'schedule' ||
-      github.event_name == 'repository_dispatch' ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.scrape_type == 'all' || github.event.inputs.scrape_type == 'flights'))
     outputs:
       matrix: ${{ steps.get-matrix.outputs.matrix }}
@@ -128,7 +124,6 @@ jobs:
     timeout-minutes: 30
     if: >-
       github.event_name == 'schedule' ||
-      github.event_name == 'repository_dispatch' ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.scrape_type == 'all' || github.event.inputs.scrape_type == 'airbnb'))
 
     steps:

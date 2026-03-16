@@ -1,4 +1,4 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, TripDuration } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig } from "./types";
 
 function stopDescription(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
   const stopPart = stops === 0 ? "Nonstop flight" : stops === 1 ? "One-stop flight" : "Two-stop flight";
@@ -44,43 +44,25 @@ export const DEFAULT_TIME_FILTERS: FlightTimeFilters = {
   maxDuration: 10,
 };
 
-export const BUDGET_TIERS: {
-  value: BudgetTier;
-  label: string;
-  range: string;
-  perPersonMin: number;
-  perPersonMax: number;
-  totalMin: number;
-  totalMax: number;
-}[] = [
-  {
-    value: "budget",
-    label: "Budget",
-    range: "$50-59/person/night",
-    perPersonMin: 50,
-    perPersonMax: 59,
-    totalMin: 2550,
-    totalMax: 3059,
-  },
-  {
-    value: "mid",
-    label: "Mid-Range",
-    range: "$60-69/person/night",
-    perPersonMin: 60,
-    perPersonMax: 69,
-    totalMin: 3060,
-    totalMax: 3569,
-  },
-  {
-    value: "premium",
-    label: "Premium",
-    range: "$70-79/person/night",
-    perPersonMin: 70,
-    perPersonMax: 79,
-    totalMin: 3570,
-    totalMax: 4029,
-  },
+export const DEFAULT_BUDGET_TIER_CONFIGS: BudgetTierConfig[] = [
+  { id: "budget", label: "Budget", perPersonMin: 50, perPersonMax: 59 },
+  { id: "mid", label: "Mid-Range", perPersonMin: 60, perPersonMax: 69 },
+  { id: "premium", label: "Premium", perPersonMin: 70, perPersonMax: 79 },
 ];
+
+export function budgetTierConfigToDisplay(configs: BudgetTierConfig[]): {
+  value: string; label: string; range: string; perPersonMin: number; perPersonMax: number;
+}[] {
+  return configs.map(c => ({
+    value: c.id,
+    label: c.label,
+    range: `$${c.perPersonMin}-${c.perPersonMax}/person/night`,
+    perPersonMin: c.perPersonMin,
+    perPersonMax: c.perPersonMax,
+  }));
+}
+
+export const BUDGET_TIERS = budgetTierConfigToDisplay(DEFAULT_BUDGET_TIER_CONFIGS);
 
 export const DEFAULT_TRIP_DURATION: TripDuration = {
   nights: 3,

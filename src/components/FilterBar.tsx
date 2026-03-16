@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig } from "@/lib/types";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS, flightCategoryConfigToDisplay } from "@/lib/constants";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig, BudgetTierConfig } from "@/lib/types";
+import { FLIGHT_CATEGORIES, BUDGET_TIERS, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay, DEFAULT_BUDGET_TIER_CONFIGS } from "@/lib/constants";
 
 interface FilterBarProps {
   flightCategory: FlightCategory;
@@ -11,6 +11,7 @@ interface FilterBarProps {
   scoringAlgorithm: ScoringAlgorithm;
   cities: CityConfig[];
   flightCategories?: FlightCategoryConfig[];
+  budgetTierConfigs?: BudgetTierConfig[];
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
   onPriorityCityChange: (city: string) => void;
@@ -91,6 +92,7 @@ export function FilterBar({
   scoringAlgorithm,
   cities,
   flightCategories,
+  budgetTierConfigs,
   onFlightCategoryChange,
   onBudgetTierChange,
   onPriorityCityChange,
@@ -100,6 +102,9 @@ export function FilterBar({
   const displayCategories = flightCategories
     ? flightCategoryConfigToDisplay(flightCategories)
     : FLIGHT_CATEGORIES;
+  const displayBudgetTiers = budgetTierConfigs
+    ? budgetTierConfigToDisplay(budgetTierConfigs)
+    : BUDGET_TIERS;
 
   return (
     <div className="space-y-3">
@@ -122,7 +127,7 @@ export function FilterBar({
               </svg>
               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-50">
                 <div className="rounded-md border border-[var(--border-default)] bg-[var(--surface-2)] p-2.5 shadow-lg whitespace-nowrap">
-                  {BUDGET_TIERS.map((t) => (
+                  {displayBudgetTiers.map((t) => (
                     <div key={t.value} className={`text-[11px] leading-relaxed ${t.value === budgetTier ? "text-[var(--blue)] font-medium" : "text-[var(--text-2)]"}`}>
                       {t.label}: {t.range}
                     </div>
@@ -132,7 +137,7 @@ export function FilterBar({
             </div>
           </div>
           <div className="flex gap-0.5 p-0.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
-            {BUDGET_TIERS.map((t) => (
+            {displayBudgetTiers.map((t) => (
               <button
                 key={t.value}
                 onClick={() => onBudgetTierChange(t.value)}

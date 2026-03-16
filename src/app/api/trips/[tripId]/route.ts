@@ -47,7 +47,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, skip_scrape } = body;
+    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, skip_scrape } = body;
 
     const payload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -62,6 +62,7 @@ export async function PUT(
     if (flight_time_filters !== undefined) payload.flight_time_filters = flight_time_filters;
     if (selected_months !== undefined) payload.selected_months = selected_months;
     if (trip_duration !== undefined) payload.trip_duration = trip_duration;
+    if (budget_tiers !== undefined) payload.budget_tiers = budget_tiers;
 
     const { data, error } = await supabaseAdmin
       .from("trips")
@@ -72,42 +73,31 @@ export async function PUT(
 
     if (error) throw error;
 
-    // Trigger scrape if needed (same logic as /api/config)
+    // Trigger scrape workflow
     if (!skip_scrape && process.env.GITHUB_PAT && process.env.GITHUB_REPO) {
+      const repo = process.env.GITHUB_REPO;
+      const ref = process.env.SCRAPE_WORKFLOW_REF || "main";
       const ghHeaders = {
         Authorization: `token ${process.env.GITHUB_PAT}`,
         Accept: "application/vnd.github.v3+json",
         "Content-Type": "application/json",
       };
-      const repo = process.env.GITHUB_REPO;
-
-      try {
-        for (const status of ["in_progress", "queued"] as const) {
-          const runsRes = await fetch(
-            `https://api.github.com/repos/${repo}/actions/workflows/scrape.yml/runs?status=${status}&per_page=10`,
-            { headers: ghHeaders }
-          );
-          if (runsRes.ok) {
-            const runsData = await runsRes.json();
-            for (const run of runsData.workflow_runs ?? []) {
-              await fetch(
-                `https://api.github.com/repos/${repo}/actions/runs/${run.id}/cancel`,
-                { method: "POST", headers: ghHeaders }
-              );
-            }
-          }
-        }
-      } catch (cancelError) {
-        console.error("Failed to cancel existing workflows:", cancelError);
-      }
 
       try {
         await fetch(
-          `https://api.github.com/repos/${repo}/dispatches`,
+          `https://api.github.com/repos/${repo}/actions/workflows/scrape.yml/dispatches`,
           {
             method: "POST",
             headers: ghHeaders,
-            body: JSON.stringify({ event_type: "config-changed" }),
+            body: JSON.stringify({
+              ref,
+              inputs: {
+                scrape_type: "all",
+                triggered_by: "config_changed",
+                environment: process.env.ENVIRONMENT || "production",
+                trip_id: tripId,
+              },
+            }),
           }
         );
       } catch (ghError) {

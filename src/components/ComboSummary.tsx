@@ -11,9 +11,11 @@ import {
   ScoringAlgorithm,
   RankChangeMap,
   RankChangeInfo,
+  FlightCategoryConfig,
+  BudgetTierConfig,
 } from "@/lib/types";
 import { computeRankChanges } from "@/lib/rank-changes";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS } from "@/lib/constants";
+import { FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_BUDGET_TIER_CONFIGS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
 import { scoreAllWeekends } from "@/lib/scoring";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
 import { ScoreBadge, RankChangeIndicator } from "./ScoreBadge";
@@ -29,6 +31,8 @@ interface ComboSummaryProps {
   previousWeekendData: WeekendData | null;
   rankChangeSince: string | null;
   totalPeople: number;
+  flightCategories?: FlightCategoryConfig[];
+  budgetTierConfigs?: BudgetTierConfig[];
   onSelectCombo: (flightCategory: FlightCategory, budgetTier: BudgetTier) => void;
 }
 
@@ -58,10 +62,21 @@ export function ComboSummary({
   previousWeekendData,
   rankChangeSince,
   totalPeople,
+  flightCategories,
+  budgetTierConfigs,
   onSelectCombo,
 }: ComboSummaryProps) {
   const [mobileFlightCat, setMobileFlightCat] = useState<FlightCategory>(activeFlightCategory);
   const [showPopular, setShowPopular] = useState(false);
+
+  const displayFlightCategories = useMemo(() =>
+    flightCategories ? flightCategoryConfigToDisplay(flightCategories) : flightCategoryConfigToDisplay(DEFAULT_FLIGHT_CATEGORIES),
+    [flightCategories]
+  );
+  const displayBudgetTiers = useMemo(() =>
+    budgetTierConfigs ? budgetTierConfigToDisplay(budgetTierConfigs) : budgetTierConfigToDisplay(DEFAULT_BUDGET_TIER_CONFIGS),
+    [budgetTierConfigs]
+  );
 
   const comboResults = useMemo(() => {
     const results: {
@@ -73,8 +88,8 @@ export function ComboSummary({
       top3: WeekendScore[];
     }[] = [];
 
-    for (const fc of FLIGHT_CATEGORIES) {
-      for (const bt of BUDGET_TIERS) {
+    for (const fc of displayFlightCategories) {
+      for (const bt of displayBudgetTiers) {
         const scored = scoreAllWeekends(
           dateRanges,
           weekendData.flights ?? [],
@@ -90,7 +105,7 @@ export function ComboSummary({
       }
     }
     return results;
-  }, [weekendData, dateRanges, cities, priorityCity, scoringAlgorithm]);
+  }, [weekendData, dateRanges, cities, priorityCity, scoringAlgorithm, displayFlightCategories, displayBudgetTiers]);
 
   // Compute rank changes per combo
   const comboRankChanges = useMemo(() => {
@@ -141,8 +156,8 @@ export function ComboSummary({
     if (!previousWeekendData) return null;
     const RANK_POINTS = [3, 2, 1];
     const data = new Map<string, { points: number; totalScore: number; appearances: number }>();
-    for (const fc of FLIGHT_CATEGORIES) {
-      for (const bt of BUDGET_TIERS) {
+    for (const fc of displayFlightCategories) {
+      for (const bt of displayBudgetTiers) {
         const scored = scoreAllWeekends(
           dateRanges, previousWeekendData.flights ?? [], previousWeekendData.flightOptions ?? [],
           previousWeekendData.airbnbListings ?? [], fc.value, bt.value, cities, priorityCity, scoringAlgorithm
@@ -166,11 +181,11 @@ export function ComboSummary({
     const rankMap = new Map<string, number>();
     sorted.forEach(([id], i) => rankMap.set(id, i + 1));
     return rankMap;
-  }, [previousWeekendData, dateRanges, cities, priorityCity, scoringAlgorithm]);
+  }, [previousWeekendData, dateRanges, cities, priorityCity, scoringAlgorithm, displayFlightCategories, displayBudgetTiers]);
 
   const maxPoints = popularWeekends.length > 0 ? popularWeekends[0].points : 1;
 
-  const totalCombos = FLIGHT_CATEGORIES.length * BUDGET_TIERS.length;
+  const totalCombos = displayFlightCategories.length * displayBudgetTiers.length;
 
   return (
     <div className="space-y-4">
@@ -276,7 +291,7 @@ export function ComboSummary({
       <div className="sm:hidden space-y-3">
         {/* Flight type tabs */}
         <div className="flex overflow-x-auto gap-1.5 -mx-4 px-4 pb-1 scrollbar-thin">
-          {FLIGHT_CATEGORIES.map((fc) => (
+          {displayFlightCategories.map((fc) => (
             <button
               key={fc.value}
               onClick={() => setMobileFlightCat(fc.value)}

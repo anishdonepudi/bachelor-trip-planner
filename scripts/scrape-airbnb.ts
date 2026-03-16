@@ -13,7 +13,8 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import axios from "axios";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { BudgetTier, AirbnbListingRow, SelectedMonth } from "../src/lib/types";
+import type { BudgetTier, AirbnbListingRow, SelectedMonth, BudgetTierConfig } from "../src/lib/types";
+import { DEFAULT_BUDGET_TIER_CONFIGS } from "../src/lib/constants";
 import { loadTripConfig } from "./lib/load-trip-config";
 
 // ---------------------------------------------------------------------------
@@ -21,25 +22,21 @@ import { loadTripConfig } from "./lib/load-trip-config";
 // ---------------------------------------------------------------------------
 
 let TOTAL_PEOPLE = 17;
-const NIGHTS = 3;
+let NIGHTS = 3;
 let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
 let TRIP_ID: string = "";
 
 const IS_TEST = process.argv.includes("--test");
 
-interface BudgetTierConfig {
-  value: BudgetTier;
+interface ScraperBudgetTier {
+  value: string;
   label: string;
   totalMin: number; // total stay price (price_filter_input_type=2)
   totalMax: number;
 }
 
-const BUDGET_TIERS: BudgetTierConfig[] = [
-  { value: "budget", label: "Budget", totalMin: 2550, totalMax: 3059 },
-  { value: "mid", label: "Mid-Range", totalMin: 3060, totalMax: 3569 },
-  { value: "premium", label: "Premium", totalMin: 3570, totalMax: 4029 },
-];
+let BUDGET_TIERS: ScraperBudgetTier[] = [];
 
 const USER_AGENTS = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -669,9 +666,26 @@ async function loadConfig(): Promise<void> {
     if (config.selectedMonths) {
       SELECTED_MONTHS = config.selectedMonths;
     }
-    console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}${TRIP_ID ? `, trip: ${TRIP_ID}` : ""}`);
+    // Load budget tiers and trip duration
+    const budgetTiers = config.budgetTiers;
+    const nights = config.tripDuration?.nights ?? 3;
+    NIGHTS = nights;
+    BUDGET_TIERS = budgetTiers.map(t => ({
+      value: t.id,
+      label: t.label,
+      totalMin: t.perPersonMin * TOTAL_PEOPLE * NIGHTS,
+      totalMax: t.perPersonMax * TOTAL_PEOPLE * NIGHTS,
+    }));
+    console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}, nights: ${NIGHTS}${TRIP_ID ? `, trip: ${TRIP_ID}` : ""}`);
   } catch (err) {
     console.warn("Could not load config, using defaults:", err instanceof Error ? err.message : err);
+    // Set default BUDGET_TIERS so test mode still works
+    BUDGET_TIERS = DEFAULT_BUDGET_TIER_CONFIGS.map(t => ({
+      value: t.id,
+      label: t.label,
+      totalMin: t.perPersonMin * TOTAL_PEOPLE * NIGHTS,
+      totalMax: t.perPersonMax * TOTAL_PEOPLE * NIGHTS,
+    }));
   }
 }
 
@@ -799,7 +813,7 @@ const SEARCH_CONCURRENCY = 3; // parallel date ranges for search phase
  */
 async function processTierTask(
   dateRange: ReturnType<typeof generateDateRanges>[0],
-  tier: BudgetTierConfig,
+  tier: ScraperBudgetTier,
   runId: string | null,
   taskNum: number,
   totalTasks: number,
@@ -898,7 +912,7 @@ async function runFull(): Promise<void> {
   const runId = process.env.GITHUB_RUN_ID ?? null;
 
   // Build all tasks (date range × tier)
-  const tasks: { dateRange: typeof dateRanges[0]; tier: BudgetTierConfig }[] = [];
+  const tasks: { dateRange: typeof dateRanges[0]; tier: ScraperBudgetTier }[] = [];
   for (const dateRange of dateRanges) {
     for (const tier of BUDGET_TIERS) {
       tasks.push({ dateRange, tier });
@@ -956,9 +970,21 @@ async function runFull(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 if (IS_TEST) {
-  runTest().catch((err) => {
-    console.error("Test failed:", err);
-    process.exit(1);
+  // Load config before test so BUDGET_TIERS is populated
+  loadConfig().catch(() => {}).finally(() => {
+    // Ensure BUDGET_TIERS has defaults if loadConfig failed silently
+    if (BUDGET_TIERS.length === 0) {
+      BUDGET_TIERS = DEFAULT_BUDGET_TIER_CONFIGS.map(t => ({
+        value: t.id,
+        label: t.label,
+        totalMin: t.perPersonMin * TOTAL_PEOPLE * NIGHTS,
+        totalMax: t.perPersonMax * TOTAL_PEOPLE * NIGHTS,
+      }));
+    }
+    runTest().catch((err) => {
+      console.error("Test failed:", err);
+      process.exit(1);
+    });
   });
 } else {
   runFull().catch((err) => {

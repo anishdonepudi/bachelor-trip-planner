@@ -9,8 +9,9 @@ import type {
   FlightTimeFilters,
   SelectedMonth,
   TripDuration,
+  BudgetTierConfig,
 } from "../../src/lib/types";
-import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "../../src/lib/constants";
+import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS } from "../../src/lib/constants";
 import { migrateTimeFilters } from "../../src/lib/migrate-time-filters";
 
 export interface TripConfig {
@@ -23,6 +24,7 @@ export interface TripConfig {
   flightTimeFilters: FlightTimeFilters;
   selectedMonths: SelectedMonth[] | null;
   tripDuration: TripDuration | null;
+  budgetTiers: BudgetTierConfig[];
 }
 
 export async function loadTripConfig(): Promise<TripConfig> {
@@ -39,7 +41,7 @@ export async function loadTripConfig(): Promise<TripConfig> {
   console.log(`Loading config from trips table for trip: ${tripId}`);
   const { data, error } = await supabase
     .from("trips")
-    .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration")
+    .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers")
     .eq("id", tripId)
     .single();
 
@@ -58,6 +60,9 @@ export async function loadTripConfig(): Promise<TripConfig> {
     ? data.selected_months as SelectedMonth[]
     : null;
   const tripDuration = data.trip_duration as TripDuration | null;
+  const budgetTiers = (data.budget_tiers && Array.isArray(data.budget_tiers))
+    ? data.budget_tiers as BudgetTierConfig[]
+    : DEFAULT_BUDGET_TIER_CONFIGS;
 
   return {
     tripId,
@@ -69,5 +74,6 @@ export async function loadTripConfig(): Promise<TripConfig> {
     flightTimeFilters,
     selectedMonths,
     tripDuration,
+    budgetTiers,
   };
 }

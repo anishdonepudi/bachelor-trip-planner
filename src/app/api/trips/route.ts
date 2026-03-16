@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration } = body;
+    const { name, cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers } = body;
 
     if (!name || !destination_airport) {
       return NextResponse.json({ error: "Name and destination airport are required" }, { status: 400 });
@@ -80,6 +80,7 @@ export async function POST(request: Request) {
         flight_time_filters: flight_time_filters ?? null,
         selected_months: selected_months ?? null,
         trip_duration: trip_duration ?? { nights: 3, departDays: [4, 5] },
+        budget_tiers: budget_tiers ?? null,
       })
       .select()
       .single();
@@ -90,6 +91,28 @@ export async function POST(request: Request) {
     await supabaseAdmin
       .from("trip_collaborators")
       .insert({ trip_id: tripId, user_id: user.id, role: "owner" });
+
+    // Auto-trigger initial scrape
+    if (process.env.GITHUB_PAT && process.env.GITHUB_REPO) {
+      const ref = process.env.SCRAPE_WORKFLOW_REF || "main";
+      fetch(`https://api.github.com/repos/${process.env.GITHUB_REPO}/actions/workflows/scrape.yml/dispatches`, {
+        method: "POST",
+        headers: {
+          Authorization: `token ${process.env.GITHUB_PAT}`,
+          Accept: "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ref,
+          inputs: {
+            scrape_type: "all",
+            triggered_by: "trip_creation",
+            environment: process.env.ENVIRONMENT || "production",
+            trip_id: tripId,
+          },
+        }),
+      }).catch(err => console.error("Failed to trigger initial scrape:", err));
+    }
 
     return NextResponse.json(data, { status: 201 });
   } catch (error) {

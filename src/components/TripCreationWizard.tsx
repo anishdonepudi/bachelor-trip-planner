@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration } from "@/lib/types";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig } from "@/lib/types";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
 import { TravelInsights, MonthDetailPanel, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type SelectedMonth, type UnitSystem, type DailyAvg, type HoveredMonthData } from "./TravelInsights";
@@ -44,6 +44,7 @@ export function TripCreationWizard() {
   // Step 4: Flight Preferences
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
+  const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(DEFAULT_BUDGET_TIER_CONFIGS);
 
   // Fetch travel insights once for the destination
   const insights = useTravelInsights(
@@ -270,6 +271,26 @@ export function TripCreationWizard() {
     flightCategories.some((other, j) => j !== i && other.stops === cat.stops && other.bags === cat.bags)
   );
 
+  // Budget tier helpers
+  const addBudgetTier = () => {
+    if (budgetTiers.length >= 3) return;
+    const nextId = `tier_${budgetTiers.length + 1}`;
+    setBudgetTiers([...budgetTiers, { id: nextId, label: `Tier ${budgetTiers.length + 1}`, perPersonMin: 0, perPersonMax: 0 }]);
+  };
+
+  const removeBudgetTier = (index: number) => {
+    setBudgetTiers(budgetTiers.filter((_, i) => i !== index));
+  };
+
+  const updateBudgetTier = (index: number, field: keyof BudgetTierConfig, value: string | number) => {
+    const updated = [...budgetTiers];
+    updated[index] = { ...updated[index], [field]: value };
+    if (field === "label") {
+      updated[index].id = (value as string).toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+    }
+    setBudgetTiers(updated);
+  };
+
   const toggleDate = (date: string) => {
     setExcludedDates((prev) => prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]);
   };
@@ -280,7 +301,7 @@ export function TripCreationWizard() {
       case 1: return !!tripName.trim() && !!destinationAirport;
       case 2: return cities.some(c => c.city);
       case 3: return selectedMonths.length > 0 && tripDuration.nights > 0 && tripDuration.departDays.length > 0;
-      case 4: return flightCategories.length > 0 && !hasDuplicateCategories;
+      case 4: return flightCategories.length > 0 && !hasDuplicateCategories && budgetTiers.length > 0;
     }
   };
 
@@ -321,6 +342,7 @@ export function TripCreationWizard() {
           flight_time_filters: timeFilters,
           selected_months: selectedMonths,
           trip_duration: tripDuration,
+          budget_tiers: budgetTiers,
         }),
       });
       if (!res.ok) {
@@ -865,6 +887,69 @@ export function TripCreationWizard() {
             )}
             {showValidation && hasDuplicateCategories && (
               <p className="text-xs text-[var(--gold)]">Remove duplicate categories</p>
+            )}
+
+            {/* Budget Tiers */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">Budget Tiers ({budgetTiers.length}/3)</span>
+                {budgetTiers.length < 3 && (
+                  <button onClick={addBudgetTier}
+                    className="text-[11px] text-[var(--blue)] hover:text-[var(--text-1)] font-medium flex items-center gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                    Add
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {budgetTiers.map((tier, i) => (
+                <div key={i} className="p-3 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={tier.label}
+                        onChange={(e) => updateBudgetTier(i, "label", e.target.value)}
+                        placeholder="Tier name"
+                        className="flex-1 h-8 px-2.5 rounded-md text-xs bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] focus:outline-none focus:border-[var(--border-active)]"
+                      />
+                      {budgetTiers.length > 1 && (
+                        <button onClick={() => removeBudgetTier(i)}
+                          className="p-1 rounded text-[var(--text-3)] hover:text-[var(--red)] hover:bg-[var(--red-soft)]">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">Min $/person/night</label>
+                        <input
+                          type="number"
+                          value={tier.perPersonMin || ""}
+                          onChange={(e) => updateBudgetTier(i, "perPersonMin", parseInt(e.target.value) || 0)}
+                          className="w-full h-8 px-2.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] focus:outline-none focus:border-[var(--border-active)]"
+                        />
+                      </div>
+                      <span className="text-[var(--text-3)] mt-4">&ndash;</span>
+                      <div className="flex-1">
+                        <label className="text-[10px] text-[var(--text-3)] mb-0.5 block">Max $/person/night</label>
+                        <input
+                          type="number"
+                          value={tier.perPersonMax || ""}
+                          onChange={(e) => updateBudgetTier(i, "perPersonMax", parseInt(e.target.value) || 0)}
+                          className="w-full h-8 px-2.5 rounded-md text-xs font-mono bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] focus:outline-none focus:border-[var(--border-active)]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {showValidation && budgetTiers.length === 0 && (
+              <p className="text-xs text-[var(--gold)]">Add at least one budget tier</p>
             )}
 
             {/* Time Filters */}
