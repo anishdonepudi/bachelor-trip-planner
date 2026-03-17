@@ -9,7 +9,6 @@ export function getSupabaseAdmin() {
   if (!_supabaseAdmin) {
     const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.SUPABASE_SERVICE_KEY!;
-    console.log("[DEBUG] SUPABASE_URL:", url?.substring(0, 30), "len:", url?.length, "KEY len:", key?.length);
     // Use <any> to avoid `never` types on untyped table queries
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     _supabaseAdmin = createClient<any>(url, key);
