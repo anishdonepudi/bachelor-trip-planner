@@ -384,10 +384,10 @@ export function LandingPage() {
                   {user.email}
                 </span>
                 <a
-                  href="/trip/new"
+                  href={trips.length > 0 ? "#your-trips" : "/trip/new"}
                   className="h-8 px-3 rounded-md text-xs font-medium bg-[var(--blue)] text-white hover:brightness-110 transition-all duration-150 inline-flex items-center gap-1.5"
                 >
-                  Dashboard
+                  {trips.length > 0 ? "My Trips" : "Start a Trip"}
                 </a>
                 <button
                   onClick={signOut}
@@ -447,13 +447,23 @@ export function LandingPage() {
                   for your entire group in minutes — no more spreadsheets, no more endless group chats.
                 </p>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                  <a
-                    href="/trip/new"
-                    className="inline-flex items-center gap-2 h-12 px-7 rounded-lg text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 transition-all duration-150 shadow-lg shadow-[var(--blue)]/20"
-                  >
-                    <PlusIcon className="w-4 h-4" />
-                    Start Planning Free
-                  </a>
+                  {user && trips.length > 0 ? (
+                    <a
+                      href="#your-trips"
+                      className="inline-flex items-center gap-2 h-12 px-7 rounded-lg text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 transition-all duration-150 shadow-lg shadow-[var(--blue)]/20"
+                    >
+                      View Your Trips
+                      <ArrowRightIcon className="w-4 h-4" />
+                    </a>
+                  ) : (
+                    <a
+                      href="/trip/new"
+                      className="inline-flex items-center gap-2 h-12 px-7 rounded-lg text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 transition-all duration-150 shadow-lg shadow-[var(--blue)]/20"
+                    >
+                      <PlusIcon className="w-4 h-4" />
+                      Start a Trip
+                    </a>
+                  )}
                   <a
                     href="#how-it-works"
                     className="inline-flex items-center gap-2 h-12 px-5 rounded-lg text-sm font-medium text-[var(--text-2)] hover:text-[var(--text-1)] transition-colors"
@@ -539,7 +549,7 @@ export function LandingPage() {
           Section 3: Your Trips (auth-conditional)
           ═══════════════════════════════════════════ */}
       {user && (
-        <section className="border-t border-[var(--border-default)] bg-[var(--surface-1)]/30">
+        <section id="your-trips" className="border-t border-[var(--border-default)] bg-[var(--surface-1)]/30 scroll-mt-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
             <div ref={reveal} className="scroll-reveal">
               <div className="flex items-center justify-between mb-6">
@@ -861,13 +871,24 @@ export function LandingPage() {
                 <p className="text-sm sm:text-base text-white/80 max-w-md mx-auto mb-8">
                   Set up your trip in minutes. Share one link. Everyone sees flights, stays, and costs — ranked by what works best for the group.
                 </p>
-                <a
-                  href="/trip/new"
-                  className="inline-flex items-center gap-2 h-12 px-8 rounded-lg text-sm font-semibold bg-white text-slate-900 hover:bg-white/90 transition-all duration-150 shadow-lg"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                  Start Planning Now
-                </a>
+                {user && trips.length > 0 ? (
+                  <a
+                    href="#your-trips"
+                    className="inline-flex items-center gap-2 h-12 px-8 rounded-lg text-sm font-semibold bg-white text-slate-900 hover:bg-white/90 transition-all duration-150 shadow-lg"
+                  >
+                    View Your Trips
+                    <ArrowRightIcon className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <a
+                    href={user ? "/trip/new" : "#"}
+                    onClick={user ? undefined : (e) => { e.preventDefault(); openAuth("signup"); }}
+                    className="inline-flex items-center gap-2 h-12 px-8 rounded-lg text-sm font-semibold bg-white text-slate-900 hover:bg-white/90 transition-all duration-150 shadow-lg"
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                    Start a Trip
+                  </a>
+                )}
               </div>
             </div>
           </div>
