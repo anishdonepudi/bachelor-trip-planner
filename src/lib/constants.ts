@@ -45,9 +45,7 @@ export const DEFAULT_TIME_FILTERS: FlightTimeFilters = {
 };
 
 export const DEFAULT_BUDGET_TIER_CONFIGS: BudgetTierConfig[] = [
-  { id: "budget", label: "Budget", perPersonMin: 50, perPersonMax: 59 },
-  { id: "mid", label: "Mid-Range", perPersonMin: 60, perPersonMax: 69 },
-  { id: "premium", label: "Premium", perPersonMin: 70, perPersonMax: 79 },
+  { id: "tier_1", label: "Tier 1", perPersonMin: 0, perPersonMax: 0 },
 ];
 
 export function budgetTierConfigToDisplay(configs: BudgetTierConfig[]): {
