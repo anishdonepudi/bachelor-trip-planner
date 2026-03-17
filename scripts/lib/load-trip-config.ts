@@ -11,6 +11,7 @@ import type {
   TripDuration,
   BudgetTierConfig,
   AirbnbAmenity,
+  AirbnbRoomConfig,
 } from "../../src/lib/types";
 import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "../../src/lib/constants";
 import { migrateTimeFilters } from "../../src/lib/migrate-time-filters";
@@ -27,6 +28,7 @@ export interface TripConfig {
   tripDuration: TripDuration | null;
   budgetTiers: BudgetTierConfig[];
   airbnbAmenities: AirbnbAmenity[];
+  airbnbRoomConfig: AirbnbRoomConfig;
 }
 
 export async function loadTripConfig(): Promise<TripConfig> {
@@ -43,7 +45,7 @@ export async function loadTripConfig(): Promise<TripConfig> {
   console.log(`Loading config from trips table for trip: ${tripId}`);
   const { data, error } = await supabase
     .from("trips")
-    .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities")
+    .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds")
     .eq("id", tripId)
     .single();
 
@@ -73,6 +75,12 @@ export async function loadTripConfig(): Promise<TripConfig> {
     ? data.airbnb_amenities as AirbnbAmenity[]
     : [];
 
+  const airbnbRoomConfig: AirbnbRoomConfig = {
+    minBedrooms: data.airbnb_min_bedrooms ?? null,
+    minBathrooms: data.airbnb_min_bathrooms ?? null,
+    minBeds: data.airbnb_min_beds ?? null,
+  };
+
   return {
     tripId,
     cities,
@@ -85,5 +93,6 @@ export async function loadTripConfig(): Promise<TripConfig> {
     tripDuration,
     budgetTiers,
     airbnbAmenities,
+    airbnbRoomConfig,
   };
 }

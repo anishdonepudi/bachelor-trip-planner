@@ -13,7 +13,7 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import axios from "axios";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { BudgetTier, AirbnbListingRow, SelectedMonth, BudgetTierConfig } from "../src/lib/types";
+import type { BudgetTier, AirbnbListingRow, SelectedMonth, BudgetTierConfig, AirbnbRoomConfig } from "../src/lib/types";
 import { loadTripConfig } from "./lib/load-trip-config";
 
 // ---------------------------------------------------------------------------
@@ -26,6 +26,7 @@ let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
 let TRIP_ID: string = "";
 let AMENITY_IDS: string[] = [];
+let ROOM_CONFIG: AirbnbRoomConfig = { minBedrooms: null, minBathrooms: null, minBeds: null };
 
 const IS_TEST = process.argv.includes("--test");
 
@@ -93,6 +94,9 @@ export function buildAirbnbSearchUrl(
   for (const amenityId of AMENITY_IDS) {
     params.append("amenities[]", amenityId);
   }
+  if (ROOM_CONFIG.minBedrooms) params.set("min_bedrooms", String(ROOM_CONFIG.minBedrooms));
+  if (ROOM_CONFIG.minBathrooms) params.set("min_bathrooms", String(ROOM_CONFIG.minBathrooms));
+  if (ROOM_CONFIG.minBeds) params.set("min_beds", String(ROOM_CONFIG.minBeds));
   params.append("refinement_paths[]", "/homes");
   if (cursor) params.set("cursor", cursor);
   const urlPath = cityToUrlPath(DESTINATION_CITY);
@@ -681,8 +685,10 @@ async function loadConfig(): Promise<void> {
     if (config.airbnbAmenities && config.airbnbAmenities.length > 0) {
       AMENITY_IDS = config.airbnbAmenities.map(a => a.id);
     }
+    ROOM_CONFIG = config.airbnbRoomConfig;
     console.log(`Config loaded — destination: ${DESTINATION_CITY}, people: ${TOTAL_PEOPLE}, nights: ${NIGHTS}${TRIP_ID ? `, trip: ${TRIP_ID}` : ""}`);
     console.log(`  Amenities: ${AMENITY_IDS.join(", ")}`);
+    console.log(`  Rooms: bedrooms=${ROOM_CONFIG.minBedrooms ?? "any"}, bathrooms=${ROOM_CONFIG.minBathrooms ?? "any"}, beds=${ROOM_CONFIG.minBeds ?? "any"}`);
   } catch (err) {
     console.error("Failed to load config:", err instanceof Error ? err.message : err);
     throw err;

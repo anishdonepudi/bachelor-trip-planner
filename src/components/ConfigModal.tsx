@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration, BudgetTierConfig, AirbnbAmenity } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration, BudgetTierConfig, AirbnbAmenity, AirbnbRoomConfig } from "@/lib/types";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
@@ -27,8 +27,9 @@ interface ConfigModalProps {
   tripDuration: TripDuration;
   budgetTierConfigs: BudgetTierConfig[];
   airbnbAmenities: AirbnbAmenity[];
+  airbnbRoomConfig: AirbnbRoomConfig;
   onOpen?: () => void;
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration, budgetTierConfigs: BudgetTierConfig[], airbnbAmenities: AirbnbAmenity[]) => void;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration, budgetTierConfigs: BudgetTierConfig[], airbnbAmenities: AirbnbAmenity[], airbnbRoomConfig: AirbnbRoomConfig) => void;
   inlineMode?: boolean;
   tripId: string;
 }
@@ -80,7 +81,7 @@ function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, c
   );
 }
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, budgetTierConfigs: initialBudgetTierConfigs, airbnbAmenities: initialAirbnbAmenities, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, budgetTierConfigs: initialBudgetTierConfigs, airbnbAmenities: initialAirbnbAmenities, airbnbRoomConfig: initialAirbnbRoomConfig, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<Section>>(new Set(["trip"]));
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -93,6 +94,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [tripDuration, setTripDuration] = useState<TripDuration>(initialTripDuration);
   const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(initialBudgetTierConfigs);
   const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>(initialAirbnbAmenities);
+  const [airbnbRoomConfig, setAirbnbRoomConfig] = useState<AirbnbRoomConfig>(initialAirbnbRoomConfig);
 
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
   const [saving, setSaving] = useState(false);
@@ -152,8 +154,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setTripDuration(initialTripDuration);
     setBudgetTiers(initialBudgetTierConfigs);
     setAirbnbAmenities(initialAirbnbAmenities);
+    setAirbnbRoomConfig(initialAirbnbRoomConfig);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialSelectedMonths, initialTripDuration, initialBudgetTierConfigs, initialAirbnbAmenities]);
+  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialSelectedMonths, initialTripDuration, initialBudgetTierConfigs, initialAirbnbAmenities, initialAirbnbRoomConfig]);
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
@@ -169,6 +172,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setTripDuration(initialTripDuration);
       setBudgetTiers(initialBudgetTierConfigs);
       setAirbnbAmenities(initialAirbnbAmenities);
+      setAirbnbRoomConfig(initialAirbnbRoomConfig);
       setExpandedSections(new Set(["trip"]));
       setDestinationCoords(null);
       coordsResolved.current = false;
@@ -192,6 +196,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const tripDurationChanged = JSON.stringify(tripDuration) !== JSON.stringify(initialTripDuration);
   const budgetTiersChanged = JSON.stringify(budgetTiers) !== JSON.stringify(initialBudgetTierConfigs);
   const amenitiesChanged = JSON.stringify(airbnbAmenities) !== JSON.stringify(initialAirbnbAmenities);
+  const roomConfigChanged = JSON.stringify(airbnbRoomConfig) !== JSON.stringify(initialAirbnbRoomConfig);
   const hasChanges =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     JSON.stringify(excludedDates.slice().sort()) !== JSON.stringify(initialExcluded.slice().sort()) ||
@@ -202,7 +207,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     selectedMonthsChanged ||
     tripDurationChanged ||
     budgetTiersChanged ||
-    amenitiesChanged;
+    amenitiesChanged ||
+    roomConfigChanged;
   const citiesChanged =
     JSON.stringify(cities) !== JSON.stringify(initialCities) ||
     destinationAirport !== initialDestination ||
@@ -212,7 +218,8 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     selectedMonthsChanged ||
     tripDurationChanged ||
     budgetTiersChanged ||
-    amenitiesChanged;
+    amenitiesChanged ||
+    roomConfigChanged;
 
   // ── City helpers ──
   const addCity = () => {
@@ -482,10 +489,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, selected_months: selectedMonths, trip_duration: tripDuration, budget_tiers: budgetTiers, airbnb_amenities: airbnbAmenities, skip_scrape: !citiesChanged && !selectedMonthsChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, selected_months: selectedMonths, trip_duration: tripDuration, budget_tiers: budgetTiers, airbnb_amenities: airbnbAmenities, airbnb_min_bedrooms: airbnbRoomConfig.minBedrooms, airbnb_min_bathrooms: airbnbRoomConfig.minBathrooms, airbnb_min_beds: airbnbRoomConfig.minBeds, skip_scrape: !citiesChanged && !selectedMonthsChanged }),
       });
       if (res.ok) {
-        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, selectedMonths, tripDuration, budgetTiers, airbnbAmenities);
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, selectedMonths, tripDuration, budgetTiers, airbnbAmenities, airbnbRoomConfig);
         hasEdited.current = false;
         setOpen(false);
       } else {
@@ -920,6 +927,51 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Rooms and Beds */}
+          <div className="mt-4">
+            <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">
+              Rooms and Beds
+            </span>
+            <p className="text-[10px] text-[var(--text-3)] mt-0.5 mb-3">
+              Minimum room requirements for your stay
+            </p>
+            <div className="space-y-2">
+              {([
+                { key: "minBedrooms" as const, label: "Bedrooms" },
+                { key: "minBathrooms" as const, label: "Bathrooms" },
+                { key: "minBeds" as const, label: "Beds" },
+              ]).map(({ key, label }) => {
+                const value = airbnbRoomConfig[key];
+                return (
+                  <div key={key} className="flex items-center justify-between p-2.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+                    <span className="text-xs font-medium text-[var(--text-1)]">{label}</span>
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        disabled={value === null}
+                        onClick={() => { hasEdited.current = true; setAirbnbRoomConfig(prev => ({ ...prev, [key]: value === 1 ? null : (value ?? 1) - 1 })); }}
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-sm font-medium transition-all duration-150 bg-[var(--surface-2)] border border-[var(--border-default)] text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:border-[var(--border-hover)] disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        &minus;
+                      </button>
+                      <span className="w-8 text-center text-xs font-mono font-semibold text-[var(--text-1)]">
+                        {value === null ? "Any" : value >= 8 ? "8+" : String(value)}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={value !== null && value >= 8}
+                        onClick={() => { hasEdited.current = true; setAirbnbRoomConfig(prev => ({ ...prev, [key]: (value ?? 0) + 1 })); }}
+                        className="w-7 h-7 rounded-md flex items-center justify-center text-sm font-medium transition-all duration-150 bg-[var(--surface-2)] border border-[var(--border-default)] text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:border-[var(--border-hover)] disabled:opacity-30 disabled:cursor-not-allowed"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Airbnb Amenities */}

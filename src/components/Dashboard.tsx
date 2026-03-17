@@ -15,6 +15,7 @@ import {
   TripDuration,
   BudgetTierConfig,
   AirbnbAmenity,
+  AirbnbRoomConfig,
 } from "@/lib/types";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { scoreAllWeekends } from "@/lib/scoring";
@@ -60,6 +61,7 @@ export function Dashboard({ tripId }: DashboardProps) {
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
   const [budgetTierConfigs, setBudgetTierConfigs] = useState<BudgetTierConfig[]>([]);
   const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>([]);
+  const [airbnbRoomConfig, setAirbnbRoomConfig] = useState<AirbnbRoomConfig>({ minBedrooms: null, minBathrooms: null, minBeds: null });
   const [cities, setCities] = useState<CityConfig[]>([]);
   const [priorityCity, setPriorityCity] = useState("all");
   const [scoringAlgorithm, setScoringAlgorithm] = useState<ScoringAlgorithm>("zscore");
@@ -204,6 +206,11 @@ export function Dashboard({ tripId }: DashboardProps) {
     if (configData?.airbnb_amenities && Array.isArray(configData.airbnb_amenities)) {
       setAirbnbAmenities(configData.airbnb_amenities);
     }
+    setAirbnbRoomConfig({
+      minBedrooms: configData?.airbnb_min_bedrooms ?? null,
+      minBathrooms: configData?.airbnb_min_bathrooms ?? null,
+      minBeds: configData?.airbnb_min_beds ?? null,
+    });
     if (configData?.name) setTripName(configData.name);
     // Check edit permissions for trip-scoped dashboard
     if (tripId && configData?.owner_id && user) {
@@ -346,7 +353,7 @@ export function Dashboard({ tripId }: DashboardProps) {
   const flightCatLabel = flightCategories.find((c) => c.id === flightCategory)?.label ?? FLIGHT_CATEGORIES.find((c) => c.value === flightCategory)?.label ?? flightCategory;
   const budgetLabel = budgetTierConfigs.find((t) => t.id === budgetTier)?.label ?? budgetTier;
 
-  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[], newTimeFilters: FlightTimeFilters, newSelectedMonths: SelectedMonth[], newTripDuration: TripDuration, newBudgetTierConfigs: BudgetTierConfig[], newAirbnbAmenities: AirbnbAmenity[]) => {
+  const handleConfigSave = useCallback((newCities: CityConfig[], newExcluded: string[], newDest: string, newDestCity: string, newFlightCategories: FlightCategoryConfig[], newTimeFilters: FlightTimeFilters, newSelectedMonths: SelectedMonth[], newTripDuration: TripDuration, newBudgetTierConfigs: BudgetTierConfig[], newAirbnbAmenities: AirbnbAmenity[], newAirbnbRoomConfig: AirbnbRoomConfig) => {
     const citiesChanged = JSON.stringify(newCities) !== JSON.stringify(cities) || newDest !== destinationAirport || newDestCity !== destinationCity;
     const categoriesChanged = JSON.stringify(newFlightCategories) !== JSON.stringify(flightCategories);
     const timeFiltersChanged = JSON.stringify(newTimeFilters) !== JSON.stringify(flightTimeFilters);
@@ -354,6 +361,7 @@ export function Dashboard({ tripId }: DashboardProps) {
     const tripDurationChanged = JSON.stringify(newTripDuration) !== JSON.stringify(tripDuration);
     const budgetTiersChanged = JSON.stringify(newBudgetTierConfigs) !== JSON.stringify(budgetTierConfigs);
     const airbnbAmenitiesChanged = JSON.stringify(newAirbnbAmenities) !== JSON.stringify(airbnbAmenities);
+    const roomConfigChanged = JSON.stringify(newAirbnbRoomConfig) !== JSON.stringify(airbnbRoomConfig);
     setCities(newCities);
     setExcludedDates(newExcluded);
     setDestinationAirport(newDest);
@@ -364,7 +372,8 @@ export function Dashboard({ tripId }: DashboardProps) {
     setTripDuration(newTripDuration);
     setBudgetTierConfigs(newBudgetTierConfigs);
     setAirbnbAmenities(newAirbnbAmenities);
-    if (citiesChanged || categoriesChanged || timeFiltersChanged || selectedMonthsChanged || tripDurationChanged || budgetTiersChanged || airbnbAmenitiesChanged) setConfigChanged(true);
+    setAirbnbRoomConfig(newAirbnbRoomConfig);
+    if (citiesChanged || categoriesChanged || timeFiltersChanged || selectedMonthsChanged || tripDurationChanged || budgetTiersChanged || airbnbAmenitiesChanged || roomConfigChanged) setConfigChanged(true);
     // If the active flight category was removed, fall back to first available
     if (!newFlightCategories.some(fc => fc.id === flightCategory)) {
       setFlightCategory(newFlightCategories[0]?.id ?? "nonstop_carryon");
@@ -373,7 +382,7 @@ export function Dashboard({ tripId }: DashboardProps) {
     if (!newBudgetTierConfigs?.some(bt => bt.id === budgetTier)) {
       setBudgetTier(newBudgetTierConfigs?.[0]?.id ?? "budget");
     }
-  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory, flightTimeFilters, selectedMonths, tripDuration, budgetTierConfigs, budgetTier, airbnbAmenities]);
+  }, [cities, destinationAirport, destinationCity, flightCategories, flightCategory, flightTimeFilters, selectedMonths, tripDuration, budgetTierConfigs, budgetTier, airbnbAmenities, airbnbRoomConfig]);
 
   // ── Render ──
   return (
@@ -433,6 +442,7 @@ export function Dashboard({ tripId }: DashboardProps) {
                   tripDuration={tripDuration}
                   budgetTierConfigs={budgetTierConfigs}
                   airbnbAmenities={airbnbAmenities}
+                  airbnbRoomConfig={airbnbRoomConfig}
                   onOpen={() => mutateConfig()}
                   onSave={handleConfigSave}
                   tripId={tripId}
@@ -740,8 +750,9 @@ export function Dashboard({ tripId }: DashboardProps) {
                 tripDuration={tripDuration}
                 budgetTierConfigs={budgetTierConfigs}
                 airbnbAmenities={airbnbAmenities}
-                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration, newBudgetTierConfigs, newAirbnbAmenities) => {
-                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration, newBudgetTierConfigs, newAirbnbAmenities);
+                airbnbRoomConfig={airbnbRoomConfig}
+                onSave={(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration, newBudgetTierConfigs, newAirbnbAmenities, newAirbnbRoomConfig) => {
+                  handleConfigSave(newCities, newExcluded, newDest, newDestCity, newFlightCategories, newTimeFilters, newSelectedMonths, newTripDuration, newBudgetTierConfigs, newAirbnbAmenities, newAirbnbRoomConfig);
                   setShowMobileConfig(false);
                 }}
                 inlineMode

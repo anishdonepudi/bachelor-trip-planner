@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity } from "@/lib/types";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity, AirbnbRoomConfig } from "@/lib/types";
 import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
@@ -46,6 +46,7 @@ export function TripCreationWizard() {
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(DEFAULT_BUDGET_TIER_CONFIGS);
   const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>([]);
+  const [airbnbRoomConfig, setAirbnbRoomConfig] = useState<AirbnbRoomConfig>({ minBedrooms: null, minBathrooms: null, minBeds: null });
 
   // Fetch travel insights once for the destination
   const insights = useTravelInsights(
@@ -354,6 +355,9 @@ export function TripCreationWizard() {
           trip_duration: tripDuration,
           budget_tiers: budgetTiers,
           airbnb_amenities: airbnbAmenities,
+          airbnb_min_bedrooms: airbnbRoomConfig.minBedrooms,
+          airbnb_min_bathrooms: airbnbRoomConfig.minBathrooms,
+          airbnb_min_beds: airbnbRoomConfig.minBeds,
         }),
       });
       if (!res.ok) {
@@ -1003,6 +1007,51 @@ export function TripCreationWizard() {
             {showValidation && budgetTiers.length === 0 && (
               <p className="text-xs text-[var(--gold)]">Add at least one budget tier</p>
             )}
+
+            {/* Rooms and Beds */}
+            <div className="mt-6">
+              <span className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">
+                Rooms and Beds
+              </span>
+              <p className="text-[10px] text-[var(--text-3)] mt-0.5 mb-3">
+                Minimum room requirements for your stay
+              </p>
+              <div className="space-y-2">
+                {([
+                  { key: "minBedrooms" as const, label: "Bedrooms" },
+                  { key: "minBathrooms" as const, label: "Bathrooms" },
+                  { key: "minBeds" as const, label: "Beds" },
+                ]).map(({ key, label }) => {
+                  const value = airbnbRoomConfig[key];
+                  return (
+                    <div key={key} className="flex items-center justify-between p-2.5 rounded-md bg-[var(--surface-1)] border border-[var(--border-default)]">
+                      <span className="text-xs font-medium text-[var(--text-1)]">{label}</span>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          type="button"
+                          disabled={value === null}
+                          onClick={() => setAirbnbRoomConfig(prev => ({ ...prev, [key]: value === 1 ? null : (value ?? 1) - 1 }))}
+                          className="w-7 h-7 rounded-md flex items-center justify-center text-sm font-medium transition-all duration-150 bg-[var(--surface-2)] border border-[var(--border-default)] text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:border-[var(--border-hover)] disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          &minus;
+                        </button>
+                        <span className="w-8 text-center text-xs font-mono font-semibold text-[var(--text-1)]">
+                          {value === null ? "Any" : value >= 8 ? "8+" : String(value)}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={value !== null && value >= 8}
+                          onClick={() => setAirbnbRoomConfig(prev => ({ ...prev, [key]: (value ?? 0) + 1 }))}
+                          className="w-7 h-7 rounded-md flex items-center justify-center text-sm font-medium transition-all duration-150 bg-[var(--surface-2)] border border-[var(--border-default)] text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:border-[var(--border-hover)] disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Airbnb Amenities */}
             <div className="mt-6">

@@ -258,3 +258,9 @@ export interface AirbnbAmenity {
   id: string;    // the Airbnb numeric ID as string, e.g. "7"
   label: string; // display name
 }
+
+export interface AirbnbRoomConfig {
+  minBedrooms: number | null;   // null = "Any" (no filter)
+  minBathrooms: number | null;  // null = "Any" (no filter)
+  minBeds: number | null;       // null = "Any" (no filter)
+}
