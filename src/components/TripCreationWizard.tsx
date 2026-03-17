@@ -2,8 +2,8 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity, AirbnbRoomConfig } from "@/lib/types";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity, AirbnbRoomConfig, SearchMode } from "@/lib/types";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS, AIRBNB_AMENITY_OPTIONS, SEARCH_MODE_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
 import { TravelInsights, MonthDetailPanel, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type SelectedMonth, type UnitSystem, type DailyAvg, type HoveredMonthData } from "./TravelInsights";
@@ -24,6 +24,7 @@ export function TripCreationWizard() {
   const [destinationCity, setDestinationCity] = useState("");
   const [destinationAirport, setDestinationAirport] = useState("");
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number; countryCode?: string; country?: string; state?: string } | null>(null);
+  const [searchMode, setSearchMode] = useState<SearchMode>("both");
 
   // Step 2: Travel Group
   const [cities, setCities] = useState<CityConfig[]>([
@@ -307,6 +308,16 @@ export function TripCreationWizard() {
     setExcludedDates((prev) => prev.includes(date) ? prev.filter((d) => d !== date) : [...prev, date]);
   };
 
+  // Compute visible steps based on search mode
+  const visibleSteps = useMemo(() => {
+    const steps = [1, 2, 3]; // always: Basics, Travel Group, Dates
+    if (searchMode !== "stays") steps.push(4); // Flight Preferences
+    if (searchMode !== "flights") steps.push(5); // Stay Preferences
+    return steps;
+  }, [searchMode]);
+  const totalSteps = visibleSteps.length;
+  const currentStepIndex = visibleSteps.indexOf(step);
+
   // Validation
   const canProceed = (s: Step): boolean => {
     switch (s) {
@@ -325,15 +336,16 @@ export function TripCreationWizard() {
 
   const handleContinue = useCallback(() => {
     if (canProceed(step)) {
-      changeStep((step + 1) as Step);
+      changeStep(visibleSteps[currentStepIndex + 1] as Step);
     } else {
       setShowValidation(true);
       setShakeKey(k => k + 1);
     }
-  }, [step, canProceed, changeStep]);
+  }, [step, canProceed, changeStep, visibleSteps, currentStepIndex]);
 
   const handleSubmit = async () => {
-    if (!canProceed(5)) {
+    const lastVisibleStep = visibleSteps[totalSteps - 1] as Step;
+    if (!canProceed(lastVisibleStep)) {
       setShowValidation(true);
       setShakeKey(k => k + 1);
       return;
@@ -360,6 +372,7 @@ export function TripCreationWizard() {
           airbnb_min_bedrooms: airbnbRoomConfig.minBedrooms,
           airbnb_min_bathrooms: airbnbRoomConfig.minBathrooms,
           airbnb_min_beds: airbnbRoomConfig.minBeds,
+          search_mode: searchMode,
         }),
       });
       if (!res.ok) {
@@ -389,7 +402,7 @@ export function TripCreationWizard() {
             </a>
             <h1 className="text-sm font-heading font-bold tracking-tight">New Trip</h1>
           </div>
-          <span className="text-[11px] text-[var(--text-3)] font-mono">Step {step} of 5</span>
+          <span className="text-[11px] text-[var(--text-3)] font-mono">Step {currentStepIndex + 1} of {totalSteps}</span>
         </div>
       </header>
 
@@ -397,7 +410,7 @@ export function TripCreationWizard() {
       <div className="h-0.5 bg-[var(--surface-2)]">
         <div
           className="h-full bg-[var(--blue)] transition-all duration-300"
-          style={{ width: `${(step / 5) * 100}%` }}
+          style={{ width: `${((currentStepIndex + 1) / totalSteps) * 100}%` }}
         />
       </div>
 
@@ -454,6 +467,28 @@ export function TripCreationWizard() {
                   </span>
                 </div>
               )}
+            </div>
+            <div>
+              <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1.5 block">Search Mode</label>
+              <div className="flex gap-2">
+                {SEARCH_MODE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setSearchMode(opt.value)}
+                    className={`flex-1 px-2.5 py-2 rounded-md text-xs font-medium transition-all duration-150 ${
+                      searchMode === opt.value
+                        ? "bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]"
+                        : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)] hover:text-[var(--text-1)]"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-[var(--text-3)] mt-1">
+                {SEARCH_MODE_OPTIONS.find(o => o.value === searchMode)?.description}
+              </p>
             </div>
           </div>
         )}
@@ -1103,15 +1138,15 @@ export function TripCreationWizard() {
 
         {/* Navigation buttons */}
         <div className="flex gap-3 pt-2">
-          {step > 1 && (
+          {currentStepIndex > 0 && (
             <button
-              onClick={() => changeStep((step - 1) as Step)}
+              onClick={() => changeStep(visibleSteps[currentStepIndex - 1] as Step)}
               className="flex-1 h-11 rounded-md text-sm font-semibold bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border-default)] hover:bg-[var(--surface-3)] transition-all duration-150"
             >
               Back
             </button>
           )}
-          {step < 5 ? (
+          {currentStepIndex < totalSteps - 1 ? (
             <div key={shakeKey} className={`flex-1 ${shakeKey > 0 ? "animate-[shake_200ms_ease-in-out]" : ""}`}>
               <button
                 onClick={handleContinue}
@@ -1129,12 +1164,12 @@ export function TripCreationWizard() {
             <div key={shakeKey} className={`flex-1 ${shakeKey > 0 ? "animate-[shake_200ms_ease-in-out]" : ""}`}>
               <button
                 onClick={handleSubmit}
-                onMouseEnter={() => { if (!canProceed(5)) setShowValidation(true); }}
+                onMouseEnter={() => { const last = visibleSteps[totalSteps - 1] as Step; if (!canProceed(last)) setShowValidation(true); }}
                 disabled={saving}
                 className={`w-full h-11 rounded-md text-sm font-semibold text-white transition-all duration-150 ${
                   saving
                     ? "bg-[var(--blue)] opacity-40 cursor-not-allowed"
-                    : canProceed(5)
+                    : canProceed(visibleSteps[totalSteps - 1] as Step)
                       ? "bg-[var(--blue)] hover:brightness-110"
                       : "bg-[var(--blue)] opacity-60 cursor-default"
                 }`}
