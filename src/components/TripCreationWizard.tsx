@@ -42,7 +42,9 @@ export function TripCreationWizard() {
   const maxSelections = 3;
 
   // Step 4: Flight Preferences
-  const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>([]);
+  const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>([
+    { id: "nonstop_carryon", stops: 0, bags: "carryon", label: "Nonstop + Carry-on" },
+  ]);
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(DEFAULT_BUDGET_TIER_CONFIGS);
   const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>([]);
