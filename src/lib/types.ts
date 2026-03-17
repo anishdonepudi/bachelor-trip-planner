@@ -73,7 +73,7 @@ export interface TimeWindow {
 export interface FlightTimeFilters {
   destinationArrival: TimeWindow;   // when to arrive at destination (filters outbound arrival)
   destinationDeparture: TimeWindow; // when to leave destination (filters return departure)
-  maxDuration: number;              // max flight duration in hours
+  maxDuration: number | null;       // max flight duration in hours (null = any)
 }
 
 /** Individual month selection */

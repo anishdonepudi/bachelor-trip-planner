@@ -342,7 +342,7 @@ function parseFlightsFromApi(inner: any[], leg: "outbound" | "return" = "outboun
         segments,
       };
 
-      if (flight.duration > TIME_FILTERS.maxDuration * 60) continue;
+      if (TIME_FILTERS.maxDuration !== null && flight.duration > TIME_FILTERS.maxDuration * 60) continue;
 
       // Apply destination-centric time filters
       if (leg === "outbound") {
@@ -898,7 +898,7 @@ async function main(): Promise<void> {
   console.log(`Date ranges: ${dateRanges.length} (${SELECTED_MONTHS.length} selected months)`);
   console.log(`Categories: ${CATEGORIES_TO_SCRAPE.join(", ")}`);
   console.log(`Top N per category: ${TOP_N_PER_CATEGORY}`);
-  console.log(`Max duration: ${TIME_FILTERS.maxDuration}hr`);
+  console.log(`Max duration: ${TIME_FILTERS.maxDuration ? `${TIME_FILTERS.maxDuration}hr` : "Any"}`);
   console.log(`Concurrency: ${DATE_RANGE_CONCURRENCY} date ranges in parallel`);
   console.log(`Category stagger: ${CATEGORY_STAGGER_MS}ms`);
   console.log(`Total tasks: ${totalTasks}\n`);

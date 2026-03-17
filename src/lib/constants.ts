@@ -41,7 +41,7 @@ export const FLIGHT_CATEGORIES: {
 export const DEFAULT_TIME_FILTERS: FlightTimeFilters = {
   destinationArrival: { from: "00:00", to: "23:59" },
   destinationDeparture: { from: "00:00", to: "23:59" },
-  maxDuration: 10,
+  maxDuration: null,
 };
 
 export const DEFAULT_BUDGET_TIER_CONFIGS: BudgetTierConfig[] = [

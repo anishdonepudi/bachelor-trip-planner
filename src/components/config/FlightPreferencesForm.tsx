@@ -90,14 +90,14 @@ export function FlightPreferencesForm({
             <div className="text-[11px] text-[var(--text-3)] mt-0.5">Flights longer than this are excluded</div>
           </div>
           <div className="flex items-center">
-            <button onClick={() => { onEdited?.(); onTimeFiltersChange({ ...timeFilters, maxDuration: Math.max(1, timeFilters.maxDuration - 1) }); }}
+            <button onClick={() => { onEdited?.(); onTimeFiltersChange({ ...timeFilters, maxDuration: timeFilters.maxDuration === null ? 24 : timeFilters.maxDuration <= 1 ? null : timeFilters.maxDuration - 1 }); }}
               className="w-8 h-8 rounded-l-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)]">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" /></svg>
             </button>
             <div className="w-14 h-8 bg-[var(--surface-2)] border-y border-[var(--border-default)] flex items-center justify-center">
-              <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{timeFilters.maxDuration}hr</span>
+              <span className="text-sm font-semibold font-mono tabular-nums text-[var(--text-1)]">{timeFilters.maxDuration === null ? "Any" : `${timeFilters.maxDuration}hr`}</span>
             </div>
-            <button onClick={() => { onEdited?.(); onTimeFiltersChange({ ...timeFilters, maxDuration: Math.min(24, timeFilters.maxDuration + 1) }); }}
+            <button onClick={() => { onEdited?.(); onTimeFiltersChange({ ...timeFilters, maxDuration: timeFilters.maxDuration === null ? 1 : timeFilters.maxDuration >= 24 ? null : timeFilters.maxDuration + 1 }); }}
               className="w-8 h-8 rounded-r-md bg-[var(--surface-2)] border border-[var(--border-default)] flex items-center justify-center text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)]">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
             </button>
