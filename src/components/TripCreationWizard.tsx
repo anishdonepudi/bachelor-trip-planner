@@ -23,6 +23,7 @@ export function TripCreationWizard() {
   const [tripName, setTripName] = useState("");
   const [destinationCity, setDestinationCity] = useState("");
   const [destinationAirport, setDestinationAirport] = useState("");
+  const [destinationAirports, setDestinationAirports] = useState<{ primary: string[]; nearby: string[] }>({ primary: [], nearby: [] });
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number; countryCode?: string; country?: string; state?: string } | null>(null);
   const [searchMode, setSearchMode] = useState<SearchMode>("both");
 
@@ -451,21 +452,15 @@ export function TripCreationWizard() {
                   onChange={(name, airports) => {
                     setDestinationCity(name);
                     if (airports?.primary?.[0]) setDestinationAirport(airports.primary[0]);
+                    setDestinationAirports(airports ?? { primary: [], nearby: [] });
                   }}
                   onCoordinates={(lat, lng, geo) => setDestinationCoords({ lat, lng, countryCode: geo?.countryCode, country: geo?.country, state: geo?.state })}
                   placeholder="Search destination..."
+                  currentAirports={destinationCity ? destinationAirports : undefined}
                 />
               </div>
               {showValidation && !destinationAirport && (
                 <p className="mt-1 text-xs text-[var(--gold)]">Select a destination</p>
-              )}
-              {destinationAirport && (
-                <div className="flex items-center gap-1.5 mt-1.5">
-                  <span className="text-[10px] text-[var(--text-3)]">Airport:</span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] font-mono font-medium">
-                    {destinationAirport}
-                  </span>
-                </div>
               )}
             </div>
             <div>
