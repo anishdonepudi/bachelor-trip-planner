@@ -27,28 +27,11 @@ DROP TABLE IF EXISTS tourism_data CASCADE;
 DROP TABLE IF EXISTS city_selections CASCADE;
 DROP TABLE IF EXISTS popular_cities CASCADE;
 DROP TABLE IF EXISTS trips CASCADE;
-DROP TABLE IF EXISTS config CASCADE;
 
 
 -- =============================================================================
 -- SECTION 2: CREATE ALL TABLES
 -- =============================================================================
-
--- -----------------------------------------------------------------------------
--- config
--- -----------------------------------------------------------------------------
-CREATE TABLE config (
-  id SERIAL PRIMARY KEY,
-  cities JSONB NOT NULL DEFAULT '[]',
-  destination_airport TEXT DEFAULT 'CUN',
-  total_people INT DEFAULT 17,
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  flight_categories JSONB DEFAULT NULL,
-  flight_time_filters JSONB DEFAULT NULL,
-  month_range JSONB DEFAULT NULL,
-  trip_duration JSONB DEFAULT '{"nights": 3, "departDays": [4, 5]}'::jsonb,
-  selected_months JSONB DEFAULT NULL
-);
 
 -- -----------------------------------------------------------------------------
 -- trips
@@ -65,7 +48,7 @@ CREATE TABLE trips (
   flight_categories JSONB,
   flight_time_filters JSONB,
   month_range JSONB,
-  trip_duration JSONB DEFAULT '{"nights":3,"departDays":[4,5]}',
+  trip_duration JSONB DEFAULT NULL,
   selected_months JSONB DEFAULT NULL,
   budget_tiers JSONB DEFAULT NULL,
   airbnb_amenities JSONB DEFAULT NULL,
@@ -348,10 +331,6 @@ CREATE INDEX idx_popular_cities_name ON popular_cities(name);
 -- =============================================================================
 -- SECTION 4: ROW LEVEL SECURITY POLICIES
 -- =============================================================================
-
--- config
-ALTER TABLE config ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read" ON config FOR SELECT USING (true);
 
 -- trips
 ALTER TABLE trips ENABLE ROW LEVEL SECURITY;
