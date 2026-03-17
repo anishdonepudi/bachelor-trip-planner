@@ -72,9 +72,9 @@ export async function GET(request: NextRequest) {
     distanceKm: haversineKm(lat, lng, a.lat, a.lng),
   }));
 
-  // Primary: large airports within 100km, closest 2
+  // Primary: large airports within 150km, closest 2
   const largePrimary = withDistance
-    .filter((a) => a.type === "large_airport" && a.distanceKm <= 100)
+    .filter((a) => a.type === "large_airport" && a.distanceKm <= 150)
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, 2);
 
@@ -92,9 +92,9 @@ export async function GET(request: NextRequest) {
 
   const primaryIatas = new Set(primary.map((a) => a.iata));
 
-  // Nearby: remaining large + medium airports within 200km, closest 4
+  // Nearby: remaining large airports within 200km, closest 4
   const nearby = withDistance
-    .filter((a) => a.distanceKm <= 200 && !primaryIatas.has(a.iata))
+    .filter((a) => a.type === "large_airport" && a.distanceKm <= 200 && !primaryIatas.has(a.iata))
     .sort((a, b) => a.distanceKm - b.distanceKm)
     .slice(0, 4);
 

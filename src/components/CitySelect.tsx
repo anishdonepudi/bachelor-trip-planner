@@ -2,13 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useCitySearch, CitySuggestion } from "@/lib/hooks/use-city-search";
-
-// ── Client-side airport lookup cache (session-scoped) ──
-const airportCache = new Map<string, { primary: string[]; nearby: string[] }>();
-
-function getAirportCacheKey(lat: number, lng: number): string {
-  return `${lat.toFixed(2)},${lng.toFixed(2)}`;
-}
+import { findNearestAirports } from "@/lib/airport-lookup";
 
 interface CitySelectProps {
   value: string;
@@ -22,7 +16,7 @@ interface CitySelectProps {
 export function CitySelect({ value, onChange, excludeCities = [], placeholder = "Search city...", currentAirports, onCoordinates }: CitySelectProps) {
   const [query, setQuery] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
-  const [resolving, setResolving] = useState(false);
+  const [resolving] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const displayCache = useRef<Record<string, string>>({});
 
@@ -77,41 +71,12 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
     setQuery(display);
     setIsOpen(false);
 
-    // All cities resolve airports via the API using lat/lng
+    // Resolve airports client-side (instant, no API call)
     if (suggestion.lat != null && suggestion.lng != null) {
       onCoordinates?.(suggestion.lat, suggestion.lng, { countryCode: suggestion.countryCode, country: suggestion.country, state: suggestion.state });
-
-      const cacheKey = getAirportCacheKey(suggestion.lat, suggestion.lng);
-      const cached = airportCache.get(cacheKey);
-
-      if (cached) {
-        onChange(suggestion.name, cached);
-        return;
-      }
-
-      setResolving(true);
-      try {
-        const res = await fetch(
-          `/api/airports/nearest?lat=${suggestion.lat}&lng=${suggestion.lng}`
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const airports = {
-            primary: (data.primary ?? []).map((a: { iata: string }) => a.iata),
-            nearby: (data.nearby ?? []).map((a: { iata: string }) => a.iata),
-          };
-          airportCache.set(cacheKey, airports);
-          onChange(suggestion.name, airports);
-        } else {
-          onChange(suggestion.name, { primary: [], nearby: [] });
-        }
-      } catch {
-        onChange(suggestion.name, { primary: [], nearby: [] });
-      } finally {
-        setResolving(false);
-      }
+      const airports = findNearestAirports(suggestion.lat, suggestion.lng);
+      onChange(suggestion.name, airports);
     } else {
-      // No lat/lng available — pass empty airports
       onChange(suggestion.name, { primary: [], nearby: [] });
     }
   };
