@@ -180,11 +180,11 @@ describe("calculateWeekendScore", () => {
     expect(result.perCityCosts[0].cityTotal).toBeNull();
   });
 
-  it("should use the cheapest airbnb in the selected budget tier", () => {
+  it("should use the best-rated airbnb in the selected budget tier", () => {
     const airbnbs = [
-      makeAirbnb({ price_per_person_per_night: 60, budget_tier: "budget" }),
-      makeAirbnb({ price_per_person_per_night: 50, budget_tier: "budget" }),
-      makeAirbnb({ price_per_person_per_night: 70, budget_tier: "mid" }),
+      makeAirbnb({ price_per_person_per_night: 60, budget_tier: "budget", rating: 4.5, review_count: 50 }),
+      makeAirbnb({ price_per_person_per_night: 50, budget_tier: "budget", rating: 4.9, review_count: 100 }),
+      makeAirbnb({ price_per_person_per_night: 70, budget_tier: "mid", rating: 5.0, review_count: 200 }),
     ];
     const flight = makeFlight({ price: 300 });
     const city = makeCity({ people: 1 });
@@ -278,6 +278,75 @@ describe("calculateWeekendScore", () => {
       "Houston",
       "Chicago",
     ]);
+  });
+
+  it("should skip airbnb in flights-only mode", () => {
+    const flight = makeFlight({ price: 300 });
+    const airbnb = makeAirbnb({ price_per_person_per_night: 50 });
+    const city = makeCity({ people: 1 });
+
+    const result = calculateWeekendScore(
+      weekend,
+      [flight],
+      [],
+      [airbnb],
+      "nonstop_carryon",
+      "budget",
+      [city],
+      undefined,
+      "flights"
+    );
+
+    // flights-only: perPersonTotal = flightCost only, stayCost = 0
+    expect(result.perCityCosts[0].flightCost).toBe(300);
+    expect(result.perCityCosts[0].stayCost).toBe(0);
+    expect(result.perCityCosts[0].perPersonTotal).toBe(300);
+    expect(result.selectedAirbnbUrl).toBeNull();
+  });
+
+  it("should skip flights in stays-only mode", () => {
+    const flight = makeFlight({ price: 300 });
+    const airbnb = makeAirbnb({ price_per_person_per_night: 50 });
+    const city = makeCity({ people: 1 });
+
+    const result = calculateWeekendScore(
+      weekend,
+      [flight],
+      [],
+      [airbnb],
+      "nonstop_carryon",
+      "budget",
+      [city],
+      undefined,
+      "stays"
+    );
+
+    // stays-only: perPersonTotal = stayCost only, flightCost = null
+    expect(result.perCityCosts[0].flightCost).toBeNull();
+    expect(result.perCityCosts[0].stayCost).toBe(150); // 50 * 3 nights
+    expect(result.perCityCosts[0].perPersonTotal).toBe(150);
+    expect(result.selectedAirbnbUrl).toBe("https://airbnb.com/rooms/123");
+  });
+
+  it("should not require airbnb data in flights-only mode", () => {
+    const flight = makeFlight({ price: 300 });
+    const city = makeCity({ people: 1 });
+
+    const result = calculateWeekendScore(
+      weekend,
+      [flight],
+      [],
+      [], // no airbnbs — would normally return Infinity
+      "nonstop_carryon",
+      "budget",
+      [city],
+      undefined,
+      "flights"
+    );
+
+    // Should NOT return Infinity — flights-only doesn't need airbnb
+    expect(result.totalGroupCost).toBe(300);
+    expect(result.perCityCosts[0].perPersonTotal).toBe(300);
   });
 });
 

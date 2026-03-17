@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
-import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration, BudgetTierConfig, AirbnbAmenity, AirbnbRoomConfig } from "@/lib/types";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
+import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration, BudgetTierConfig, AirbnbAmenity, AirbnbRoomConfig, SearchMode } from "@/lib/types";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, AIRBNB_AMENITY_OPTIONS, SEARCH_MODE_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { CitySelect } from "./CitySelect";
@@ -28,8 +28,9 @@ interface ConfigModalProps {
   budgetTierConfigs: BudgetTierConfig[];
   airbnbAmenities: AirbnbAmenity[];
   airbnbRoomConfig: AirbnbRoomConfig;
+  searchMode?: SearchMode;
   onOpen?: () => void;
-  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration, budgetTierConfigs: BudgetTierConfig[], airbnbAmenities: AirbnbAmenity[], airbnbRoomConfig: AirbnbRoomConfig) => void;
+  onSave: (cities: CityConfig[], excludedDates: string[], destinationAirport: string, destinationCity: string, flightCategories: FlightCategoryConfig[], flightTimeFilters: FlightTimeFilters, selectedMonths: SelectedMonth[], tripDuration: TripDuration, budgetTierConfigs: BudgetTierConfig[], airbnbAmenities: AirbnbAmenity[], airbnbRoomConfig: AirbnbRoomConfig, searchMode: SearchMode) => void;
   inlineMode?: boolean;
   tripId: string;
 }
@@ -81,7 +82,7 @@ function ConfigSection({ id, title, subtitle, icon, expanded, onToggle, badge, c
   );
 }
 
-export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, budgetTierConfigs: initialBudgetTierConfigs, airbnbAmenities: initialAirbnbAmenities, airbnbRoomConfig: initialAirbnbRoomConfig, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
+export function ConfigModal({ cities: initialCities, excludedDates: initialExcluded, destinationAirport: initialDestination, destinationCity: initialDestinationCity, flightCategories: initialFlightCategories, flightTimeFilters: initialTimeFilters, selectedMonths: initialSelectedMonths, tripDuration: initialTripDuration, budgetTierConfigs: initialBudgetTierConfigs, airbnbAmenities: initialAirbnbAmenities, airbnbRoomConfig: initialAirbnbRoomConfig, searchMode, onOpen, onSave, inlineMode = false, tripId }: ConfigModalProps) {
   const [open, setOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<Section>>(new Set(["trip"]));
   const [cities, setCities] = useState<CityConfig[]>(initialCities);
@@ -95,6 +96,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(initialBudgetTierConfigs);
   const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>(initialAirbnbAmenities);
   const [airbnbRoomConfig, setAirbnbRoomConfig] = useState<AirbnbRoomConfig>(initialAirbnbRoomConfig);
+  const [localSearchMode, setLocalSearchMode] = useState<SearchMode>(searchMode ?? "both");
 
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
   const [saving, setSaving] = useState(false);
@@ -155,8 +157,9 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
     setBudgetTiers(initialBudgetTierConfigs);
     setAirbnbAmenities(initialAirbnbAmenities);
     setAirbnbRoomConfig(initialAirbnbRoomConfig);
+    setLocalSearchMode(searchMode ?? "both");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialSelectedMonths, initialTripDuration, initialBudgetTierConfigs, initialAirbnbAmenities, initialAirbnbRoomConfig]);
+  }, [initialCities, initialExcluded, initialDestination, initialDestinationCity, initialFlightCategories, initialTimeFilters, initialSelectedMonths, initialTripDuration, initialBudgetTierConfigs, initialAirbnbAmenities, initialAirbnbRoomConfig, searchMode]);
 
   const handleOpenChange = (isOpen: boolean) => {
     if (isOpen) {
@@ -173,6 +176,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setBudgetTiers(initialBudgetTierConfigs);
       setAirbnbAmenities(initialAirbnbAmenities);
       setAirbnbRoomConfig(initialAirbnbRoomConfig);
+      setLocalSearchMode(searchMode ?? "both");
       setExpandedSections(new Set(["trip"]));
       setDestinationCoords(null);
       coordsResolved.current = false;
@@ -489,10 +493,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       const res = await fetch(saveUrl, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, selected_months: selectedMonths, trip_duration: tripDuration, budget_tiers: budgetTiers, airbnb_amenities: airbnbAmenities, airbnb_min_bedrooms: airbnbRoomConfig.minBedrooms, airbnb_min_bathrooms: airbnbRoomConfig.minBathrooms, airbnb_min_beds: airbnbRoomConfig.minBeds, skip_scrape: !citiesChanged && !selectedMonthsChanged }),
+        body: JSON.stringify({ cities, destination_airport: destinationAirport, destination_city: destinationCity, total_people: total, excluded_dates: excludedDates, flight_categories: flightCategories, flight_time_filters: timeFilters, selected_months: selectedMonths, trip_duration: tripDuration, budget_tiers: budgetTiers, airbnb_amenities: airbnbAmenities, airbnb_min_bedrooms: airbnbRoomConfig.minBedrooms, airbnb_min_bathrooms: airbnbRoomConfig.minBathrooms, airbnb_min_beds: airbnbRoomConfig.minBeds, search_mode: localSearchMode, skip_scrape: !citiesChanged && !selectedMonthsChanged }),
       });
       if (res.ok) {
-        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, selectedMonths, tripDuration, budgetTiers, airbnbAmenities, airbnbRoomConfig);
+        onSave(cities, excludedDates, destinationAirport, destinationCity, flightCategories, timeFilters, selectedMonths, tripDuration, budgetTiers, airbnbAmenities, airbnbRoomConfig, localSearchMode);
         hasEdited.current = false;
         setOpen(false);
       } else {
@@ -547,6 +551,30 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
             </svg>
           }
         >
+          {/* Search Mode */}
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-2)] mb-1.5">Search Mode</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {SEARCH_MODE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => { hasEdited.current = true; setLocalSearchMode(opt.value); }}
+                  className={`px-2.5 py-2 rounded-md text-xs font-medium transition-all duration-150 ${
+                    localSearchMode === opt.value
+                      ? "bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]"
+                      : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)] hover:text-[var(--text-1)]"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-[var(--text-3)] mt-1">
+              {SEARCH_MODE_OPTIONS.find(o => o.value === localSearchMode)?.description}
+            </p>
+          </div>
+
           {/* Destination */}
           <div>
             <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1.5 block">Destination</label>
@@ -702,6 +730,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         </ConfigSection>
 
         {/* Section 3: Flight Preferences */}
+        {localSearchMode !== "stays" && (
         <ConfigSection
           id="flights"
           title="Flight Preferences"
@@ -853,8 +882,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
           </div>
 
         </ConfigSection>
+        )}
 
         {/* Section: Stay Preferences */}
+        {localSearchMode !== "flights" && (
         <ConfigSection
           id="stay"
           title="Stay Preferences"
@@ -1011,6 +1042,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
             ));
           })()}
         </ConfigSection>
+        )}
 
         {/* Section 4: Schedule */}
         <ConfigSection

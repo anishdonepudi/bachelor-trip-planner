@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import type { SearchMode } from "@/lib/types";
 
 async function fetchAll(table: string, tripId: string) {
   const rows: Record<string, unknown>[] = [];
@@ -30,13 +31,22 @@ export async function GET(
   const { tripId } = await params;
 
   try {
+    // Read trip's search_mode
+    const { data: trip } = await supabaseAdmin
+      .from("trips")
+      .select("search_mode")
+      .eq("id", tripId)
+      .single();
+
+    const searchMode: SearchMode = (trip?.search_mode as SearchMode) ?? "both";
+
     const [flights, flightOptions, airbnbListings] = await Promise.all([
-      fetchAll("flights", tripId),
-      fetchAll("flight_options", tripId),
-      fetchAll("airbnb_listings", tripId),
+      searchMode !== "stays" ? fetchAll("flights", tripId) : Promise.resolve([]),
+      searchMode !== "stays" ? fetchAll("flight_options", tripId) : Promise.resolve([]),
+      searchMode !== "flights" ? fetchAll("airbnb_listings", tripId) : Promise.resolve([]),
     ]);
 
-    return NextResponse.json({ flights, flightOptions, airbnbListings });
+    return NextResponse.json({ flights, flightOptions, airbnbListings, searchMode });
   } catch (error) {
     console.error("Error fetching weekends:", error);
     return NextResponse.json({ error: "Failed to fetch weekend data" }, { status: 500 });

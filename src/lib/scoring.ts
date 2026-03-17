@@ -10,6 +10,7 @@ import {
   WeekendScore,
   FlightOptionRow,
   FlightCategoryConfig,
+  SearchMode,
 } from "./types";
 import { DEFAULT_FLIGHT_CATEGORIES } from "./constants";
 
@@ -62,19 +63,22 @@ export function calculateWeekendScore(
   flightCategory: FlightCategory,
   budgetTier: BudgetTier,
   cities: CityConfig[],
-  flightCategories?: FlightCategoryConfig[]
+  flightCategories?: FlightCategoryConfig[],
+  searchMode: SearchMode = "both"
 ): { score: number; totalGroupCost: number; perCityCosts: CostBreakdown[]; selectedAirbnbUrl: string | null } {
-  const topAirbnb = selectTopAirbnb(airbnbs, budgetTier);
+  // Select airbnb unless flights-only mode
+  const topAirbnb = searchMode !== "flights" ? selectTopAirbnb(airbnbs, budgetTier) : null;
 
-  if (!topAirbnb) {
+  if (searchMode !== "flights" && !topAirbnb) {
     return { score: 0, totalGroupCost: Infinity, perCityCosts: [], selectedAirbnbUrl: null };
   }
 
   const nights = Math.round(
     (new Date(weekend.returnDate + "T00:00:00").getTime() - new Date(weekend.departDate + "T00:00:00").getTime()) / 86400000
   );
-  const stayPerPerson =
-    (topAirbnb.price_per_person_per_night ?? 0) * nights;
+  const stayPerPerson = topAirbnb
+    ? (topAirbnb.price_per_person_per_night ?? 0) * nights
+    : 0;
 
   // Build the fallback order starting from the selected category
   const hierarchy = buildCategoryHierarchy(flightCategories);
@@ -88,31 +92,41 @@ export function calculateWeekendScore(
     let bestFlight: Flight | null = null;
     let fallbackCategory: FlightCategory | null = null;
     const skippedCategories: FlightCategory[] = [];
+    let alternateFlights: FlightOptionRow[] = [];
 
-    // Try each category in hierarchy order
-    for (const cat of fallbackOrder) {
-      const candidate = flights
-        .filter((f) => f.origin_city === city.city && f.category === cat)
-        .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity))[0];
+    if (searchMode !== "stays") {
+      // Try each category in hierarchy order
+      for (const cat of fallbackOrder) {
+        const candidate = flights
+          .filter((f) => f.origin_city === city.city && f.category === cat)
+          .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity))[0];
 
-      if (candidate?.price != null) {
-        bestFlight = candidate;
-        fallbackCategory = cat !== flightCategory ? cat : null;
-        break;
+        if (candidate?.price != null) {
+          bestFlight = candidate;
+          fallbackCategory = cat !== flightCategory ? cat : null;
+          break;
+        }
+        skippedCategories.push(cat);
       }
-      skippedCategories.push(cat);
+
+      // Collect up to 3 flight options for the effective category (for toggle)
+      const effectiveCategory = fallbackCategory ?? flightCategory;
+      alternateFlights = flightOptions
+        .filter((f) => f.origin_city === city.city && f.category === effectiveCategory && f.price != null)
+        .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity))
+        .slice(0, 3);
     }
 
-    // Collect up to 3 flight options for the effective category (for toggle)
-    const effectiveCategory = fallbackCategory ?? flightCategory;
-    const alternateFlights = flightOptions
-      .filter((f) => f.origin_city === city.city && f.category === effectiveCategory && f.price != null)
-      .sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity))
-      .slice(0, 3);
+    const flightCost = searchMode === "stays" ? null : (bestFlight?.price ?? null);
 
-    const flightCost = bestFlight?.price ?? null;
-    const perPersonTotal =
-      flightCost !== null ? flightCost + stayPerPerson : null;
+    let perPersonTotal: number | null;
+    if (searchMode === "flights") {
+      perPersonTotal = flightCost;
+    } else if (searchMode === "stays") {
+      perPersonTotal = stayPerPerson;
+    } else {
+      perPersonTotal = flightCost !== null ? flightCost + stayPerPerson : null;
+    }
 
     perCityCosts.push({
       city: city.city,
@@ -132,7 +146,7 @@ export function calculateWeekendScore(
     }
   }
 
-  return { score: totalGroupCost, totalGroupCost, perCityCosts, selectedAirbnbUrl: topAirbnb.airbnb_url ?? null };
+  return { score: totalGroupCost, totalGroupCost, perCityCosts, selectedAirbnbUrl: topAirbnb?.airbnb_url ?? null };
 }
 
 export function scoreAllWeekends(
@@ -145,13 +159,14 @@ export function scoreAllWeekends(
   cities: CityConfig[],
   priorityCity: string = "all",
   scoringAlgorithm: ScoringAlgorithm = "zscore",
-  flightCategories?: FlightCategoryConfig[]
+  flightCategories?: FlightCategoryConfig[],
+  searchMode: SearchMode = "both"
 ): WeekendScore[] {
   // Filter out flights with 2+ stops on either leg (stale data from older scraper runs)
   const maxStops = (f: { outbound_details?: { stops?: number } | null; return_details?: { stops?: number } | null }) =>
     Math.max(f.outbound_details?.stops ?? 0, f.return_details?.stops ?? 0);
-  const validFlights = allFlights.filter((f) => maxStops(f) <= 1);
-  const validFlightOptions = allFlightOptions.filter((f) => maxStops(f) <= 1);
+  const validFlights = searchMode === "stays" ? [] : allFlights.filter((f) => maxStops(f) <= 1);
+  const validFlightOptions = searchMode === "stays" ? [] : allFlightOptions.filter((f) => maxStops(f) <= 1);
 
   const weekendScores: WeekendScore[] = [];
 
@@ -159,7 +174,7 @@ export function scoreAllWeekends(
     const weekendFlights = validFlights.filter(
       (f) => f.date_range_id === weekend.id
     );
-    const weekendAirbnbs = allAirbnbs.filter(
+    const weekendAirbnbs = searchMode === "flights" ? [] : allAirbnbs.filter(
       (a) => a.date_range_id === weekend.id
     );
     let weekendFlightOptions = validFlightOptions.filter(
@@ -168,6 +183,7 @@ export function scoreAllWeekends(
 
     // Fill gaps: if flight_options is missing a city/category but flights has it,
     // convert the Flight entry into a FlightOptionRow so the grid can display it
+    if (searchMode !== "stays") {
     const optionKeys = new Set(
       weekendFlightOptions.map((f) => `${f.origin_city}|${f.category}`)
     );
@@ -189,6 +205,7 @@ export function scoreAllWeekends(
         optionKeys.add(`${f.origin_city}|${f.category}`);
       }
     }
+    }
 
     const result = calculateWeekendScore(
       weekend,
@@ -198,7 +215,8 @@ export function scoreAllWeekends(
       flightCategory,
       budgetTier,
       cities,
-      flightCategories
+      flightCategories,
+      searchMode
     );
 
     weekendScores.push({

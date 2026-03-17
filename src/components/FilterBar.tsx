@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig, BudgetTierConfig } from "@/lib/types";
-import { FLIGHT_CATEGORIES, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig, BudgetTierConfig, SearchMode } from "@/lib/types";
+import { FLIGHT_CATEGORIES, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay, getAvailableAlgorithms } from "@/lib/constants";
 
 interface FilterBarProps {
   flightCategory: FlightCategory;
@@ -12,6 +12,7 @@ interface FilterBarProps {
   cities: CityConfig[];
   flightCategories?: FlightCategoryConfig[];
   budgetTierConfigs: BudgetTierConfig[];
+  searchMode?: SearchMode;
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
   onPriorityCityChange: (city: string) => void;
@@ -93,6 +94,7 @@ export function FilterBar({
   cities,
   flightCategories,
   budgetTierConfigs,
+  searchMode,
   onFlightCategoryChange,
   onBudgetTierChange,
   onPriorityCityChange,
@@ -107,13 +109,16 @@ export function FilterBar({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-4">
-        <SegmentedControl
-          label="Flight Type"
-          options={displayCategories.map((c) => ({ value: c.value, label: c.label }))}
-          value={flightCategory}
-          onChange={onFlightCategoryChange}
-        />
+        {searchMode !== "stays" && (
+          <SegmentedControl
+            label="Flight Type"
+            options={displayCategories.map((c) => ({ value: c.value, label: c.label }))}
+            value={flightCategory}
+            onChange={onFlightCategoryChange}
+          />
+        )}
 
+        {searchMode !== "flights" && (
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
             <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider">
@@ -150,6 +155,7 @@ export function FilterBar({
             ))}
           </div>
         </div>
+        )}
 
         <SelectControl
           label="City"
@@ -183,7 +189,7 @@ export function FilterBar({
               backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
             }}
           >
-            {SCORING_ALGORITHMS.map((a) => (
+            {(searchMode ? SCORING_ALGORITHMS.filter(a => getAvailableAlgorithms(searchMode).includes(a.value)) : SCORING_ALGORITHMS).map((a) => (
               <option key={a.value} value={a.value}>{a.label}</option>
             ))}
           </select>
@@ -202,7 +208,7 @@ export function FilterBar({
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {SCORING_ALGORITHMS.map((algo) => (
+            {(searchMode ? SCORING_ALGORITHMS.filter(a => getAvailableAlgorithms(searchMode).includes(a.value)) : SCORING_ALGORITHMS).map((algo) => (
               <div key={algo.value}
                 className={`p-2.5 rounded-md border transition-colors duration-150 ${
                   algo.value === scoringAlgorithm

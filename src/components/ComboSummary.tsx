@@ -13,9 +13,10 @@ import {
   RankChangeInfo,
   FlightCategoryConfig,
   BudgetTierConfig,
+  SearchMode,
 } from "@/lib/types";
 import { computeRankChanges } from "@/lib/rank-changes";
-import { FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
+import { FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, flightCategoryConfigToDisplay, budgetTierConfigToDisplay, getAvailableAlgorithms } from "@/lib/constants";
 import { scoreAllWeekends } from "@/lib/scoring";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
 import { ScoreBadge, RankChangeIndicator } from "./ScoreBadge";
@@ -33,6 +34,7 @@ interface ComboSummaryProps {
   totalPeople: number;
   flightCategories?: FlightCategoryConfig[];
   budgetTierConfigs: BudgetTierConfig[];
+  searchMode?: SearchMode;
   onSelectCombo: (flightCategory: FlightCategory, budgetTier: BudgetTier) => void;
 }
 
@@ -64,6 +66,7 @@ export function ComboSummary({
   totalPeople,
   flightCategories,
   budgetTierConfigs,
+  searchMode,
   onSelectCombo,
 }: ComboSummaryProps) {
   const [mobileFlightCat, setMobileFlightCat] = useState<FlightCategory>(activeFlightCategory);
@@ -88,24 +91,32 @@ export function ComboSummary({
       top3: WeekendScore[];
     }[] = [];
 
-    for (const fc of displayFlightCategories) {
-      for (const bt of displayBudgetTiers) {
+    const flightCats = searchMode === "stays"
+      ? [{ value: displayFlightCategories[0]?.value ?? "nonstop_carryon", label: "" }]
+      : displayFlightCategories;
+    const budgetTs = searchMode === "flights"
+      ? [{ value: displayBudgetTiers[0]?.value ?? "budget", label: "", range: "" }]
+      : displayBudgetTiers;
+
+    for (const fc of flightCats) {
+      for (const bt of budgetTs) {
         const scored = scoreAllWeekends(
           dateRanges,
           weekendData.flights ?? [],
           weekendData.flightOptions ?? [],
           weekendData.airbnbListings ?? [],
-          fc.value, bt.value, cities, priorityCity, scoringAlgorithm
+          fc.value, bt.value, cities, priorityCity, scoringAlgorithm,
+          undefined, searchMode
         );
         results.push({
           flightCategory: fc.value, flightLabel: fc.label,
-          budgetTier: bt.value, budgetLabel: bt.label, budgetRange: bt.range,
+          budgetTier: bt.value, budgetLabel: bt.label, budgetRange: (bt as { range?: string }).range ?? "",
           top3: scored.slice(0, 3),
         });
       }
     }
     return results;
-  }, [weekendData, dateRanges, cities, priorityCity, scoringAlgorithm, displayFlightCategories, displayBudgetTiers]);
+  }, [weekendData, dateRanges, cities, priorityCity, scoringAlgorithm, displayFlightCategories, displayBudgetTiers, searchMode]);
 
   // Compute rank changes per combo
   const comboRankChanges = useMemo(() => {
@@ -118,7 +129,8 @@ export function ComboSummary({
       const currentScores = scoreAllWeekends(
         dateRanges, weekendData.flights ?? [], weekendData.flightOptions ?? [],
         weekendData.airbnbListings ?? [], combo.flightCategory, combo.budgetTier,
-        cities, priorityCity, scoringAlgorithm
+        cities, priorityCity, scoringAlgorithm,
+        undefined, searchMode
       );
       map.set(key, computeRankChanges(
         previousWeekendData, currentScores, dateRanges,
@@ -128,7 +140,9 @@ export function ComboSummary({
     return map;
   }, [previousWeekendData, comboResults, weekendData, dateRanges, cities, priorityCity, scoringAlgorithm]);
 
-  const mobileFilteredCombos = comboResults.filter((r) => r.flightCategory === mobileFlightCat);
+  const mobileFilteredCombos = searchMode === "stays"
+    ? comboResults
+    : comboResults.filter((r) => r.flightCategory === mobileFlightCat);
 
   const popularWeekends = useMemo(() => {
     const RANK_POINTS = [3, 2, 1]; // #1 = 3pts, #2 = 2pts, #3 = 1pt
@@ -160,7 +174,8 @@ export function ComboSummary({
       for (const bt of displayBudgetTiers) {
         const scored = scoreAllWeekends(
           dateRanges, previousWeekendData.flights ?? [], previousWeekendData.flightOptions ?? [],
-          previousWeekendData.airbnbListings ?? [], fc.value, bt.value, cities, priorityCity, scoringAlgorithm
+          previousWeekendData.airbnbListings ?? [], fc.value, bt.value, cities, priorityCity, scoringAlgorithm,
+          undefined, searchMode
         );
         for (let i = 0; i < Math.min(scored.length, 3); i++) {
           const ws = scored[i];
@@ -290,21 +305,23 @@ export function ComboSummary({
       {/* ===== MOBILE ===== */}
       <div className="sm:hidden space-y-3">
         {/* Flight type tabs */}
-        <div className="flex overflow-x-auto gap-1.5 -mx-4 px-4 pb-1 scrollbar-thin">
-          {displayFlightCategories.map((fc) => (
-            <button
-              key={fc.value}
-              onClick={() => setMobileFlightCat(fc.value)}
-              className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ${
-                mobileFlightCat === fc.value
-                  ? "bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]"
-                  : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)]"
-              }`}
-            >
-              {fc.label}
-            </button>
-          ))}
-        </div>
+        {searchMode !== "stays" && (
+          <div className="flex overflow-x-auto gap-1.5 -mx-4 px-4 pb-1 scrollbar-thin">
+            {displayFlightCategories.map((fc) => (
+              <button
+                key={fc.value}
+                onClick={() => setMobileFlightCat(fc.value)}
+                className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 ${
+                  mobileFlightCat === fc.value
+                    ? "bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]"
+                    : "bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)]"
+                }`}
+              >
+                {fc.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Budget sections */}
         {mobileFilteredCombos.map((combo) => (
@@ -371,71 +388,144 @@ export function ComboSummary({
       </div>
 
       {/* ===== DESKTOP: Grid layout ===== */}
-      <div className="hidden sm:grid grid-cols-2 gap-3">
-        {FLIGHT_CATEGORIES.map((fc) => {
-          const combos = comboResults.filter((r) => r.flightCategory === fc.value);
-          const isActiveCategory = fc.value === activeFlightCategory;
-          return (
-            <div
-              key={fc.value}
-              className={`rounded-lg border ${
-                isActiveCategory
-                  ? "border-[var(--blue-border)] shadow-sm"
-                  : "border-[var(--border-default)]"
-              }`}
-            >
-              {/* Card header */}
-              <div className="px-3 py-2.5 bg-[var(--surface-1)] border-b border-[var(--border-default)]">
-                <h3 className="text-sm font-heading font-semibold text-[var(--text-1)]">{fc.label}</h3>
-                <p className="text-[11px] text-[var(--text-3)]">{fc.description}</p>
+      {searchMode === "stays" ? (
+        /* Stays-only: 1D grid by budget tier */
+        <div className="hidden sm:grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {comboResults.map((combo) => {
+            const isActive = combo.budgetTier === activeBudgetTier;
+            const comboKey = `${combo.flightCategory}:${combo.budgetTier}`;
+            const changes = comboRankChanges.get(comboKey);
+            return (
+              <div key={combo.budgetTier} className={`rounded-lg border ${isActive ? "border-[var(--blue-border)] shadow-sm" : "border-[var(--border-default)]"}`}>
+                <button
+                  className={`w-full px-3 py-2.5 text-left hover:bg-[var(--surface-1)] transition-colors duration-150 cursor-pointer ${isActive ? "bg-[var(--blue-soft)]" : ""}`}
+                  onClick={() => onSelectCombo(combo.flightCategory, combo.budgetTier)}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-sm font-heading font-semibold text-[var(--text-1)]">{combo.budgetLabel}</span>
+                    <span className="text-[11px] text-[var(--text-3)]">{combo.budgetRange}</span>
+                    <svg className="w-3 h-3 text-[var(--text-3)] ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  {combo.top3.length === 0 ? (
+                    <p className="text-[11px] text-[var(--text-3)] italic">No data</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {combo.top3.map((ws, i) => {
+                        const rc = changes ? changes[ws.dateRange.id] : undefined;
+                        return (
+                          <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} rankChangeInfo={rc} sinceTimestamp={rankChangeSince} totalPeople={totalPeople} searchMode={searchMode} />
+                        );
+                      })}
+                    </div>
+                  )}
+                </button>
               </div>
-
-              {/* Budget tiers */}
-              <div className="divide-y divide-[var(--border-default)]">
-                {combos.map((combo) => {
-                  const isActive = combo.flightCategory === activeFlightCategory && combo.budgetTier === activeBudgetTier;
-                  return (
-                    <button
-                      key={combo.budgetTier}
-                      className={`w-full px-3 py-2.5 text-left hover:bg-[var(--surface-1)] transition-colors duration-150 cursor-pointer ${
-                        isActive ? "bg-[var(--blue-soft)]" : ""
-                      }`}
-                      onClick={() => onSelectCombo(combo.flightCategory, combo.budgetTier)}
-                    >
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-xs font-medium text-[var(--text-1)]">{combo.budgetLabel}</span>
-                        <span className="text-[11px] text-[var(--text-3)]">{combo.budgetRange}</span>
-                        <svg className="w-3 h-3 text-[var(--text-3)] ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </div>
-                      {combo.top3.length === 0 ? (
-                        <p className="text-[11px] text-[var(--text-3)] italic">No data</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {combo.top3.map((ws, i) => {
-                            const comboKey = `${combo.flightCategory}:${combo.budgetTier}`;
-                            const changes = comboRankChanges.get(comboKey);
-                            const rc = changes ? changes[ws.dateRange.id] : undefined;
-                            return (
-                              <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} rankChangeInfo={rc} sinceTimestamp={rankChangeSince} totalPeople={totalPeople} />
-                            );
-                          })}
+            );
+          })}
+        </div>
+      ) : searchMode === "flights" ? (
+        /* Flights-only: 1D grid by flight category */
+        <div className="hidden sm:grid grid-cols-2 gap-3">
+          {comboResults.map((combo) => {
+            const isActive = combo.flightCategory === activeFlightCategory;
+            const comboKey = `${combo.flightCategory}:${combo.budgetTier}`;
+            const changes = comboRankChanges.get(comboKey);
+            return (
+              <div key={combo.flightCategory} className={`rounded-lg border ${isActive ? "border-[var(--blue-border)] shadow-sm" : "border-[var(--border-default)]"}`}>
+                <button
+                  className={`w-full px-3 py-2.5 text-left hover:bg-[var(--surface-1)] transition-colors duration-150 cursor-pointer ${isActive ? "bg-[var(--blue-soft)]" : ""}`}
+                  onClick={() => onSelectCombo(combo.flightCategory, combo.budgetTier)}
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-sm font-heading font-semibold text-[var(--text-1)]">{combo.flightLabel}</span>
+                    <svg className="w-3 h-3 text-[var(--text-3)] ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                  {combo.top3.length === 0 ? (
+                    <p className="text-[11px] text-[var(--text-3)] italic">No data</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {combo.top3.map((ws, i) => {
+                        const rc = changes ? changes[ws.dateRange.id] : undefined;
+                        return (
+                          <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} rankChangeInfo={rc} sinceTimestamp={rankChangeSince} totalPeople={totalPeople} searchMode={searchMode} />
+                        );
+                      })}
+                    </div>
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* Both: 2D grid (current behavior) */
+        <div className="hidden sm:grid grid-cols-2 gap-3">
+          {displayFlightCategories.map((fc) => {
+            const combos = comboResults.filter((r) => r.flightCategory === fc.value);
+            const isActiveCategory = fc.value === activeFlightCategory;
+            return (
+              <div
+                key={fc.value}
+                className={`rounded-lg border ${
+                  isActiveCategory
+                    ? "border-[var(--blue-border)] shadow-sm"
+                    : "border-[var(--border-default)]"
+                }`}
+              >
+                <div className="px-3 py-2.5 bg-[var(--surface-1)] border-b border-[var(--border-default)]">
+                  <h3 className="text-sm font-heading font-semibold text-[var(--text-1)]">{fc.label}</h3>
+                  <p className="text-[11px] text-[var(--text-3)]">{fc.description}</p>
+                </div>
+                <div className="divide-y divide-[var(--border-default)]">
+                  {combos.map((combo) => {
+                    const isActive = combo.flightCategory === activeFlightCategory && combo.budgetTier === activeBudgetTier;
+                    return (
+                      <button
+                        key={combo.budgetTier}
+                        className={`w-full px-3 py-2.5 text-left hover:bg-[var(--surface-1)] transition-colors duration-150 cursor-pointer ${
+                          isActive ? "bg-[var(--blue-soft)]" : ""
+                        }`}
+                        onClick={() => onSelectCombo(combo.flightCategory, combo.budgetTier)}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-xs font-medium text-[var(--text-1)]">{combo.budgetLabel}</span>
+                          <span className="text-[11px] text-[var(--text-3)]">{combo.budgetRange}</span>
+                          <svg className="w-3 h-3 text-[var(--text-3)] ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
                         </div>
-                      )}
-                    </button>
-                  );
-                })}
+                        {combo.top3.length === 0 ? (
+                          <p className="text-[11px] text-[var(--text-3)] italic">No data</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {combo.top3.map((ws, i) => {
+                              const comboKey = `${combo.flightCategory}:${combo.budgetTier}`;
+                              const changes = comboRankChanges.get(comboKey);
+                              const rc = changes ? changes[ws.dateRange.id] : undefined;
+                              return (
+                                <WeekendPill key={ws.dateRange.id} weekend={ws} rank={i + 1} priorityCity={priorityCity} rankChangeInfo={rc} sinceTimestamp={rankChangeSince} totalPeople={totalPeople} searchMode={searchMode} />
+                              );
+                            })}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function WeekendPill({ weekend, rank, priorityCity, rankChangeInfo, sinceTimestamp, totalPeople }: { weekend: WeekendScore; rank: number; priorityCity: string; rankChangeInfo?: RankChangeInfo; sinceTimestamp?: string | null; totalPeople: number }) {
+function WeekendPill({ weekend, rank, priorityCity, rankChangeInfo, sinceTimestamp, totalPeople, searchMode }: { weekend: WeekendScore; rank: number; priorityCity: string; rankChangeInfo?: RankChangeInfo; sinceTimestamp?: string | null; totalPeople: number; searchMode?: SearchMode }) {
   const { dateRange, score, totalGroupCost, perCityCosts, cityAverages } = weekend;
   const selectedCityCost = priorityCity !== "all" ? perCityCosts.find((c) => c.city === priorityCity) : null;
 
@@ -457,10 +547,14 @@ function WeekendPill({ weekend, rank, priorityCity, rankChangeInfo, sinceTimesta
       </div>
       {selectedCityCost && selectedCityCost.perPersonTotal != null && (
         <div className="flex items-center gap-1 text-[10px] shrink-0">
-          <span className="text-[var(--text-3)] font-mono tabular-nums">${selectedCityCost.flightCost ?? 0}</span>
-          <span className="text-[var(--text-3)]">+</span>
-          <span className="text-[var(--text-3)] font-mono tabular-nums">${Math.round(selectedCityCost.stayCost)}</span>
-          <span className="text-[var(--text-3)]">=</span>
+          {searchMode === "both" ? (
+            <>
+              <span className="text-[var(--text-3)] font-mono tabular-nums">${selectedCityCost.flightCost ?? 0}</span>
+              <span className="text-[var(--text-3)]">+</span>
+              <span className="text-[var(--text-3)] font-mono tabular-nums">${Math.round(selectedCityCost.stayCost)}</span>
+              <span className="text-[var(--text-3)]">=</span>
+            </>
+          ) : null}
           <span className="text-xs font-semibold font-mono tabular-nums text-[var(--gold)]">${Math.round(selectedCityCost.perPersonTotal)}</span>
         </div>
       )}

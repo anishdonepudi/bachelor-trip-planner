@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { WeekendScore, FlightCategory, BudgetTier, RankChangeInfo, CityStats } from "@/lib/types";
+import { WeekendScore, FlightCategory, BudgetTier, RankChangeInfo, CityStats, SearchMode } from "@/lib/types";
 import { FLIGHT_CATEGORIES } from "@/lib/constants";
 import { formatDateRangeDisplay } from "@/lib/date-ranges";
 import { ScoreBadge } from "./ScoreBadge";
@@ -193,6 +193,7 @@ interface WeekendCardProps {
   onCollapsedHeight?: (height: number) => void;
   totalPeople: number;
   destinationCity: string;
+  searchMode?: SearchMode;
 }
 
 type DetailTab = "flights" | "stays" | "costs";
@@ -241,9 +242,9 @@ function DeltaSpan({ value, lowerIsBetter = false, prefix = "$" }: { value: numb
   );
 }
 
-export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorityCity, rankChangeInfo, rankChangeSince, onCollapsedHeight, totalPeople, destinationCity }: WeekendCardProps) {
+export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorityCity, rankChangeInfo, rankChangeSince, onCollapsedHeight, totalPeople, destinationCity, searchMode }: WeekendCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<DetailTab>("flights");
+  const [activeTab, setActiveTab] = useState<DetailTab>(searchMode === "stays" ? "stays" : "flights");
   const [showScoreSheet, setShowScoreSheet] = useState(false);
   const [showRankChangeSheet, setShowRankChangeSheet] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -276,8 +277,8 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
   const tierColor = getTierColor(score);
 
   const TABS: { id: DetailTab; label: string }[] = [
-    { id: "flights", label: "Flights" },
-    { id: "stays", label: `Stays (${villaCount})` },
+    ...(searchMode !== "stays" ? [{ id: "flights" as DetailTab, label: "Flights" }] : []),
+    ...(searchMode !== "flights" ? [{ id: "stays" as DetailTab, label: `Stays (${villaCount})` }] : []),
     { id: "costs", label: "Costs" },
   ];
 
@@ -348,12 +349,14 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </button>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)]">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-            </svg>
-            {villaCount} stays
-          </span>
+          {searchMode !== "flights" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-[var(--surface-1)] text-[var(--text-2)] border border-[var(--border-default)]">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+              </svg>
+              {villaCount} stays
+            </span>
+          )}
         </div>
       </div>
 
@@ -378,10 +381,14 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
           {/* Per-city cost if selected */}
           {selectedCityCost && selectedCityCost.perPersonTotal != null && (
             <div className="flex items-center gap-1.5 text-[11px]">
-              <span className="text-[var(--text-3)] font-mono tabular-nums">${selectedCityCost.flightCost ?? 0}</span>
-              <span className="text-[var(--text-3)]">+</span>
-              <span className="text-[var(--text-3)] font-mono tabular-nums">${Math.round(selectedCityCost.stayCost)}</span>
-              <span className="text-[var(--text-3)]">=</span>
+              {searchMode === "both" ? (
+                <>
+                  <span className="text-[var(--text-3)] font-mono tabular-nums">${selectedCityCost.flightCost ?? 0}</span>
+                  <span className="text-[var(--text-3)]">+</span>
+                  <span className="text-[var(--text-3)] font-mono tabular-nums">${Math.round(selectedCityCost.stayCost)}</span>
+                  <span className="text-[var(--text-3)]">=</span>
+                </>
+              ) : null}
               <span className="text-sm font-semibold font-mono tabular-nums text-[var(--gold)]">${Math.round(selectedCityCost.perPersonTotal)}</span>
               <span className="text-[var(--text-3)]">pp</span>
             </div>
@@ -393,9 +400,11 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
           )}
 
           {/* Meta pills */}
-          <span className="text-[11px] font-mono tabular-nums text-[var(--text-2)] px-2 py-1 rounded bg-[var(--surface-1)]">
-            {villaCount} stays
-          </span>
+          {searchMode !== "flights" && (
+            <span className="text-[11px] font-mono tabular-nums text-[var(--text-2)] px-2 py-1 rounded bg-[var(--surface-1)]">
+              {villaCount} stays
+            </span>
+          )}
           <span className="text-[11px] font-mono tabular-nums text-[var(--text-2)] px-2 py-1 rounded bg-[var(--surface-1)]">
             {daysUntil > 0 ? `${daysUntil}d` : daysUntil === 0 ? "Today" : "Past"}
           </span>
@@ -462,6 +471,7 @@ export function WeekendCard({ weekend, rank, flightCategory, budgetTier, priorit
               <CostBreakdownTable
                 perCityCosts={perCityCosts}
                 totalGroupCost={totalGroupCost}
+                searchMode={searchMode}
               />
             )}
           </div>

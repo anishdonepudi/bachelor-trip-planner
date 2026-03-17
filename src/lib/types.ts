@@ -106,6 +106,8 @@ export type ScoringAlgorithm =
   | "fairness"
   | "best_value";
 
+export type SearchMode = "flights" | "stays" | "both";
+
 export interface Flight {
   id?: number;
   date_range_id: string;
@@ -205,6 +207,7 @@ export interface WeekendData {
   flights: Flight[];
   flightOptions: FlightOptionRow[];
   airbnbListings: AirbnbListingRow[];
+  searchMode?: SearchMode;
 }
 
 export interface CityPriceChange {

@@ -13,7 +13,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { generateDateRanges } from "../src/lib/date-ranges";
-import type { FlightCategory, SelectedMonth } from "../src/lib/types";
+import type { FlightCategory, SelectedMonth, SearchMode } from "../src/lib/types";
 import { loadTripConfig } from "./lib/load-trip-config";
 
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -106,6 +106,8 @@ async function main() {
 
   // Load config (trip-aware)
   const tripConfig = await loadTripConfig();
+  const searchMode: SearchMode = tripConfig.searchMode ?? "both";
+  console.log(`Search mode: ${searchMode}`);
   const selectedMonths = tripConfig.selectedMonths;
 
   if (!selectedMonths || selectedMonths.length === 0) {
@@ -141,9 +143,9 @@ async function main() {
       return rows;
     };
     const [prodFlights, prodFlightOptions, prodAirbnb] = await Promise.all([
-      fetchProdData("flights"),
-      fetchProdData("flight_options"),
-      fetchProdData("airbnb_listings"),
+      searchMode !== "stays" ? fetchProdData("flights") : Promise.resolve([]),
+      searchMode !== "stays" ? fetchProdData("flight_options") : Promise.resolve([]),
+      searchMode !== "flights" ? fetchProdData("airbnb_listings") : Promise.resolve([]),
     ]);
 
     if (prodFlights.length > 0 || prodFlightOptions.length > 0 || prodAirbnb.length > 0) {
@@ -227,8 +229,10 @@ async function main() {
   console.log("--- Phase 1: Aggregate in staging ---\n");
 
   // Flights
+  let stagedFlights: Record<string, unknown>[] = [];
+  if (searchMode !== "stays") {
   console.log("1. Fetching staged flight options...");
-  const stagedFlights = await fetchAll("flight_options_staging", RUN_ID);
+  stagedFlights = await fetchAll("flight_options_staging", RUN_ID);
   console.log(`   ${stagedFlights.length} staged flight options`);
 
   if (stagedFlights.length > 0) {
@@ -290,9 +294,14 @@ async function main() {
   } else {
     console.log("   No staged flights — skipping aggregation.");
   }
+  } else {
+    console.log("1-3. Skipping flight aggregation (stays-only mode)");
+  }
 
   // Airbnb — already fully staged, nothing to aggregate
-  const stagedAirbnb = await fetchAll("airbnb_listings_staging", RUN_ID);
+  const stagedAirbnb = searchMode !== "flights"
+    ? await fetchAll("airbnb_listings_staging", RUN_ID)
+    : [];
   console.log(`\n4. ${stagedAirbnb.length} staged airbnb listings (ready for promotion)`);
 
   // =============================================
@@ -373,9 +382,13 @@ async function main() {
     query = query.eq("trip_id", TRIP_ID);
     await query;
   };
-  await cleanStaging("flight_options_staging");
-  await cleanStaging("flights_staging");
-  await cleanStaging("airbnb_listings_staging");
+  if (searchMode !== "stays") {
+    await cleanStaging("flight_options_staging");
+    await cleanStaging("flights_staging");
+  }
+  if (searchMode !== "flights") {
+    await cleanStaging("airbnb_listings_staging");
+  }
   console.log("   Done");
 
   console.log(`\nFinalization complete at ${new Date().toISOString()}`);

@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const { name, cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds } = body;
+    const { name, cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds, search_mode } = body;
 
     if (!name || !destination_airport) {
       return NextResponse.json({ error: "Name and destination airport are required" }, { status: 400 });
@@ -85,6 +85,7 @@ export async function POST(request: Request) {
         airbnb_min_bedrooms: airbnb_min_bedrooms ?? null,
         airbnb_min_bathrooms: airbnb_min_bathrooms ?? null,
         airbnb_min_beds: airbnb_min_beds ?? null,
+        search_mode: search_mode ?? "both",
       })
       .select()
       .single();
@@ -109,7 +110,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           ref,
           inputs: {
-            scrape_type: "all",
+            scrape_type: search_mode === "flights" ? "flights" : search_mode === "stays" ? "airbnb" : "all",
             triggered_by: "trip_creation",
             environment: process.env.ENVIRONMENT || "production",
             trip_id: tripId,

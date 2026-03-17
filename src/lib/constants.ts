@@ -1,4 +1,4 @@
-import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity } from "./types";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity, SearchMode } from "./types";
 
 function stopDescription(stops: 0 | 1 | 2, bags: "carryon" | "none"): string {
   const stopPart = stops === 0 ? "Nonstop flight" : stops === 1 ? "One-stop flight" : "Two-stop flight";
@@ -178,3 +178,24 @@ export const AIRBNB_AMENITY_OPTIONS: AirbnbAmenityOption[] = [
 ];
 
 export const DEFAULT_AIRBNB_AMENITIES: AirbnbAmenity[] = [];
+
+export const SEARCH_MODE_OPTIONS: {
+  value: SearchMode;
+  label: string;
+  description: string;
+}[] = [
+  { value: "both", label: "Flights + Stays", description: "Search for both flights and Airbnb stays" },
+  { value: "flights", label: "Flights Only", description: "Search for flights only — no Airbnb data" },
+  { value: "stays", label: "Stays Only", description: "Search for Airbnb stays only — no flight data" },
+];
+
+export function getAvailableAlgorithms(mode: SearchMode): ScoringAlgorithm[] {
+  switch (mode) {
+    case "flights":
+      return ["zscore", "lowest_total", "lowest_per_person", "fairness"];
+    case "stays":
+      return ["zscore", "lowest_total", "lowest_per_person", "best_value"];
+    case "both":
+      return ["zscore", "lowest_total", "lowest_per_person", "fairness", "best_value"];
+  }
+}

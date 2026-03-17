@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig, BudgetTierConfig } from "@/lib/types";
-import { FLIGHT_CATEGORIES, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay } from "@/lib/constants";
+import { FlightCategory, BudgetTier, ScoringAlgorithm, CityConfig, FlightCategoryConfig, BudgetTierConfig, SearchMode } from "@/lib/types";
+import { FLIGHT_CATEGORIES, SCORING_ALGORITHMS, flightCategoryConfigToDisplay, budgetTierConfigToDisplay, getAvailableAlgorithms } from "@/lib/constants";
 
 interface FilterSheetProps {
   open: boolean;
@@ -14,6 +14,7 @@ interface FilterSheetProps {
   cities: CityConfig[];
   flightCategories?: FlightCategoryConfig[];
   budgetTierConfigs: BudgetTierConfig[];
+  searchMode?: SearchMode;
   onFlightCategoryChange: (category: FlightCategory) => void;
   onBudgetTierChange: (tier: BudgetTier) => void;
   onPriorityCityChange: (city: string) => void;
@@ -30,6 +31,7 @@ export function FilterSheet({
   cities,
   flightCategories,
   budgetTierConfigs,
+  searchMode,
   onFlightCategoryChange,
   onBudgetTierChange,
   onPriorityCityChange,
@@ -118,6 +120,7 @@ export function FilterSheet({
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
           {/* Flight Category */}
+          {searchMode !== "stays" && (
           <div>
             <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">
               Flight Type
@@ -138,8 +141,10 @@ export function FilterSheet({
               ))}
             </div>
           </div>
+          )}
 
           {/* Budget */}
+          {searchMode !== "flights" && (
           <div>
             <div className="text-[10px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-2">
               Budget
@@ -161,6 +166,7 @@ export function FilterSheet({
               ))}
             </div>
           </div>
+          )}
 
           {/* City */}
           <div>
@@ -189,7 +195,7 @@ export function FilterSheet({
               onChange={(e) => onScoringAlgorithmChange(e.target.value as ScoringAlgorithm)}
               className="w-full h-10 px-3 rounded-md text-sm bg-[var(--surface-1)] text-[var(--text-1)] border border-[var(--border-default)] focus:outline-none focus:border-[var(--border-active)] transition-all duration-150 appearance-none"
             >
-              {SCORING_ALGORITHMS.map((algo) => (
+              {(searchMode ? SCORING_ALGORITHMS.filter(a => getAvailableAlgorithms(searchMode).includes(a.value)) : SCORING_ALGORITHMS).map((algo) => (
                 <option key={algo.value} value={algo.value}>{algo.label}</option>
               ))}
             </select>

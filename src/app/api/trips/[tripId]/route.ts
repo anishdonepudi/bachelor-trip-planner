@@ -47,7 +47,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds, skip_scrape } = body;
+    const { cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds, skip_scrape, search_mode } = body;
 
     const payload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
@@ -67,6 +67,7 @@ export async function PUT(
     if (airbnb_min_bedrooms !== undefined) payload.airbnb_min_bedrooms = airbnb_min_bedrooms;
     if (airbnb_min_bathrooms !== undefined) payload.airbnb_min_bathrooms = airbnb_min_bathrooms;
     if (airbnb_min_beds !== undefined) payload.airbnb_min_beds = airbnb_min_beds;
+    if (search_mode !== undefined) payload.search_mode = search_mode;
 
     const { data, error } = await supabaseAdmin
       .from("trips")
@@ -96,7 +97,7 @@ export async function PUT(
             body: JSON.stringify({
               ref,
               inputs: {
-                scrape_type: "all",
+                scrape_type: search_mode === "flights" ? "flights" : search_mode === "stays" ? "airbnb" : "all",
                 triggered_by: "config_changed",
                 environment: process.env.ENVIRONMENT || "production",
                 trip_id: tripId,

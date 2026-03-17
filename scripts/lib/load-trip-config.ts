@@ -12,6 +12,7 @@ import type {
   BudgetTierConfig,
   AirbnbAmenity,
   AirbnbRoomConfig,
+  SearchMode,
 } from "../../src/lib/types";
 import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "../../src/lib/constants";
 import { migrateTimeFilters } from "../../src/lib/migrate-time-filters";
@@ -29,6 +30,7 @@ export interface TripConfig {
   budgetTiers: BudgetTierConfig[];
   airbnbAmenities: AirbnbAmenity[];
   airbnbRoomConfig: AirbnbRoomConfig;
+  searchMode: SearchMode;
 }
 
 export async function loadTripConfig(): Promise<TripConfig> {
@@ -45,7 +47,7 @@ export async function loadTripConfig(): Promise<TripConfig> {
   console.log(`Loading config from trips table for trip: ${tripId}`);
   const { data, error } = await supabase
     .from("trips")
-    .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds")
+    .select("cities, destination_airport, destination_city, total_people, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds, search_mode")
     .eq("id", tripId)
     .single();
 
@@ -67,7 +69,9 @@ export async function loadTripConfig(): Promise<TripConfig> {
   const budgetTiers = (data.budget_tiers && Array.isArray(data.budget_tiers))
     ? data.budget_tiers as BudgetTierConfig[]
     : null;
-  if (!budgetTiers || budgetTiers.length === 0) {
+  const searchMode = (data.search_mode as SearchMode) ?? "both";
+  const needsBudgetTiers = searchMode !== "flights";
+  if (needsBudgetTiers && (!budgetTiers || budgetTiers.length === 0)) {
     throw new Error(`Trip ${tripId} has no budget_tiers configured`);
   }
 
@@ -91,8 +95,9 @@ export async function loadTripConfig(): Promise<TripConfig> {
     flightTimeFilters,
     selectedMonths,
     tripDuration,
-    budgetTiers,
+    budgetTiers: budgetTiers ?? [],
     airbnbAmenities,
     airbnbRoomConfig,
+    searchMode,
   };
 }
