@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { nanoid } from "nanoid";
 import { getAuthUser } from "@/lib/auth-check";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
+  const supabaseAdmin = getSupabaseAdmin();
   const user = await getAuthUser(request);
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -50,6 +51,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const supabaseAdmin = getSupabaseAdmin();
   const user = await getAuthUser(request);
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin();
   // Protect with service key check (same pattern as refresh-tourism)
   const authHeader = request.headers.get("authorization");
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;

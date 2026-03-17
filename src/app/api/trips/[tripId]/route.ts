@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { getAuthUser, canEditTrip } from "@/lib/auth-check";
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ tripId: string }> }
 ) {
+  const supabaseAdmin = getSupabaseAdmin();
   const { tripId } = await params;
 
   try {
@@ -33,6 +34,7 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ tripId: string }> }
 ) {
+  const supabaseAdmin = getSupabaseAdmin();
   const { tripId } = await params;
 
   const user = await getAuthUser(request);

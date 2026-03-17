@@ -1,5 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 
 export async function getAuthUser(request: Request) {
   const supabase = createServerClient(
@@ -26,6 +26,7 @@ export async function getAuthUser(request: Request) {
 }
 
 export async function canEditTrip(userId: string, tripId: string): Promise<boolean> {
+  const supabaseAdmin = getSupabaseAdmin();
   // Check if user is owner
   const { data: trip } = await supabaseAdmin
     .from("trips")

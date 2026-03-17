@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { DestinationData } from "@/lib/types/tourism";
 import { generateTourismData } from "@/lib/gemini";
 
@@ -282,6 +282,7 @@ function assignRecommendations(months: { score: number }[]): ("great" | "good" |
  * 2. Gemini Flash on-demand generation (cached to DB)
  */
 async function getTourismData(cityName: string, location?: { countryCode?: string; country?: string; state?: string }): Promise<DestinationData | null> {
+  const supabaseAdmin = getSupabaseAdmin();
   const normalized = cityName.toLowerCase().trim();
 
   // Try cache with exact name and common variants (e.g. "new york city" ↔ "new york")

@@ -4,16 +4,14 @@ import { cookies } from "next/headers";
 
 let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
 
-export const supabaseAdmin = new Proxy({} as ReturnType<typeof createClient>, {
-  get(_, prop) {
-    if (!_supabaseAdmin) {
-      const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
-      const key = process.env.SUPABASE_SERVICE_KEY!;
-      _supabaseAdmin = createClient(url, key);
-    }
-    return (_supabaseAdmin as Record<string, unknown>)[prop as string];
-  },
-});
+export function getSupabaseAdmin() {
+  if (!_supabaseAdmin) {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.SUPABASE_SERVICE_KEY!;
+    _supabaseAdmin = createClient(url, key);
+  }
+  return _supabaseAdmin;
+}
 
 export async function createAuthClient() {
   const cookieStore = await cookies();

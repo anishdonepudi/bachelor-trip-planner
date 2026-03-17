@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { getSupabaseAdmin } from "@/lib/supabase/server";
 import type { SearchMode } from "@/lib/types";
 
 async function fetchAll(table: string, tripId: string) {
+  const supabaseAdmin = getSupabaseAdmin();
   const rows: Record<string, unknown>[] = [];
   const PAGE_SIZE = 1000;
   let offset = 0;
@@ -28,6 +29,7 @@ export async function GET(
   _request: Request,
   { params }: { params: Promise<{ tripId: string }> }
 ) {
+  const supabaseAdmin = getSupabaseAdmin();
   const { tripId } = await params;
 
   try {
