@@ -380,12 +380,12 @@ CREATE POLICY "Allow public read" ON listing_details_cache FOR SELECT USING (tru
 -- previous_weekend_snapshot
 ALTER TABLE previous_weekend_snapshot ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public read snapshots" ON previous_weekend_snapshot FOR SELECT USING (true);
-CREATE POLICY "Service key write snapshots" ON previous_weekend_snapshot FOR ALL USING (true);
+CREATE POLICY "Service key write snapshots" ON previous_weekend_snapshot FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
 -- tourism_data
 ALTER TABLE tourism_data ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public read tourism_data" ON tourism_data FOR SELECT USING (true);
-CREATE POLICY "Service write tourism_data" ON tourism_data FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service write tourism_data" ON tourism_data FOR ALL USING (auth.role() = 'service_role') WITH CHECK (auth.role() = 'service_role');
 
 -- city_selections
 ALTER TABLE city_selections ENABLE ROW LEVEL SECURITY;
