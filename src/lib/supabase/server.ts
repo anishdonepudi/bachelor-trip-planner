@@ -2,13 +2,16 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
-let _supabaseAdmin: ReturnType<typeof createClient> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _supabaseAdmin: ReturnType<typeof createClient<any>> | null = null;
 
 export function getSupabaseAdmin() {
   if (!_supabaseAdmin) {
     const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const key = process.env.SUPABASE_SERVICE_KEY!;
-    _supabaseAdmin = createClient(url, key);
+    // Use <any> to avoid `never` types on untyped table queries
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _supabaseAdmin = createClient<any>(url, key);
   }
   return _supabaseAdmin;
 }
