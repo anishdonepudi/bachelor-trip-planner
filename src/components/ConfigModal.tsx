@@ -884,11 +884,11 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         </ConfigSection>
         )}
 
-        {/* Section: Stay Preferences */}
+        {/* Section: Airbnb Preferences */}
         {localSearchMode !== "flights" && (
         <ConfigSection
           id="stay"
-          title="Stay Preferences"
+          title="Airbnb Preferences"
           subtitle={`${budgetTiers.length} budget ${budgetTiers.length === 1 ? "tier" : "tiers"} \u00b7 ${airbnbAmenities.length} ${airbnbAmenities.length === 1 ? "amenity" : "amenities"}`}
           expanded={expandedSections.has("stay")}
           onToggle={toggleSection}

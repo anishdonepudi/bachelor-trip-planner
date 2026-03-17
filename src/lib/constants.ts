@@ -184,9 +184,9 @@ export const SEARCH_MODE_OPTIONS: {
   label: string;
   description: string;
 }[] = [
-  { value: "both", label: "Flights + Stays", description: "Search for both flights and Airbnb stays" },
+  { value: "both", label: "Flights + Airbnb", description: "Search for both flights and Airbnb stays" },
   { value: "flights", label: "Flights Only", description: "Search for flights only — no Airbnb data" },
-  { value: "stays", label: "Stays Only", description: "Search for Airbnb stays only — no flight data" },
+  { value: "stays", label: "Airbnb Only", description: "Search for Airbnb stays only — no flight data" },
 ];
 
 export function getAvailableAlgorithms(mode: SearchMode): ScoringAlgorithm[] {

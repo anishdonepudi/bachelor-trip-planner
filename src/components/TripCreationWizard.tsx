@@ -312,7 +312,7 @@ export function TripCreationWizard() {
   const visibleSteps = useMemo(() => {
     const steps = [1, 2, 3]; // always: Basics, Travel Group, Dates
     if (searchMode !== "stays") steps.push(4); // Flight Preferences
-    if (searchMode !== "flights") steps.push(5); // Stay Preferences
+    if (searchMode !== "flights") steps.push(5); // Airbnb Preferences
     return steps;
   }, [searchMode]);
   const totalSteps = visibleSteps.length;
@@ -387,7 +387,7 @@ export function TripCreationWizard() {
     }
   };
 
-  const stepTitles = ["Trip Basics", "Travel Group", "Trip Dates", "Flight Preferences", "Stay Preferences"];
+  const stepTitles = ["Trip Basics", "Travel Group", "Trip Dates", "Flight Preferences", "Airbnb Preferences"];
 
   return (
     <div className="min-h-screen bg-[var(--surface-0)] text-[var(--text-1)]">
@@ -422,7 +422,7 @@ export function TripCreationWizard() {
             {step === 2 && "Add the cities people are flying from."}
             {step === 3 && "Set your travel window and block dates."}
             {step === 4 && "Configure flight search preferences."}
-            {step === 5 && "Set your accommodation budget ranges."}
+            {step === 5 && "Set your Airbnb budget ranges and amenities."}
           </p>
         </div>
 
@@ -982,7 +982,7 @@ export function TripCreationWizard() {
           </div>
         )}
 
-        {/* Step 5: Stay Preferences */}
+        {/* Step 5: Airbnb Preferences */}
         {step === 5 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
