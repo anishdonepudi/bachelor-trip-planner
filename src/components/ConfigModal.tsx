@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters, SelectedMonth, TripDuration, BudgetTierConfig, AirbnbAmenity } from "@/lib/types";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_AIRBNB_AMENITIES, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { CitySelect } from "./CitySelect";

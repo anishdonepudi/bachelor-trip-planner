@@ -177,6 +177,4 @@ export const AIRBNB_AMENITY_OPTIONS: AirbnbAmenityOption[] = [
   { id: "51", label: "Self Check-in", category: "Booking" },
 ];
 
-export const DEFAULT_AIRBNB_AMENITIES: AirbnbAmenity[] = [
-  { id: "7", label: "Pool" },
-];
+export const DEFAULT_AIRBNB_AMENITIES: AirbnbAmenity[] = [];

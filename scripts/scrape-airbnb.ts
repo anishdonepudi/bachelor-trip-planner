@@ -25,7 +25,7 @@ let NIGHTS = 3;
 let DESTINATION_CITY = "Tulum, Quintana Roo, Mexico";
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
 let TRIP_ID: string = "";
-let AMENITY_IDS: string[] = ["7"]; // default: Pool (will be overwritten by config)
+let AMENITY_IDS: string[] = [];
 
 const IS_TEST = process.argv.includes("--test");
 

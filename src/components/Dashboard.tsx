@@ -28,7 +28,7 @@ import {
 import { computeRankChanges } from "@/lib/rank-changes";
 
 import { migrateTimeFilters } from "@/lib/migrate-time-filters";
-import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_AIRBNB_AMENITIES } from "@/lib/constants";
+import { SCORING_ALGORITHMS, FLIGHT_CATEGORIES, BUDGET_TIERS, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "@/lib/constants";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { useAuth } from "./auth/AuthProvider";
 import { FilterBar } from "./FilterBar";
@@ -59,7 +59,7 @@ export function Dashboard({ tripId }: DashboardProps) {
   const [flightTimeFilters, setFlightTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTier, setBudgetTier] = useState<BudgetTier>("budget");
   const [budgetTierConfigs, setBudgetTierConfigs] = useState<BudgetTierConfig[]>([]);
-  const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>(DEFAULT_AIRBNB_AMENITIES);
+  const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>([]);
   const [cities, setCities] = useState<CityConfig[]>([]);
   const [priorityCity, setPriorityCity] = useState("all");
   const [scoringAlgorithm, setScoringAlgorithm] = useState<ScoringAlgorithm>("zscore");

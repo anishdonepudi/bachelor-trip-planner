@@ -12,7 +12,7 @@ import type {
   BudgetTierConfig,
   AirbnbAmenity,
 } from "../../src/lib/types";
-import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_AIRBNB_AMENITIES } from "../../src/lib/constants";
+import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION } from "../../src/lib/constants";
 import { migrateTimeFilters } from "../../src/lib/migrate-time-filters";
 
 export interface TripConfig {
@@ -71,7 +71,7 @@ export async function loadTripConfig(): Promise<TripConfig> {
 
   const airbnbAmenities = (data.airbnb_amenities && Array.isArray(data.airbnb_amenities))
     ? data.airbnb_amenities as AirbnbAmenity[]
-    : DEFAULT_AIRBNB_AMENITIES;
+    : [];
 
   return {
     tripId,

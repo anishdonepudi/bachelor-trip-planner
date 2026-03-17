@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, BudgetTierConfig, AirbnbAmenity } from "@/lib/types";
-import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS, DEFAULT_AIRBNB_AMENITIES, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
+import { generateCategoryId, generateCategoryLabel, DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS, AIRBNB_AMENITY_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
 import { TravelInsights, MonthDetailPanel, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type SelectedMonth, type UnitSystem, type DailyAvg, type HoveredMonthData } from "./TravelInsights";
@@ -45,7 +45,7 @@ export function TripCreationWizard() {
   const [flightCategories, setFlightCategories] = useState<FlightCategoryConfig[]>(DEFAULT_FLIGHT_CATEGORIES);
   const [timeFilters, setTimeFilters] = useState<FlightTimeFilters>(DEFAULT_TIME_FILTERS);
   const [budgetTiers, setBudgetTiers] = useState<BudgetTierConfig[]>(DEFAULT_BUDGET_TIER_CONFIGS);
-  const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>(DEFAULT_AIRBNB_AMENITIES);
+  const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>([]);
 
   // Fetch travel insights once for the destination
   const insights = useTravelInsights(
