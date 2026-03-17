@@ -45,3 +45,6 @@ supabase/.temp/
 
 # claude code local settings
 .claude/settings.local.json
+
+# internal docs
+/docs/internal/
