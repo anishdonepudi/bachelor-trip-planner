@@ -71,11 +71,7 @@ jobs:
 
       - name: Get airport matrix from config
         id: get-matrix
-        run: |
-          MATRIX=$(npx tsx scripts/get-airport-matrix.ts)
-          echo "matrix<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$MATRIX" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+        run: npx tsx scripts/get-airport-matrix.ts
 
   # Step 2: Scrape flights with dynamic matrix (writes to staging)
   scrape-flights:

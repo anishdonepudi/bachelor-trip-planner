@@ -8,6 +8,7 @@
  */
 
 import { loadTripConfig } from "./lib/load-trip-config";
+import { appendFileSync } from "fs";
 
 const MAX_JOBS = 19;
 
@@ -54,10 +55,18 @@ async function main() {
       airports: e.airports,
     }));
 
-  // Output the matrix JSON to stdout (GitHub Actions reads this)
+  // Output the matrix JSON
   const matrix = { include: filledEntries };
+  const matrixJson = JSON.stringify(matrix);
   console.error(`Created ${filledEntries.length} jobs for ${airports.length} airports`);
-  console.log(JSON.stringify(matrix));
+
+  // Write directly to $GITHUB_OUTPUT if available (avoids shell escaping issues)
+  const outputFile = process.env.GITHUB_OUTPUT;
+  if (outputFile) {
+    appendFileSync(outputFile, `matrix=${matrixJson}\n`);
+  } else {
+    console.log(matrixJson);
+  }
 }
 
 main();
