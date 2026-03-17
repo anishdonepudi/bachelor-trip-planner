@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await supabaseAdmin.from("city_selections").insert({
+    const { error } = await supabaseAdmin.from("city_selections").insert({
       city_name: name,
       country_code: countryCode,
       lat: lat ?? null,
@@ -24,8 +24,14 @@ export async function POST(request: NextRequest) {
       population: population ?? null,
     });
 
+    if (error) {
+      console.error("city_selections insert failed:", error.message, error.code);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
     return new NextResponse(null, { status: 204 });
-  } catch {
+  } catch (err) {
+    console.error("track-selection error:", err);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
