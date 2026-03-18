@@ -6,6 +6,8 @@ import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAUL
 import { generateDateRanges } from "@/lib/date-ranges";
 import { estimateRefreshMinutes } from "@/lib/estimate-refresh";
 import { CitySelect } from "./CitySelect";
+import { AirportPicker } from "./AirportPicker";
+import { findNearestAirports } from "@/lib/airport-lookup";
 import { TravelInsights, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type UnitSystem, type DailyAvg } from "./TravelInsights";
 import { useTravelInsights } from "@/lib/hooks/use-travel-insights";
 import {
@@ -97,6 +99,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   const [airbnbAmenities, setAirbnbAmenities] = useState<AirbnbAmenity[]>(initialAirbnbAmenities);
   const [airbnbRoomConfig, setAirbnbRoomConfig] = useState<AirbnbRoomConfig>(initialAirbnbRoomConfig);
   const [localSearchMode, setLocalSearchMode] = useState<SearchMode>(searchMode ?? "both");
+  const [destinationAirports, setDestinationAirports] = useState<{ primary: string[]; nearby: string[] }>({ primary: [], nearby: [] });
 
   const [unitSystem, setUnitSystem] = useState<UnitSystem>("imperial");
   const [saving, setSaving] = useState(false);
@@ -180,6 +183,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
       setExpandedSections(new Set(["trip"]));
       setDestinationCoords(null);
       coordsResolved.current = false;
+      setDestinationAirports({ primary: [], nearby: [] });
     }
     setOpen(isOpen);
   };
@@ -361,7 +365,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
   // Resolve coordinates for existing destination city (for TravelInsights)
   useEffect(() => {
     if (destinationCoords || coordsResolved.current || !destinationCity) return;
-    if (!expandedSections.has("schedule")) return;
+    if (!expandedSections.has("schedule") && !expandedSections.has("trip")) return;
     coordsResolved.current = true;
     fetch(`/api/cities/search?q=${encodeURIComponent(destinationCity)}`)
       .then((r) => r.ok ? r.json() : [])
@@ -369,7 +373,10 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
         const match = results.find(
           (r) => r.name.toLowerCase() === destinationCity.toLowerCase()
         ) ?? results[0];
-        if (match) setDestinationCoords({ lat: match.lat, lng: match.lng, countryCode: match.countryCode, country: match.country, state: match.state });
+        if (match) {
+          setDestinationCoords({ lat: match.lat, lng: match.lng, countryCode: match.countryCode, country: match.country, state: match.state });
+          setDestinationAirports(findNearestAirports(match.lat, match.lng));
+        }
       })
       .catch(() => {});
   }, [destinationCity, destinationCoords, expandedSections]);
@@ -583,20 +590,20 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
               onChange={(name, airports) => {
                 hasEdited.current = true;
                 setDestinationCity(name);
-                if (airports?.primary?.[0]) {
-                  setDestinationAirport(airports.primary[0]);
-                }
+                setDestinationAirport("");
+                setDestinationAirports(airports ?? { primary: [], nearby: [] });
               }}
               onCoordinates={(lat, lng, geo) => { setDestinationCoords({ lat, lng, countryCode: geo?.countryCode, country: geo?.country, state: geo?.state }); coordsResolved.current = true; }}
               placeholder="Search destination..."
+              showAirportBadges={false}
             />
-            {destinationAirport && (
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <span className="text-[10px] text-[var(--text-3)]">Airport:</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] font-mono font-medium">
-                  {destinationAirport}
-                </span>
-              </div>
+            {localSearchMode !== "stays" && destinationCity && (destinationAirports.primary.length > 0 || destinationAirports.nearby.length > 0) && (
+              <AirportPicker
+                airports={destinationAirports}
+                selected={destinationAirport}
+                onSelect={(iata) => { setDestinationAirport(iata); hasEdited.current = true; }}
+                showValidation={true}
+              />
             )}
           </div>
 
@@ -1263,7 +1270,7 @@ export function ConfigModal({ cities: initialCities, excludedDates: initialExclu
             )}
           </div>
         )}
-        <button onClick={handleSave} disabled={saving || !hasChanges || (categoriesChanged && hasDuplicateCategories)}
+        <button onClick={handleSave} disabled={saving || !hasChanges || (categoriesChanged && hasDuplicateCategories) || (localSearchMode !== "stays" && !destinationAirport)}
           className="w-full h-11 rounded-md text-sm font-semibold bg-[var(--blue)] text-white hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150">
           {saving ? (
             <span className="flex items-center justify-center gap-1.5">

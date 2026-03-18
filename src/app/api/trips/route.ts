@@ -61,8 +61,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { name, cities, destination_airport, destination_city, total_people, excluded_dates, flight_categories, flight_time_filters, selected_months, trip_duration, budget_tiers, airbnb_amenities, airbnb_min_bedrooms, airbnb_min_bathrooms, airbnb_min_beds, search_mode } = body;
 
-    if (!name || !destination_airport) {
-      return NextResponse.json({ error: "Name and destination airport are required" }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
     const tripId = nanoid(10);

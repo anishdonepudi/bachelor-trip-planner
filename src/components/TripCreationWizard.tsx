@@ -6,6 +6,7 @@ import { CityConfig, FlightCategoryConfig, FlightTimeFilters, TripDuration, Budg
 import { generateCategoryId, generateCategoryLabel, DEFAULT_TIME_FILTERS, DEFAULT_TRIP_DURATION, DEFAULT_BUDGET_TIER_CONFIGS, AIRBNB_AMENITY_OPTIONS, SEARCH_MODE_OPTIONS } from "@/lib/constants";
 import { generateDateRanges } from "@/lib/date-ranges";
 import { CitySelect } from "./CitySelect";
+import { AirportPicker } from "./AirportPicker";
 import { TravelInsights, MonthDetailPanel, WeatherIcon, RECOMMENDATION_COLORS, formatTemp, type SelectedMonth, type UnitSystem, type DailyAvg, type HoveredMonthData } from "./TravelInsights";
 import { useTravelInsights } from "@/lib/hooks/use-travel-insights";
 
@@ -322,7 +323,7 @@ export function TripCreationWizard() {
   // Validation
   const canProceed = (s: Step): boolean => {
     switch (s) {
-      case 1: return !!tripName.trim() && !!destinationAirport;
+      case 1: return !!tripName.trim() && !!destinationCity && (searchMode === "stays" || !!destinationAirport);
       case 2: return cities.some(c => c.city);
       case 3: return selectedMonths.length > 0 && tripDuration.nights > 0 && tripDuration.departDays.length > 0;
       case 4: return flightCategories.length > 0 && !hasDuplicateCategories;
@@ -446,20 +447,29 @@ export function TripCreationWizard() {
             </div>
             <div>
               <label className="text-[11px] font-heading font-semibold text-[var(--text-3)] uppercase tracking-wider mb-1.5 block">Destination</label>
-              <div className={`rounded-md ${showValidation && !destinationAirport ? "ring-1 ring-[var(--gold)]" : ""}`}>
+              <div className={`rounded-md ${showValidation && !destinationCity ? "ring-1 ring-[var(--gold)]" : ""}`}>
                 <CitySelect
                   value={destinationCity}
                   onChange={(name, airports) => {
                     setDestinationCity(name);
-                    if (airports?.primary?.[0]) setDestinationAirport(airports.primary[0]);
+                    setDestinationAirport("");
                     setDestinationAirports(airports ?? { primary: [], nearby: [] });
                   }}
                   onCoordinates={(lat, lng, geo) => setDestinationCoords({ lat, lng, countryCode: geo?.countryCode, country: geo?.country, state: geo?.state })}
                   placeholder="Search destination..."
                   currentAirports={destinationCity ? destinationAirports : undefined}
+                  showAirportBadges={false}
                 />
               </div>
-              {showValidation && !destinationAirport && (
+              {searchMode !== "stays" && destinationCity && (destinationAirports.primary.length > 0 || destinationAirports.nearby.length > 0) && (
+                <AirportPicker
+                  airports={destinationAirports}
+                  selected={destinationAirport}
+                  onSelect={setDestinationAirport}
+                  showValidation={showValidation}
+                />
+              )}
+              {showValidation && !destinationCity && (
                 <p className="mt-1 text-xs text-[var(--gold)]">Select a destination</p>
               )}
             </div>

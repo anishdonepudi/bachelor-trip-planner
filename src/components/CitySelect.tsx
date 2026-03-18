@@ -11,9 +11,10 @@ interface CitySelectProps {
   placeholder?: string;
   currentAirports?: { primary: string[]; nearby: string[] };
   onCoordinates?: (lat: number, lng: number, geo?: { countryCode?: string; country?: string; state?: string }) => void;
+  showAirportBadges?: boolean;
 }
 
-export function CitySelect({ value, onChange, excludeCities = [], placeholder = "Search city...", currentAirports, onCoordinates }: CitySelectProps) {
+export function CitySelect({ value, onChange, excludeCities = [], placeholder = "Search city...", currentAirports, onCoordinates, showAirportBadges }: CitySelectProps) {
   const [query, setQuery] = useState(value);
   const [isOpen, setIsOpen] = useState(false);
   const [resolving] = useState(false);
@@ -136,7 +137,7 @@ export function CitySelect({ value, onChange, excludeCities = [], placeholder = 
         </div>
       )}
 
-      {airports && value && !isOpen && (
+      {showAirportBadges !== false && airports && value && !isOpen && (
         <div className="flex flex-wrap gap-1 mt-1">
           {airports.primary.map((a) => (
             <span key={a} className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)] font-mono font-medium">
