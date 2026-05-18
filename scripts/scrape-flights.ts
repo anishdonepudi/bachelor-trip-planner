@@ -32,6 +32,7 @@ import type {
   FlightCategoryConfig,
   FlightTimeFilters,
   SelectedMonth,
+  TripDuration,
 } from "../src/lib/types";
 import { DEFAULT_FLIGHT_CATEGORIES, DEFAULT_TIME_FILTERS } from "../src/lib/constants";
 import { migrateTimeFilters } from "../src/lib/migrate-time-filters";
@@ -59,6 +60,7 @@ let CATEGORIES_TO_SCRAPE_CONFIGS: FlightCategoryConfig[] = DEFAULT_FLIGHT_CATEGO
 let CATEGORIES_TO_SCRAPE: FlightCategory[] = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
 let TIME_FILTERS: FlightTimeFilters = DEFAULT_TIME_FILTERS;
 let SELECTED_MONTHS: SelectedMonth[] | null = null;
+let TRIP_DURATION: TripDuration | null = null;
 let TRIP_ID: string = "";
 
 const TOP_N_PER_CATEGORY = 3;
@@ -82,6 +84,7 @@ async function loadAirportToCities(): Promise<void> {
   CATEGORIES_TO_SCRAPE = CATEGORIES_TO_SCRAPE_CONFIGS.map(fc => fc.id);
   TIME_FILTERS = config.flightTimeFilters;
   SELECTED_MONTHS = config.selectedMonths;
+  TRIP_DURATION = config.tripDuration;
 
   const map: Record<string, string[]> = {};
   for (const c of config.cities) {
@@ -892,7 +895,7 @@ async function main(): Promise<void> {
   console.log(`Airports: ${inputAirports.join(", ")}`);
   console.log(`Target cities: ${[...targetCities].join(", ")}`);
 
-  const dateRanges = generateDateRanges(undefined, SELECTED_MONTHS);
+  const dateRanges = generateDateRanges(TRIP_DURATION ?? undefined, SELECTED_MONTHS);
   const totalTasks = inputAirports.length * dateRanges.length;
 
   console.log(`Date ranges: ${dateRanges.length} (${SELECTED_MONTHS.length} selected months)`);
